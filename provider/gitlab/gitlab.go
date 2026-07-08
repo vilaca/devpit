@@ -77,21 +77,21 @@ func (p *Provider) do(ctx context.Context, method, url string) (*http.Response, 
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
 		return resp, nil
 	case resp.StatusCode == http.StatusUnauthorized:
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, sdk.ErrUnauthorized
 	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests:
 		ra := resp.Header.Get("Retry-After")
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, &rateError{retryAfter: ra}
 	default:
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("gitlab: unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 }
 
 func decodeJSON(resp *http.Response, v any) error {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 

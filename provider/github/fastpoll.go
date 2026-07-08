@@ -43,7 +43,7 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 	}
 
 	if resp.StatusCode == http.StatusNotModified {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return sdk.PollResult{State: out}, nil
 	}
 

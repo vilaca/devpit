@@ -14,7 +14,7 @@ func openTest(t *testing.T) *DB {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -35,7 +35,7 @@ func TestWALMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open file db: %v", err)
 	}
-	defer fdb.Close()
+	defer func() { _ = fdb.Close() }()
 	var fmode string
 	if err := fdb.sql.QueryRow(`PRAGMA journal_mode`).Scan(&fmode); err != nil {
 		t.Fatalf("query file journal_mode: %v", err)
@@ -52,13 +52,13 @@ func TestMigrationIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Open: %v", err)
 	}
-	db1.Close()
+	_ = db1.Close()
 
 	db2, err := Open(path)
 	if err != nil {
 		t.Fatalf("second Open: %v", err)
 	}
-	defer db2.Close()
+	defer func() { _ = db2.Close() }()
 
 	var version int
 	if err := db2.sql.QueryRow(`SELECT version FROM schema_version`).Scan(&version); err != nil {

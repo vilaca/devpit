@@ -1,0 +1,17 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://api.github.com/user
+    headers: {}
+    body: ""
+  response:
+    status: 401 Unauthorized
+    code: 401
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {"message":"Bad credentials"}

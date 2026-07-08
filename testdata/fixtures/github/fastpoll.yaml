@@ -1,0 +1,69 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://api.github.com/notifications
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+      Last-Modified:
+      - Wed, 08 Jul 2026 09:14:02 GMT
+      Etag:
+      - W/"deadbeef"
+      X-Ratelimit-Remaining:
+      - "4998"
+    body: |
+      [
+        {
+          "id": "1",
+          "reason": "review_requested",
+          "subject": {
+            "title": "Fix flaky sync test",
+            "url": "https://api.github.com/repos/acme/api/pulls/42",
+            "type": "PullRequest"
+          },
+          "repository": {"full_name": "acme/api"},
+          "updated_at": "2026-07-08T09:14:02Z"
+        },
+        {
+          "id": "2",
+          "reason": "subscribed",
+          "subject": {"title": "some issue", "url": "https://api.github.com/repos/acme/api/issues/7", "type": "Issue"},
+          "repository": {"full_name": "acme/api"},
+          "updated_at": "2026-07-08T09:00:00Z"
+        }
+      ]
+- id: 1
+  request:
+    method: GET
+    url: https://api.github.com/repos/acme/api/pulls/42
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {
+        "number": 42,
+        "title": "Fix flaky sync test",
+        "html_url": "https://github.com/acme/api/pull/42",
+        "state": "open",
+        "draft": false,
+        "merged": false,
+        "mergeable_state": "clean",
+        "updated_at": "2026-07-08T09:14:02Z",
+        "user": {"login": "jdoe"},
+        "requested_reviewers": [{"login": "octocat"}],
+        "assignees": [],
+        "base": {"repo": {"full_name": "acme/api"}}
+      }

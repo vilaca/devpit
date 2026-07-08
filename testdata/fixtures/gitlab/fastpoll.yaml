@@ -1,0 +1,65 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/todos?state=pending
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+      Ratelimit-Remaining:
+      - "1998"
+    body: |
+      [
+        {
+          "id": 18442,
+          "action_name": "review_requested",
+          "target_type": "MergeRequest",
+          "target": {"iid": 7, "web_url": "https://gitlab.com/acme/api/-/merge_requests/7"},
+          "project_id": 12,
+          "author": {"username": "jdoe"},
+          "updated_at": "2026-07-08T09:14:02Z"
+        },
+        {
+          "id": 18443,
+          "action_name": "mentioned",
+          "target_type": "Issue",
+          "target": {"iid": 3, "web_url": "https://gitlab.com/acme/api/-/issues/3"},
+          "project_id": 12,
+          "author": {"username": "jdoe"},
+          "updated_at": "2026-07-08T09:00:00Z"
+        }
+      ]
+- id: 1
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/projects/12/merge_requests/7
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {
+        "iid": 7,
+        "project_id": 12,
+        "title": "Fix flaky sync test",
+        "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
+        "state": "opened",
+        "draft": false,
+        "detailed_merge_status": "not_approved",
+        "updated_at": "2026-07-08T09:14:02Z",
+        "author": {"username": "jdoe"},
+        "assignees": [],
+        "reviewers": [{"username": "octocat"}],
+        "references": {"full": "acme/api!7"}
+      }

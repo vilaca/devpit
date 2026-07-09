@@ -14,7 +14,11 @@ type glTodo struct {
 		IID    int    `json:"iid"`
 		WebURL string `json:"web_url"`
 	} `json:"target"`
-	ProjectID int    `json:"project_id"`
+	// GitLab nests the project under "project": {"id": ...}; there is no
+	// top-level "project_id" on a todo.
+	Project struct {
+		ID int `json:"id"`
+	} `json:"project"`
 	Author    glUser `json:"author"`
 	UpdatedAt string `json:"updated_at"`
 }

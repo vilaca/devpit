@@ -4,7 +4,7 @@ interactions:
 - id: 0
   request:
     method: GET
-    url: https://gitlab.com/api/v4/merge_requests?scope=assigned&state=opened
+    url: https://gitlab.com/api/v4/merge_requests?scope=assigned_to_me&state=opened
     headers: {}
     body: ""
   response:
@@ -35,7 +35,7 @@ interactions:
 - id: 1
   request:
     method: GET
-    url: https://gitlab.com/api/v4/merge_requests?scope=created&state=opened
+    url: https://gitlab.com/api/v4/merge_requests?scope=created_by_me&state=opened
     headers: {}
     body: ""
   response:

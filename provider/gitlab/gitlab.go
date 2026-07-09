@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +20,7 @@ func init() {
 
 const userAgent = "devpit/0.1"
 
+// Provider is the GitLab implementation of sdk.Provider.
 type Provider struct {
 	cfg     sdk.ConnectionConfig
 	apiBase string
@@ -27,6 +28,8 @@ type Provider struct {
 	http    *http.Client
 }
 
+// New builds a GitLab provider. BaseURL is the instance host (e.g.
+// "https://gitlab.com"); the REST API lives at "{base}/api/v4".
 func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	if base == "" {
@@ -39,6 +42,7 @@ func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 	}, nil
 }
 
+// Capabilities implements sdk.Provider.
 func (p *Provider) Capabilities() sdk.Capabilities {
 	return sdk.Capabilities{
 		FastSignal:       true,
@@ -48,20 +52,14 @@ func (p *Provider) Capabilities() sdk.Capabilities {
 	}
 }
 
-func (p *Provider) Close(ctx context.Context) error {
+// Close implements sdk.Provider.
+func (p *Provider) Close(_ context.Context) error {
 	p.http.CloseIdleConnections()
 	return nil
 }
 
-type rateError struct {
-	retryAfter string
-}
-
-func (e *rateError) Error() string { return "provider: rate limited" }
-func (e *rateError) Unwrap() error { return sdk.ErrRateLimited }
-
-func (p *Provider) do(ctx context.Context, method, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+func (p *Provider) do(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -80,23 +78,35 @@ func (p *Provider) do(ctx context.Context, method, url string) (*http.Response, 
 		_ = resp.Body.Close()
 		return nil, sdk.ErrUnauthorized
 	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests:
-		ra := resp.Header.Get("Retry-After")
+		d := parseRateDelay(resp)
 		_ = resp.Body.Close()
-		return nil, &rateError{retryAfter: ra}
+		return nil, &sdk.RateLimitError{RetryAfter: d}
 	default:
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("gitlab: unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &sdk.StatusError{Status: resp.StatusCode}
 	}
+}
+
+// parseRateDelay extracts the retry delay from the Retry-After header (seconds).
+func parseRateDelay(resp *http.Response) time.Duration {
+	if ra := resp.Header.Get("Retry-After"); ra != "" {
+		if secs, err := strconv.Atoi(ra); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return 0
 }
 
 func decodeJSON(resp *http.Response, v any) error {
 	defer func() { _ = resp.Body.Close() }()
-	return json.NewDecoder(resp.Body).Decode(v)
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		return fmt.Errorf("%w: %w", sdk.ErrParse, err)
+	}
+	return nil
 }
 
 func rateRemaining(h http.Header) *int {
-	s := h.Get("RateLimit-Remaining")
+	s := h.Get("Ratelimit-Remaining")
 	if s == "" {
 		return nil
 	}

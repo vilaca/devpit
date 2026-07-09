@@ -78,7 +78,10 @@ func TestFastPoll(t *testing.T) {
 		switch e.EventType {
 		case "item.observed":
 			observed++
-			pl := e.Payload.(sdk.ItemObservedPayload)
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatalf("item.observed payload has unexpected type %T", e.Payload)
+			}
 			if pl.Repo != "acme/api" {
 				t.Errorf("repo = %q", pl.Repo)
 			}
@@ -136,7 +139,11 @@ func TestReconcileDedup(t *testing.T) {
 			if _, dup := observedByID[e.NativeID]; dup {
 				t.Fatalf("duplicate item.observed for %s", e.NativeID)
 			}
-			observedByID[e.NativeID] = e.Payload.(sdk.ItemObservedPayload)
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatalf("item.observed payload has unexpected type %T", e.Payload)
+			}
+			observedByID[e.NativeID] = pl
 		}
 	}
 	pl, ok := observedByID["acme/api#42"]

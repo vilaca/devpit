@@ -1,0 +1,37 @@
+version: 3
+workdir: .
+
+# External/stdlib imports are unrestricted; we only govern our own layering.
+allow:
+  depOnAnyVendor: true
+
+components:
+  sdk: { in: sdk }
+  cmd: { in: cmd/** }
+  config: { in: internal/config }
+  engine: { in: internal/engine }
+  storage: { in: internal/storage }
+  api: { in: internal/api }
+  attention: { in: internal/attention }
+  providerGithub: { in: provider/github }
+  providerGitlab: { in: provider/gitlab }
+
+# Dependency direction. sdk is the leaf contract; cmd is the composition root;
+# providers see only the sdk; storage/config/attention are leaves over sdk.
+deps:
+  config:
+    mayDependOn: [sdk]
+  storage:
+    mayDependOn: [sdk]
+  attention:
+    mayDependOn: [sdk, storage]
+  api:
+    mayDependOn: [sdk, storage, attention]
+  engine:
+    mayDependOn: [sdk, storage]
+  providerGithub:
+    mayDependOn: [sdk]
+  providerGitlab:
+    mayDependOn: [sdk]
+  cmd:
+    mayDependOn: [sdk, config, engine, storage, api, attention, providerGithub, providerGitlab]

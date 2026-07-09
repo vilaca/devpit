@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +20,7 @@ func init() {
 
 const userAgent = "devpit/0.1"
 
+// Provider is the GitHub implementation of sdk.Provider.
 type Provider struct {
 	cfg     sdk.ConnectionConfig
 	apiBase string
@@ -48,6 +49,7 @@ func apiBase(baseURL string) string {
 	}
 }
 
+// Capabilities implements sdk.Provider.
 func (p *Provider) Capabilities() sdk.Capabilities {
 	return sdk.Capabilities{
 		FastSignal:       true,
@@ -57,26 +59,18 @@ func (p *Provider) Capabilities() sdk.Capabilities {
 	}
 }
 
-func (p *Provider) Close(ctx context.Context) error {
+// Close implements sdk.Provider.
+func (p *Provider) Close(_ context.Context) error {
 	p.http.CloseIdleConnections()
 	return nil
 }
-
-// rateError carries a Retry-After hint so the caller can persist it as a
-// cursor; the engine honors sync_cursors["gh.fast.retry_after"].
-type rateError struct {
-	retryAfter string
-}
-
-func (e *rateError) Error() string { return "provider: rate limited" }
-func (e *rateError) Unwrap() error { return sdk.ErrRateLimited }
 
 // do issues a request with auth + UA headers and classifies the HTTP status
 // into sentinel errors. On 2xx it returns the response for the caller to
 // decode; callers must close the body. On 304 it returns the response too
 // (status is preserved for the conditional-request path).
-func (p *Provider) do(ctx context.Context, method, url string, hdr http.Header) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+func (p *Provider) do(ctx context.Context, url string, hdr http.Header) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -103,24 +97,45 @@ func (p *Provider) do(ctx context.Context, method, url string, hdr http.Header) 
 		_ = resp.Body.Close()
 		return nil, sdk.ErrUnauthorized
 	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests:
-		ra := resp.Header.Get("Retry-After")
+		d := parseRateDelay(resp)
 		_ = resp.Body.Close()
-		return nil, &rateError{retryAfter: ra}
+		return nil, &sdk.RateLimitError{RetryAfter: d}
 	default:
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("github: unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &sdk.StatusError{Status: resp.StatusCode}
 	}
+}
+
+// parseRateDelay extracts the retry delay from Retry-After (seconds) and
+// X-RateLimit-Reset (Unix timestamp), returning the larger of the two.
+func parseRateDelay(resp *http.Response) time.Duration {
+	var d time.Duration
+	if ra := resp.Header.Get("Retry-After"); ra != "" {
+		if secs, err := strconv.Atoi(ra); err == nil && secs > 0 {
+			d = time.Duration(secs) * time.Second
+		}
+	}
+	if reset := resp.Header.Get("X-Ratelimit-Reset"); reset != "" {
+		if ts, err := strconv.ParseInt(reset, 10, 64); err == nil {
+			if until := time.Until(time.Unix(ts, 0)); until > d {
+				d = until
+			}
+		}
+	}
+	return d
 }
 
 func decodeJSON(resp *http.Response, v any) error {
 	defer func() { _ = resp.Body.Close() }()
-	return json.NewDecoder(resp.Body).Decode(v)
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		return fmt.Errorf("%w: %w", sdk.ErrParse, err)
+	}
+	return nil
 }
 
 // rateRemaining reads X-RateLimit-Remaining for the sync log; nil if absent.
 func rateRemaining(h http.Header) *int {
-	s := h.Get("X-RateLimit-Remaining")
+	s := h.Get("X-Ratelimit-Remaining")
 	if s == "" {
 		return nil
 	}

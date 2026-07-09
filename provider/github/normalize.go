@@ -13,6 +13,9 @@ import (
 
 const objectType = "merge_request"
 
+// eventItemObserved is the event_type for a periodic item snapshot (taxonomy §1).
+const eventItemObserved = "item.observed"
+
 // mergeGate maps GitHub's mergeable_state to the normalized gate class.
 // Transient values ("unknown", "") map to "unknown" and per the taxonomy
 // never overwrite a known gate downstream (the synthesizer carries forward);
@@ -95,7 +98,7 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 	return sdk.Event{
 		ObjectType: objectType,
 		NativeID:   nid,
-		EventType:  "item.observed",
+		EventType:  eventItemObserved,
 		OccurredAt: parseTime(pr.UpdatedAt),
 		Actor:      pr.User.Login,
 		DedupeKey:  observedDedupeKey(payload),
@@ -121,7 +124,7 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 	return sdk.Event{
 		ObjectType: objectType,
 		NativeID:   nativeID(repo, it.Number),
-		EventType:  "item.observed",
+		EventType:  eventItemObserved,
 		OccurredAt: parseTime(it.UpdatedAt),
 		Actor:      it.User.Login,
 		DedupeKey:  observedDedupeKey(payload),
@@ -133,7 +136,7 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 // same facts hash identically so re-polls dedupe, a changed fact makes a new
 // snapshot.
 func observedDedupeKey(p sdk.ItemObservedPayload) string {
-	b, _ := json.Marshal(p)
+	b, _ := json.Marshal(p) //nolint:errchkjson // payload is JSON-safe (scalar fields only); Marshal cannot fail here
 	sum := sha256.Sum256(b)
 	return "item.observed:" + hex.EncodeToString(sum[:])
 }

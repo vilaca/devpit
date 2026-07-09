@@ -48,6 +48,22 @@ Requested → Blocked → Mentioned → Waiting on Author.
 A single YAML file with a list of named connections (type, base URL, token).
 See [`docs/Configuration.md`](docs/Configuration.md).
 
+## Running
+
+Build the binary once, then run it:
+
+```sh
+go build -o devpit ./cmd/devpit
+./devpit --config ~/.config/devpit/config.yaml
+```
+
+Prefer this over `go run ./cmd/devpit`. DevPit depends on `modernc.org/sqlite`,
+a pure-Go SQLite that is large and slow to compile; a cold build takes ~15–20 s
+and pegs all cores (enough to spin up laptop fans). `go run` recompiles whenever
+the build cache is cold — e.g. after a dependency upgrade — so a start/stop loop
+pays that cost repeatedly. The running binary itself is idle (~0 % CPU between
+poll cycles).
+
 ## Contributing
 
 See [`docs/Contributing.md`](docs/Contributing.md).

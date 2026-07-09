@@ -8,8 +8,9 @@ Accepted
 
 Sync-log persistence and per-cycle rows **Implemented (v0.1)**
 (`internal/storage`, `internal/engine`). Per-call detail rows **Deferred**. The
-user-facing health indicators and sync-log view are **Planned** — the REST API
-and frontend are not built. See `docs/Roadmap.md`.
+user-facing health indicators and sync-log view are **Planned** — the frontend
+is not built (the REST API backing them is built, `internal/api`). See
+`docs/Roadmap.md`.
 
 ## Context
 
@@ -46,7 +47,7 @@ it serves debugging and trust at once, without adding setup steps.
   (`internal/storage/schema.go`, `internal/engine/cycle.go`) — an open `TEXT` outcome
   column so the set extends without migration. The log's semantics and the
   outcome taxonomy are specified in `docs/Synchronization_Engine.md`; the
-  response shapes in `docs/REST_API.md` (Planned).
+  response shapes in `docs/REST_API.md`, implemented in `internal/api`.
 - Per-call detail rows are Deferred: the v0.1 schema records cycle summaries
   only.
 - Health and the sync-log view live behind the same SSE events as the rest of

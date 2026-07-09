@@ -1,9 +1,9 @@
 # REST API & SSE
 
-> **Status: Planned.** This is the design of the HTTP surface; `internal/api`
-> is a stub and none of it is implemented yet. When built, the response shapes
-> below become authoritative in code and this doc will link to them rather than
-> restate them. Decision: `ADR/ADR-0008_API_Design.md`.
+> **Status: Implemented.** All endpoints below, including the SSE stream, are
+> served by `internal/api` and wired up in `cmd/devpit`. The response shapes in
+> code (`internal/api`) are authoritative; this doc describes the surface.
+> Decision: `ADR/ADR-0008_API_Design.md`.
 
 Deliberately minimal. Buckets have no dedicated endpoints — they are
 client-side filters over the single attention list

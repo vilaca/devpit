@@ -10,8 +10,9 @@ The shift: repositories become context. You are the center of the workflow.
 
 ## Status
 
-Early development — not yet usable. Core storage and provider SDK done;
-engine and UI in progress.
+Early development — not yet usable. Storage, provider SDK, sync engine,
+attention fold, and the REST + SSE API are done; the web UI — the last v0.1
+piece — is not yet built.
 
 ## How it works
 

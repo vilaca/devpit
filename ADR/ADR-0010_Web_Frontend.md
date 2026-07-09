@@ -31,5 +31,6 @@ mobile clients. Embedding via `go:embed` keeps the single-binary deployment
 ## Consequences
 
 - Accepted cost: a JS build step lives in the repo.
-- Frontend and its SSE/REST integration are **Planned**, not built; the API
-  surface it consumes is specified in `docs/REST_API.md`.
+- Frontend and its SSE/REST integration are **Planned**, not built (the last
+  remaining v0.1 piece); the API surface it consumes is built (`internal/api`)
+  and specified in `docs/REST_API.md`.

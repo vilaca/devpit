@@ -54,8 +54,6 @@ attention fold. **Not yet built:** the REST API, SSE stream, and frontend (see
   staleness) — the team's shared work state — not a reconstruction of each
   teammate's private notifications.
 - Buckets re-interpreted for teammates (stalled / blocked-on-them).
-- Federation (push aggregation) remains an uncommitted "future maybe", built
-  only if users ask (ADR-0001).
 
 ## v1.0 — Plugin SDK & ecosystem
 
@@ -63,10 +61,3 @@ attention fold. **Not yet built:** the REST API, SSE stream, and frontend (see
 - Broaden beyond code forges: Jira, Slack, CI/CD, Sentry, PagerDuty
   (see `docs/Why.md`).
 
-## Open questions (undecided)
-
-- **Authentication / access control** if DevPit is ever exposed beyond
-  localhost or federated — currently none is needed (ADR-0001, ADR-0019). A
-  hard prerequisite for federation.
-- **Observability depth** — structured logs, metrics, tracing beyond the
-  user-facing sync log (`docs/Observability.md`).

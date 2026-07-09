@@ -2,26 +2,37 @@
 
 ## Status
 
-Proposed
+Accepted (supersedes the earlier WebSocket choice)
+
+## Scope
+
+**Planned** — the REST surface and SSE stream are designed but not yet built
+(`internal/api` is a stub). See `docs/Roadmap.md`.
 
 ## Context
 
-This ADR records a foundational architectural decision for DevPit.
+Clients need the attention list and live notification that it changed. The
+question is the transport for live updates.
 
 ## Decision
 
-Expose a REST API with Server-Sent Events (SSE) for live updates.
+Expose a **REST API** with a **Server-Sent Events (SSE)** stream for live
+updates. Live updates are one-directional (the server pushes "your attention
+list changed"); client actions use REST. The event set is deliberately
+coarse — events say *that* something changed and the client re-fetches, rather
+than patching state from event payloads.
 
 ## Rationale
 
-REST is simple to implement and consume. Live updates in DevPit are
-one-directional (server pushes "your attention list changed" to the
-client; client actions use REST), so SSE is a better fit than WebSocket:
-it rides plain HTTP, auto-reconnects, and avoids bidirectional-channel
-complexity. See docs/Design_Decisions.md §13.
+REST is simple to implement and consume. Because updates are one-directional,
+SSE fits better than WebSocket: it rides plain HTTP, auto-reconnects, and
+avoids bidirectional-channel complexity.
 
 ## Consequences
 
-Provides a consistent foundation for future implementation and
-contributor discussions. (Supersedes the earlier WebSocket choice;
-docs/SSE_Events.md lists the event stream.)
+- Supersedes the earlier WebSocket choice.
+- The REST surface and SSE event set are specified in `docs/REST_API.md`
+  (which includes the SSE stream); both are **Planned**, not implemented.
+- The SSE events feed the health indicators and sync-log view
+  (`ADR/ADR-0018_Sync_Observability.md`) and the live attention list
+  (`ADR/ADR-0016_Presentation_And_Ranking.md`).

@@ -134,13 +134,7 @@ later.
 
 ## Guiding Principles
 
-- User-centric
-- Attention over information
-- Provider agnostic
-- Self-host first
-- Read-only by default
-- Extensible plugin architecture
-- Fast and keyboard friendly
+See `docs/Engineering_Philosophy.md` for the guiding principles.
 
 ## Success Criteria
 

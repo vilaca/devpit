@@ -54,7 +54,7 @@ func run() error {
 		len(cfg.Connections), cfg.DBPath)
 
 	// Cancel the root context on SIGINT/SIGTERM so the engine drains and Closes
-	// each provider under its bounded timeout before we exit (§10).
+	// each provider under its bounded timeout before we exit.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

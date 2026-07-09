@@ -5,7 +5,7 @@ import "time"
 // maxBackoffShift caps the exponential streak at 1<<4 = 16 minutes.
 const maxBackoffShift = 4
 
-// backoff is a goroutine-local retry gate (§8). It holds no timers and does no
+// backoff is a goroutine-local retry gate. It holds no timers and does no
 // rescheduling: the connection's tickers keep firing, and a cycle that finds
 // the gate closed simply returns early until notBefore passes. Because it is
 // touched only by its own connection's goroutine, it needs no lock.
@@ -31,7 +31,7 @@ func (b *backoff) bump() {
 }
 
 // rateLimit sets the gate for a rate-limit failure and returns the chosen wait.
-// It never retries before the provider's floor (hint, Q3) but waits longer if
+// It never retries before the provider's floor (hint) but waits longer if
 // the exponential streak already demands it: delay = max(exponential, hint).
 func (b *backoff) rateLimit(hint *time.Duration) time.Duration {
 	b.streak++

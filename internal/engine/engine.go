@@ -9,7 +9,7 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
-// Default scheduler timings. These are engine constants, not config (§9): the
+// Default scheduler timings. These are engine constants, not config (ADR-0004): the
 // tiered cadence is a property of the design, not something a user tunes.
 const (
 	defaultFastEvery    = 60 * time.Second
@@ -17,8 +17,9 @@ const (
 	defaultCloseTimeout = 10 * time.Second
 )
 
-// Store is the subset of the storage write handle the engine needs (§9, Q9: the
-// engine holds the single-writer pool; the API holds the reader pool). Depending
+// Store is the subset of the storage write handle the engine needs — the
+// engine holds the single-writer pool; the API holds the reader pool
+// (ADR-0007). Depending
 // on this narrow interface rather than *storage.DB keeps cycles unit-testable
 // with fakes and no SQLite.
 type Store interface {
@@ -29,8 +30,8 @@ type Store interface {
 }
 
 // Engine owns the set of connection goroutines and their shared collaborators.
-// Connections are static (Q1): built once from config at Run, alive until the
-// process exits.
+// Connections are static (ADR-0015): built once from config at Run, alive
+// until the process exits.
 type Engine struct {
 	store  Store
 	notify Notifier
@@ -88,7 +89,7 @@ func New(store Store, cfgs []sdk.ConnectionConfig, opts ...Option) *Engine {
 
 // Run builds every connection, starts one goroutine per live connection, then
 // blocks until ctx is cancelled and every goroutine has drained and Closed its
-// provider (§5, §10). It returns ctx.Err() — the cancellation cause — once the
+// provider. It returns ctx.Err() — the cancellation cause — once the
 // WaitGroup joins. A connection that fails to build (unknown type, factory
 // error) or whose identity is permanently unresolvable (bad token / no handle)
 // is logged to sync_log and skipped; it does not abort startup of the others.
@@ -116,7 +117,7 @@ func (e *Engine) Run(ctx context.Context) error {
 			closeTimeout: e.closeTimeout,
 		}
 
-		// Resolve identity up front; classify permanent vs transient (Q2). A
+		// Resolve identity up front; classify permanent vs transient. A
 		// permanent failure is dead until a config fix + restart, so don't start
 		// its loop. A transient failure still starts: the cycle re-attempts
 		// identity at its top until it succeeds.

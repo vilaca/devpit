@@ -1,232 +1,126 @@
-# Event Taxonomy & Storage Schema
+# Event Taxonomy & Storage
 
-Resolves the Design_Decisions open question: the column-level storage
-schema and how object facts are encoded as events for the fold (§2, §3).
-Scope is v0.1. Decisions recorded here: facts are encoded as **snapshot
-events**, payloads are **JSON with indexed key columns**, and connection
-config lives **in the config file only** (the DB stores opaque
-connection-id strings).
+> **Status:** Implemented. The event model is realized as `sdk.Event` and the
+> payload structs in `sdk/provider.go`; the SQLite schema is in
+> `internal/storage`. This spec is the design behind them — it does not restate
+> the DDL or the struct fields, which are authoritative in code. Decisions:
+> `ADR/ADR-0005_Event_Based_Attention_Engine.md`,
+> `ADR/ADR-0006_Normalized_Data_Model.md`.
 
-## 1. Event model
+Storage is events-first: the primary table is the event/signal log. There is no
+materialized current-state table in v0.1 — object facts and attention states
+are folded from events on read (`docs/Attention_Engine.md`). Normalized,
+provider-neutral entities exist only as the fold's output; they are not stored
+rows.
 
-Every event belongs to one provider object, identified by the WorkItem
-key `(connection_id, object_type, native_id)` (§3):
+## Event model
 
-- `connection_id` — opaque id of a connection in the config file (§1b).
-  The DB never stores connection details; if the id is unknown to the
-  config, its rows are orphans eligible for purge.
-- `object_type` — `merge_request` (covers GitHub PRs) or `issue`.
-- `native_id` — plugin-defined, stable, human-debuggable. GitHub:
-  `owner/repo#number`; GitLab: `group/project!iid`.
+Every event belongs to one provider object, identified by the WorkItem key
+`(connection_id, object_type, native_id)`:
+
+- **connection_id** — opaque id of a connection in the config file. The DB
+  never stores connection details; rows whose id is unknown to the config are
+  orphans eligible for purge.
+- **object_type** — `merge_request` (covers GitHub PRs) or `issue`.
+- **native_id** — plugin-defined, stable, human-debuggable (GitHub
+  `owner/repo#number`; GitLab `group/project!iid`).
 
 Two event streams share one log:
 
 **Fact stream** — encodes object state for the fold:
 
-| Type            | Meaning                                                                                                                                                                                                    |
-|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `item.observed` | Full normalized fact set (§2). Appended only when the fact set differs from the item's previous snapshot — the poll diff *is* the change detector. The fold reads the **latest** snapshot per item; earlier snapshots are history. |
-| `item.removed`  | The reconciliation sweep no longer sees the item and no closing state was observed (lost access, repo deleted). Fold drops the item.                                                                        |
+| Type | Meaning |
+|---|---|
+| `item.observed` | Full normalized fact set. Appended only when the fact set differs from the item's previous snapshot — the poll diff *is* the change detector. The fold reads the latest snapshot per item. |
+| `item.removed` | The reconciliation sweep no longer sees the item and no closing state was observed (lost access, repo deleted). The fold drops the item. |
 
-**Signal stream** — discrete "aimed at you" occurrences, stored raw and
-never collapsed (§3). They feed the Mentioned bucket, the "×N" tag
-counts (§6), the item's ranking timestamp, and "what's new since last
-visit":
+**Signal stream** — discrete "aimed at you" occurrences, stored raw and never
+collapsed. They feed the Mentioned bucket, the "×N" tag counts, the item's
+ranking timestamp, and "what's new since last visit":
 
-| Type                       | Payload highlights                                                | Synthesized from                                                                                          |
-|----------------------------|-------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| `signal.mentioned`         | direct vs team/group mention                                      | GitHub `mentions:@me` search / notification `mention`; GitLab todos `mentioned`, `directly_addressed`    |
-| `signal.review_requested`  | direct vs team request                                            | entering the review-requested result set; GitLab todo `review_requested`                                  |
-| `signal.review_submitted`  | `verdict: approved \| changes_requested \| commented`, reviewer   | `reviewDecision` / reviewer-state transitions; GitLab todo `review_submitted`                             |
-| `signal.assigned`          | assigner if known                                                 | assigned result set / todos `assigned`                                                                    |
-| `signal.ci_failed`         | check/pipeline name if known                                      | red checks on authored PRs (incl. non-gating, per §4); GitLab todo `build_failed`                        |
+| Type | Synthesized from |
+|---|---|
+| `signal.mentioned` | GitHub `mentions:@me` / notification `mention`; GitLab todos `mentioned`, `directly_addressed` |
+| `signal.review_requested` | entering the review-requested result set; GitLab todo `review_requested` |
+| `signal.review_submitted` | review-decision / reviewer-state transitions; GitLab todo `review_submitted` |
+| `signal.assigned` | assigned result set / todos `assigned` |
+| `signal.ci_failed` | red checks on authored PRs (incl. non-gating); GitLab todo `build_failed` |
 
-Seven types total. Merged/closed are not signals — they arrive as an
-`item.observed` state change and the fold drops the item (§11: items
-vanish only when the condition clears). Fine-grained notification
-events remain a later option (§13); new types extend the taxonomy
-without schema changes.
+Merged/closed are not signals — they arrive as an `item.observed` state change
+and the fold drops the item. New signal types extend the taxonomy without
+schema changes (the payload is JSON). The concrete payload shapes are the
+structs in `sdk/provider.go`.
 
 ### Diff fidelity
 
-Per ADR-0005, activity between two polls collapses into one diff: one
-new snapshot, and one signal per *detected transition* (not per
-underlying provider action). Signal exactness affects counts and
-timestamps only — bucket membership always derives from the latest
-facts, so missed intermediate signals never produce wrong buckets.
+Activity between two polls collapses into one diff: one new snapshot, and one
+signal per *detected transition* (not per underlying provider action). Bucket
+membership always derives from the latest facts, so missed intermediate signals
+never produce wrong buckets — only counts and timestamps are affected.
 
-## 2. The fact set (`item.observed` payload)
+## The fact set
 
-Provider-neutral, produced by the plugin's normalizer:
+The `item.observed` payload is a provider-neutral fact set produced by the
+plugin's normalizer (the struct is `sdk.ItemObservedPayload`). Design notes on
+its fields:
 
-```json
-{
-  "title": "Fix flaky sync test",
-  "url": "https://github.com/acme/api/pull/412",
-  "repo": "acme/api",
-  "state": "open",                  // open | merged | closed
-  "draft": false,
-  "author": "jdoe",
-  "my_roles": ["reviewer"],         // author | reviewer | assignee | mentioned
-  "review_decision": "changes_requested", // approved | changes_requested | pending | none
-  "my_review_state": "reviewed",    // requested | reviewed | approved | changes_requested | none
-  "gate": "blocked",                // ready | blocked | unknown  (normalized class)
-  "gate_detail": "BLOCKED",         // provider-raw value, for the detail view
-  "failing_checks": true,           // any red check, gating or not (§4)
-  "provider_updated_at": "2026-07-08T09:14:02Z"
-}
-```
-
-- `gate` uses the merge-gate mappings in Provider_API_Analysis.md.
-  **Transient gate values (`UNKNOWN`, `unchecked`, `checking`, …) never
-  reach storage:** the synthesizer carries the previous known `gate`
-  forward, so transient reads cause neither churn snapshots nor bucket
+- **`gate`** (normalized `ready | blocked | unknown`) uses the per-provider
+  merge-gate mappings in `docs/Provider_API_Analysis.md`. **Transient gate
+  values never reach storage**: the synthesizer carries the previous known gate
+  forward, so a mid-computation read causes neither churn snapshots nor bucket
   flapping.
-- Unknown/ungranted facts (capability gaps, §10) are omitted; the fold
-  treats absent as "cannot say", never as false.
+- **Unknown/ungranted facts** (capability gaps) are omitted; the fold treats
+  absent as "cannot say", never as false.
+- `failing_checks` renders the failure-notification marker, never a bucket.
 
-## 3. Fold rules (buckets from events)
+The fold rules that turn this fact set into buckets live in
+`docs/Attention_Engine.md`.
 
-Computed at read time — no materialized state (§2). For each item:
-latest `item.observed` gives the facts; `state == open`, no
-`item.removed`, else the item is dropped.
+## Storage schema
 
-| Bucket (§4)        | Condition on latest facts                                                              |
-|--------------------|----------------------------------------------------------------------------------------|
-| Needs Review       | `my_roles` has `reviewer` ∧ `my_review_state == requested`                             |
-| Changes Requested  | `my_roles` has `author` ∧ `review_decision == changes_requested`                       |
-| Blocked            | `my_roles` has `author` ∧ ¬`draft` ∧ `gate == blocked`                                |
-| Ready to Merge     | `my_roles` has `author` ∧ ¬`draft` ∧ `gate == ready`                                  |
-| Mentioned          | ≥ 1 `signal.mentioned` event (item open)                                               |
-| Waiting on Author  | `my_roles` has `reviewer` ∧ `my_review_state ∈ {reviewed, approved, changes_requested}` |
+WAL mode, single writer, read-only reader pool (`ADR/ADR-0007_Storage.md`). All
+facts beyond the indexed keys live in JSON payloads, so taxonomy changes need no
+migration. The tables (see `internal/storage/schema.go` for the DDL):
 
-- **Ranking timestamp** (§6): newest `coalesce(occurred_at,
-  observed_at)` across the item's signal events, else the latest
-  snapshot's `provider_updated_at`. Stale badge when older than the
-  threshold (§6).
-- **Tag counts**: same-type signals per item → "Mentioned ×3";
-  individual signals appear in the detail view.
-- **What's new since last visit**: events with `id >` the stored
-  `last_seen_event_id`; the client advances the mark on visit. The
-  backing `app_state` KV is deferred until this feature is built (§4).
-- `failing_checks` renders the failure notification marker (§4), never
-  a bucket.
+- **`events`** — the log. Indexed keys (`connection_id`, `object_type`,
+  `native_id`, `event_type`) plus timestamps, actor, a dedupe key, and a JSON
+  payload. A `UNIQUE` constraint over the key columns plus the dedupe key makes
+  overlapping polls idempotent via `INSERT OR IGNORE`. An autoincrement `id`
+  gives insertion order, which drives "what's new since last visit".
+- **`handle_next`** — the local-only "Handle next" pins, keyed by the item's
+  opaque id, ordered by flag time (`ADR/ADR-0017_Read_Only_Action_Model.md`).
+- **`sync_log`** — one row per poll cycle; bounded by user cleanup plus an
+  optional cap (`ADR/ADR-0018_Sync_Observability.md`).
+- **`sync_cursors`** — operational poll state (watermarks, last-modified
+  tokens), opaque to the engine and owned by each provider.
+- **`schema_version`** — migration bookkeeping.
 
-## 4. Storage schema (SQLite)
+The `app_state` KV and its `last_seen_event_id` key (backing "what's new since
+last visit") are **Deferred** — they arrive when that feature is built, an API
+concern.
 
-WAL mode, single sync writer, REST readers (§14). Timestamps are RFC
-3339 UTC strings. All facts beyond the indexed keys live in JSON
-payloads — taxonomy changes need no migration.
+## Dedupe keys
 
-```sql
-CREATE TABLE events (
-  id            INTEGER PRIMARY KEY,   -- insertion order; drives "new since last visit"
-  connection_id TEXT    NOT NULL,
-  object_type   TEXT    NOT NULL,      -- 'merge_request' | 'issue'
-  native_id     TEXT    NOT NULL,
-  event_type    TEXT    NOT NULL,      -- taxonomy §1
-  occurred_at   TEXT,                  -- provider-reported time, when known
-  observed_at   TEXT    NOT NULL,      -- when the poll saw it
-  actor         TEXT,                  -- provider handle, when known
-  dedupe_key    TEXT    NOT NULL,      -- §5
-  payload       TEXT    NOT NULL DEFAULT '{}',  -- JSON, shape per event_type
-  UNIQUE (connection_id, object_type, native_id, event_type, dedupe_key)
-);
-CREATE INDEX events_by_item ON events
-  (connection_id, object_type, native_id, id);
-```
+Overlapping polls (watermark overlap, the reconcile sweep re-seeing everything)
+must not duplicate events; the `UNIQUE` constraint enforces this and writers use
+`INSERT OR IGNORE`:
 
-The fold scans open items' events via `events_by_item`; at single-user
-scale this is fast without further indexes (§2), and compaction remains
-a later optimization.
+- `item.observed`: a hash of the canonical fact-set JSON — doubles as the "did
+  anything change?" check against the previous snapshot.
+- `item.removed`: a constant — at most one live removal; reappearance resumes
+  via new snapshots.
+- Signals with a provider-native identity (todo/review/comment id): that id,
+  prefixed with its kind.
+- Signals synthesized from a diff (no native id): a plugin-defined transition
+  fingerprint (e.g. review-requested + provider-updated timestamp) — a
+  re-request after a completed review yields a new fingerprint; a re-poll of the
+  same state does not.
 
-```sql
-CREATE TABLE handle_next (             -- "Handle next" (§5, §11), local-only; lean name, not 'flags'
-  connection_id TEXT NOT NULL,
-  object_type   TEXT NOT NULL,
-  native_id     TEXT NOT NULL,
-  flagged_at    TEXT NOT NULL,         -- pin order in the pinned zone
-  PRIMARY KEY (connection_id, object_type, native_id)
-);
+## Retention
 
-CREATE TABLE sync_log (                -- §16; cycle rows + per-call detail
-  id             INTEGER PRIMARY KEY,
-  parent_id      INTEGER REFERENCES sync_log(id), -- NULL = cycle summary row;
-                                                  -- set = per-call detail under a failed cycle
-  connection_id  TEXT    NOT NULL,
-  ts             TEXT    NOT NULL,
-  operation      TEXT    NOT NULL,     -- cycle rows: 'fast_poll' | 'reconcile';
-                                       -- call rows: endpoint label
-  outcome        TEXT    NOT NULL,     -- 'ok' | 'auth' | 'rate_limited' | 'network'
-                                       --   | 'server' | 'parse' | 'storage' | 'unexpected' (§9, Q6)
-  http_status    INTEGER,
-  items_changed  INTEGER,
-  rate_remaining INTEGER,
-  retries        INTEGER,
-  next_retry     TEXT,
-  error          TEXT                  -- plain-language cause
-);
-CREATE INDEX sync_log_by_conn ON sync_log (connection_id, ts);
-
-CREATE TABLE sync_cursors (            -- operational poll state, not events
-  connection_id TEXT NOT NULL,
-  cursor        TEXT NOT NULL,         -- e.g. 'mr_updated_after', 'notifications_last_modified'
-  value         TEXT NOT NULL,
-  PRIMARY KEY (connection_id, cursor)
-);
-
-CREATE TABLE schema_version (          -- migration bookkeeping only
-  version INTEGER NOT NULL
-);
-```
-
-Lean-name reconciliation (§11 Q7): the pin table is `handle_next` (not
-`flags`), and migration state lives in a dedicated `schema_version` table
-rather than a generic KV. The `app_state` KV and its `last_seen_event_id`
-key are deferred: they arrive only when "what's new since last visit"
-(§1) is built — an API concern, not a sync-engine one.
-
-Successful cycles write one row (`parent_id NULL`, no children). The
-§12 rolling failure count is `COUNT(*)` over cycle rows with
-`outcome != 'ok'` in the window.
-
-## 5. Dedupe keys
-
-Overlapping polls (watermark overlap, reconciliation sweep re-seeing
-everything) must not duplicate events; the `UNIQUE` constraint enforces
-this, writers use `INSERT OR IGNORE`.
-
-- `item.observed`: hash of the canonical (key-sorted) fact-set JSON.
-  Doubles as the "did anything change?" check against the previous
-  snapshot.
-- `item.removed`: constant `"removed"` — at most one live removal;
-  reappearance resumes via new snapshots.
-- Signals with a provider-native identity (todo id, review id, comment
-  id): that id, prefixed with its kind (`todo:18442`).
-- Signals synthesized from a diff (no native id, e.g. review request
-  detected by entering a search result set): a plugin-defined
-  transition fingerprint, e.g.
-  `review_requested:{provider_updated_at}` — a re-request after a
-  completed review produces a new fingerprint, a re-poll of the same
-  state does not.
-
-## 6. Retention & deletion (§2)
-
-No automatic compaction. User-initiated "clear history older than X"
-deletes, per item:
-
-- signal events older than X, and
-- superseded `item.observed` snapshots (all but the latest),
-
-but **never** the latest snapshot of a still-open item — open items
-must survive any cleanup. Items whose latest state is
-merged/closed/removed and older than X are purged entirely, as are
-rows whose `connection_id` no longer exists in the config. `sync_log`
-is bounded by the same cleanup plus an optional row cap (§16).
-
-## Effects on existing docs
-
-- Design_Decisions.md: closes the "detailed storage schema / fact
-  encoding" open question.
-- Data_Model.md: the normalized entities are realized as the §2 fact
-  set plus signal events; points here.
+No automatic compaction. User-initiated "clear history older than X" deletes,
+per item, signals older than X and superseded snapshots (all but the latest) —
+but **never** the latest snapshot of a still-open item. Items whose latest state
+is merged/closed/removed and older than X are purged entirely, as are rows whose
+`connection_id` no longer exists in the config. `sync_log` is bounded by the
+same cleanup plus an optional cap.

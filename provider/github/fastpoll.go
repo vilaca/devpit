@@ -95,7 +95,8 @@ func (p *Provider) fetchPull(ctx context.Context, owner, repo string, number int
 
 // signalsFromNotification derives signal events from the notification reason.
 // occurredAt uses the notification's updated_at so re-notification of the same
-// state dedupes and a genuinely new occurrence gets a fresh key (taxonomy §5).
+// state dedupes and a genuinely new occurrence gets a fresh key (see the
+// dedupe-key rules in docs/Event_Taxonomy_and_Storage.md).
 func (p *Provider) signalsFromNotification(n ghNotification, nid string) []sdk.Event {
 	occ := parseTime(n.UpdatedAt)
 	base := func(eventType string, payload any) sdk.Event {

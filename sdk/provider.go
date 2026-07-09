@@ -48,7 +48,7 @@ type Event struct {
 	EventType  string     // taxonomy from Event_Taxonomy_and_Storage.md
 	OccurredAt *time.Time // provider-reported time; nil if unknown
 	Actor      string     // provider handle; empty if unknown
-	DedupeKey  string     // per Event_Taxonomy_and_Storage.md §5
+	DedupeKey  string     // per the dedupe-key rules in Event_Taxonomy_and_Storage.md
 	Payload    any        // typed per EventType; engine serialises to JSON
 }
 
@@ -140,7 +140,7 @@ type ProviderFactory func(cfg ConnectionConfig) (Provider, error)
 var Registry = map[string]ProviderFactory{}
 
 // Payload shapes — one struct per event type; the engine serialises whichever
-// is set. Shapes follow Event_Taxonomy_and_Storage.md §1–2.
+// is set. Shapes follow the event model in Event_Taxonomy_and_Storage.md.
 
 // ItemObservedPayload is the payload for event_type "item.observed".
 type ItemObservedPayload struct {

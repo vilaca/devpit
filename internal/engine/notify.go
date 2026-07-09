@@ -1,7 +1,7 @@
 package engine
 
-// Notifier bridges the engine to the SSE hub in internal/api (§13, coarse
-// events). The engine defines it and imports nothing from api; main wires the
+// Notifier bridges the engine to the SSE hub in internal/api (coarse events —
+// docs/REST_API.md). The engine defines it and imports nothing from api; main wires the
 // hub in. The default is noopNotifier so the engine runs headless in tests.
 type Notifier interface {
 	// AttentionChanged is global: it tells the client to re-fetch GET /attention

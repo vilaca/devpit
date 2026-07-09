@@ -2,7 +2,13 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Scope
+
+Implemented (v0.1) — the backend owns synchronization, storage, business logic,
+providers, and the fold (`cmd/devpit`, `internal/*`, `provider/*`). See
+`docs/Roadmap.md`.
 
 ## Context
 

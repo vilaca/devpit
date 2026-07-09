@@ -2,7 +2,13 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Scope
+
+Implemented (v0.1) — `cmd/`, `internal/*`, `provider/*`, `sdk`, and the
+`frontend/` placeholder. Enforced by `ADR/ADR-0013_Linting_and_Architecture_Enforcement.md`.
+See `docs/Roadmap.md`.
 
 ## Context
 

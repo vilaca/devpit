@@ -58,6 +58,8 @@ Each item carries:
 - `signal_counts` — present only when a signal type has count > 1 (drives "×N"
   tags).
 - **Markers** (diagnostic booleans, never affect state):
+  - `draft` — item is in draft/WIP mode (pre-existing; also listed under item
+    identity above).
   - `failing_checks` — CI/checks red (GitHub: `unstable`; GitLab: `ci_must_pass`).
   - `merge_conflict` — manual conflict resolution needed (GitHub: `dirty`;
     GitLab: `conflict`).

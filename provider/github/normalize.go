@@ -91,7 +91,9 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 		MyRoles:           roles,
 		Gate:              gate,
 		GateDetail:        pr.MergeableState,
-		FailingChecks:     pr.MergeableState == "unstable" || pr.MergeableState == "dirty",
+		FailingChecks:     pr.MergeableState == "unstable",
+		MergeConflict:     pr.MergeableState == "dirty",
+		NeedsRebase:       pr.MergeableState == "behind",
 		ProviderUpdatedAt: pr.UpdatedAt,
 	}
 

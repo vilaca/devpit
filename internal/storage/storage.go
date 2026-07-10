@@ -472,27 +472,38 @@ func (db *DB) SetHandleNext(ctx context.Context, itemID string, flagged bool) er
 	return nil
 }
 
-// ListHandleNext returns all flagged item IDs, ordered by flagged_at ascending.
-func (db *DB) ListHandleNext(ctx context.Context) ([]string, error) {
+// PinnedItem is a flagged item from the handle_next table.
+type PinnedItem struct {
+	ID        string
+	FlaggedAt time.Time
+}
+
+// ListHandleNext returns all flagged items with their flagged_at timestamps,
+// ordered by flagged_at ascending.
+func (db *DB) ListHandleNext(ctx context.Context) ([]PinnedItem, error) {
 	rows, err := db.read.QueryContext(ctx,
-		`SELECT item_id FROM handle_next ORDER BY flagged_at ASC, item_id ASC`)
+		`SELECT item_id, flagged_at FROM handle_next ORDER BY flagged_at ASC, item_id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list handle_next: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var ids []string
+	var items []PinnedItem
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var id, flaggedAtStr string
+		if err := rows.Scan(&id, &flaggedAtStr); err != nil {
 			return nil, fmt.Errorf("scan handle_next: %w", err)
 		}
-		ids = append(ids, id)
+		pi := PinnedItem{ID: id}
+		if t, err := time.Parse(timeFormat, flaggedAtStr); err == nil {
+			pi.FlaggedAt = t
+		}
+		items = append(items, pi)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list handle_next: %w", err)
 	}
-	return ids, nil
+	return items, nil
 }
 
 // migrate brings the database schema up to the latest version by applying any

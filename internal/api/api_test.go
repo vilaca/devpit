@@ -30,7 +30,7 @@ func openTestDB(t *testing.T) *storage.DB {
 
 func newTestServer(t *testing.T, db *storage.DB) *Server {
 	t.Helper()
-	return New(db, testMeta, attention.DefaultStaleThreshold)
+	return New(db, testMeta, attention.DefaultStaleThreshold, attention.DefaultAbandonedThreshold)
 }
 
 func do(t *testing.T, s *Server, method, path string) *httptest.ResponseRecorder {
@@ -184,7 +184,7 @@ func TestConnectionsReturnsAll(t *testing.T) {
 
 func TestConnectionsIdentityNullWhenEmpty(t *testing.T) {
 	meta := []ConnectionMeta{{ID: "gh", Type: "github", Label: "Personal"}} // no Identity
-	s := New(openTestDB(t), meta, attention.DefaultStaleThreshold)
+	s := New(openTestDB(t), meta, attention.DefaultStaleThreshold, attention.DefaultAbandonedThreshold)
 	w := do(t, s, "GET", "/connections")
 	var resp connectionsResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -403,6 +403,65 @@ func TestFlagClearIdempotent(t *testing.T) {
 	w := do(t, s, "DELETE", "/items/doesnotexist/flag")
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("DELETE flag: status = %d, want 204", w.Code)
+	}
+}
+
+// --- New fields: markers, age, since, flagged_at ---
+
+func TestAttentionNewFields(t *testing.T) {
+	db := openTestDB(t)
+	f := openFacts([]string{"author"}, "", "ready")
+	f.MergeConflict = true
+	f.GateDetail = "dirty"
+	writeTestEvent(t, db, "acme/api#1", f)
+	s := newTestServer(t, db)
+
+	w := do(t, s, "GET", "/attention")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var resp attentionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(resp.Items))
+	}
+	item := resp.Items[0]
+	if !item.MergeConflict {
+		t.Error("merge_conflict should be true")
+	}
+	if item.GateDetail != "dirty" {
+		t.Errorf("gate_detail = %q, want dirty", item.GateDetail)
+	}
+	if item.FailingChecks {
+		t.Error("failing_checks should be false for merge_conflict item")
+	}
+}
+
+func TestAttentionFlaggedAtInResponse(t *testing.T) {
+	db := openTestDB(t)
+	writeTestEvent(t, db, "acme/api#1", openFacts([]string{"reviewer"}, "requested", ""))
+	s := newTestServer(t, db)
+
+	w := do(t, s, "GET", "/attention")
+	var attResp attentionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &attResp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	id := attResp.Items[0].ID
+
+	w = do(t, s, "PUT", "/items/"+id+"/flag")
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("PUT flag: status = %d, want 204", w.Code)
+	}
+
+	w = do(t, s, "GET", "/attention")
+	if err := json.Unmarshal(w.Body.Bytes(), &attResp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if attResp.Items[0].FlaggedAt == nil {
+		t.Error("flagged_at should be non-null after pin")
 	}
 }
 

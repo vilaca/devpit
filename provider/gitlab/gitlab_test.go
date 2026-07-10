@@ -443,6 +443,106 @@ func TestGraphQLJoinMultiReason(t *testing.T) {
 	t.Fatal("missing item.observed for acme/api!7")
 }
 
+// TestFastPollOpenSetRefresh verifies that fast_poll refreshes the three GraphQL
+// booleans for open items not covered by a todo this cycle (anti-clobber: REST
+// fields on the cached snapshot must survive the merge unchanged).
+func TestFastPollOpenSetRefresh(t *testing.T) {
+	p := newTestProvider(t, "fastpoll_open_set_refresh", "octocat")
+
+	// Seed the cache as reconcile would have: full payload from last sweep.
+	// MergeConflict=true is a REST field; it must survive the GraphQL merge.
+	// FailingChecks=false will be overwritten to true by the cassette response.
+	p.openSnapshots["acme/api!7"] = sdk.ItemObservedPayload{
+		Title:         "cached MR",
+		URL:           "https://gitlab.com/acme/api/-/merge_requests/7",
+		Repo:          "acme/api",
+		State:         stateOpen,
+		Draft:         false,
+		Author:        "jdoe",
+		MyRoles:       []string{"reviewer"},
+		Gate:          gateBlocked,
+		GateDetail:    "ci_must_pass",
+		FailingChecks: false,
+		MergeConflict: true, // REST field — must not be clobbered by GraphQL merge
+		NeedsRebase:   false,
+		NeedsApproval: false,
+	}
+
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+
+	var found bool
+	for _, e := range res.Events {
+		if e.EventType != "item.observed" || e.NativeID != "acme/api!7" {
+			continue
+		}
+		found = true
+		pl, ok := e.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Fatal("payload type assertion failed")
+		}
+		// GraphQL field updated by cassette (headPipeline=FAILED)
+		if !pl.FailingChecks {
+			t.Error("failing_checks should be true: pipeline FAILED in GraphQL response")
+		}
+		// REST field must survive the merge (anti-clobber guarantee)
+		if !pl.MergeConflict {
+			t.Error("merge_conflict should remain true: REST field must not be clobbered by GraphQL merge")
+		}
+		if pl.Title != "cached MR" {
+			t.Errorf("title = %q, want %q: REST field must survive", pl.Title, "cached MR")
+		}
+	}
+	if !found {
+		t.Fatal("missing item.observed event for acme/api!7 from open-set refresh")
+	}
+}
+
+// TestFastPollOpenSetRefreshDegraded verifies that a GraphQL error on the
+// open-set refresh path is logged and skipped — the cycle succeeds and no
+// open-set events are emitted.
+func TestFastPollOpenSetRefreshDegraded(t *testing.T) {
+	p := newTestProvider(t, "fastpoll_open_set_refresh_degraded", "octocat")
+	p.openSnapshots["acme/api!7"] = sdk.ItemObservedPayload{
+		Title:  "cached MR",
+		State:  stateOpen,
+		Author: "jdoe",
+	}
+
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll must succeed despite GraphQL error: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType == "item.observed" && e.NativeID == "acme/api!7" {
+			t.Error("open-set refresh should not emit events when GraphQL is degraded")
+		}
+	}
+}
+
+// TestFastPollOpenSetRefreshEmptyCache verifies no panic and no open-set refresh
+// when the cache is empty (startup state, before the first reconcile).
+func TestFastPollOpenSetRefreshEmptyCache(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200, body: "[]"})
+	if _, err := p.FastPoll(context.Background(), nil); err != nil {
+		t.Fatalf("FastPoll with empty cache: %v", err)
+	}
+}
+
+// TestReconcilePopulatesOpenSnapshots verifies that Reconcile populates the
+// open-set cache so a subsequent FastPoll open-set refresh has data to work with.
+func TestReconcilePopulatesOpenSnapshots(t *testing.T) {
+	p := newTestProvider(t, "reconcile", "octocat")
+	if _, err := p.Reconcile(context.Background(), nil); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if _, ok := p.openSnapshots["acme/api!7"]; !ok {
+		t.Error("openSnapshots should contain acme/api!7 after Reconcile")
+	}
+}
+
 func TestGraphQLJoinGitLabDegraded(t *testing.T) {
 	p := newTestProvider(t, "graphql_join_degraded", "octocat")
 	res, err := p.Reconcile(context.Background(), nil)

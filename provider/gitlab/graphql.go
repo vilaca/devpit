@@ -145,16 +145,94 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		if !ok {
 			continue
 		}
-		if !pl.Draft {
-			pl.NeedsApproval = !mr.Approved
-			pl.NeedsRebase = mr.ShouldRebase
-			pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
-		}
+		pl = applyGraphQL(pl, mr)
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
 		out[evIdx] = ev
 	}
 	return out
+}
+
+// applyGraphQL merges the three GraphQL-derived booleans onto a payload.
+// Draft items keep all three booleans false (draft suppression).
+func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR) sdk.ItemObservedPayload {
+	if !pl.Draft {
+		pl.NeedsApproval = !mr.Approved
+		pl.NeedsRebase = mr.ShouldRebase
+		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
+	}
+	return pl
+}
+
+// openSetRefresh queries the three volatile GraphQL booleans for cached open
+// items not already covered by todo-driven events, merges onto the cached
+// payload, and appends item.observed events to events. On GraphQL failure it
+// logs to sync_log and skips the batch — the cycle still succeeds.
+func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, covered map[string]bool) []sdk.Event {
+	type openItem struct {
+		nativeID string
+		fullPath string
+		iid      int
+		payload  sdk.ItemObservedPayload
+	}
+
+	var openItems []openItem
+	for nid, pl := range p.openSnapshots {
+		if covered[nid] {
+			continue
+		}
+		fp, iid, ok := parseGLNativeID(nid)
+		if !ok {
+			continue
+		}
+		openItems = append(openItems, openItem{nid, fp, iid, pl})
+	}
+	if len(openItems) == 0 {
+		return events
+	}
+
+	const batchSize = 30
+	for start := 0; start < len(openItems); start += batchSize {
+		batch := openItems[start:min(start+batchSize, len(openItems))]
+
+		var q strings.Builder
+		q.WriteString("query{")
+		for j, it := range batch {
+			fmt.Fprintf(&q, `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){approved shouldBeRebased headPipeline{status}}}`,
+				j, it.fullPath, it.iid)
+		}
+		q.WriteString("}")
+
+		data, err := p.doGraphQL(ctx, q.String())
+		if err != nil {
+			log.Printf("devpit: gitlab graphql open-set refresh degraded: %v", err)
+			continue
+		}
+
+		for j, it := range batch {
+			raw, ok := data[fmt.Sprintf("a%d", j)]
+			if !ok || raw == nil {
+				continue
+			}
+			var node struct {
+				MergeRequest *glGraphQLMR `json:"mergeRequest"`
+			}
+			if json.Unmarshal(raw, &node) != nil || node.MergeRequest == nil {
+				continue
+			}
+			pl := applyGraphQL(it.payload, *node.MergeRequest)
+			events = append(events, sdk.Event{
+				ObjectType: objectType,
+				NativeID:   it.nativeID,
+				EventType:  eventItemObserved,
+				OccurredAt: parseTime(pl.ProviderUpdatedAt),
+				Actor:      pl.Author,
+				DedupeKey:  observedDedupeKey(pl),
+				Payload:    pl,
+			})
+		}
+	}
+	return events
 }
 
 // isPipelineRed reports whether the pipeline status represents a failure.

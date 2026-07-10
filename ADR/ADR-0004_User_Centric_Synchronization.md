@@ -47,3 +47,22 @@ token-only promise (no provider-side webhook configuration).
   configuration.
 - The full adaptive rate-budget controller is deferred to avoid gold-plating
   before real usage data exists (`docs/Roadmap.md`).
+
+## Amendment — v0.1.3: fast_poll open-set refresh (2026-07-10)
+
+FastPoll now also refreshes the three volatile GraphQL-derived booleans
+(`failing_checks`, `needs_approval`, `needs_rebase`) for the full known-open
+set on every cycle, not only for todo-bearing items. Motivation: pipeline status
+transitions generate no todo, so those badges were up to 15 min stale.
+
+Mechanism: Reconcile populates an `openSnapshots` in-memory cache (full
+REST+GraphQL `ItemObservedPayload` keyed by native ID). On each FastPoll cycle,
+after the todo-driven path, items in the cache not already covered by a todo
+this cycle are queried via a batched GraphQL alias query. The three GraphQL
+booleans are merged onto the cached full payload (REST-derived fields are
+preserved). Deduplicated by `observedDedupeKey` so no-change cycles are
+free. GraphQL failure degrades gracefully: logged, skipped, cycle succeeds.
+
+No lock is needed: FastPoll and Reconcile are serialised on the same goroutine
+per connection (`internal/engine/connection.go`). Cache is populated by the
+startup reconcile before any FastPoll runs.

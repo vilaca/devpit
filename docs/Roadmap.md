@@ -156,3 +156,38 @@ Noted, not committed to any release.
   - Whether issues and PRs should be visually distinguished in the list
     (they currently share the same row shape).
 
+- Multiple configs via `--config`: support launching the service with an
+  explicit config file path (`devpit --config ~/work.yaml`, `devpit --config
+  ~/personal.yaml`), allowing the user to maintain separate connection sets
+  and switch between them by restarting with a different flag rather than
+  editing a single shared file. Each config is fully independent — its own
+  connections, its own DB, its own port if needed. No merging of configs;
+  the loaded file is the entire world for that instance. The main open
+  question is whether a single default config path (e.g. `~/.config/devpit/
+  config.yaml`) is still honoured when `--config` is absent, or whether the
+  flag becomes mandatory.
+
+- Connection filter: a UI control (toggle or multi-select) to temporarily
+  focus on one or more connections, hiding items from the others without
+  touching config. Useful when switching context between work and personal
+  accounts, or across multiple GitLab instances. The filter is ephemeral —
+  session-only or persisted in `localStorage` — and never modifies the
+  underlying connection config. The ranked list, bucket counts, and health
+  dots should all reflect the active filter. The main design question is
+  placement: a persistent header control vs. a collapsible sidebar vs. a
+  keyboard-driven picker (e.g., `f` to open a connection filter overlay).
+
+- Label-based tracking: surface items by label subscription rather than (or in
+  addition to) user identity. Instead of only tracking "items assigned to me"
+  or "items mentioning me", a user could say "show me everything labelled
+  `needs-triage` or `p0`". This would cover team-owned queues and on-call
+  rotations where the actionable signal is the label, not the mention.
+
+  The main design questions:
+  - Whether label subscriptions are configured per-connection or globally.
+  - How label-matched items sit in the bucket/precedence model (they do not
+    map cleanly to Needs Review / Changes Requested / Assigned — a new bucket
+    or a separate "Watching" tier may be needed).
+  - Whether label tracking and user tracking are additive (union) or
+    configurable per-subscription.
+

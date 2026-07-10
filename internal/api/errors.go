@@ -7,7 +7,6 @@ import (
 
 // Error codes used in the uniform error envelope (docs/REST_API.md Conventions).
 const (
-	errCodeNotFound   = "not_found"
 	errCodeBadRequest = "bad_request"
 	errCodeInternal   = "internal"
 )

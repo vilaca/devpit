@@ -94,16 +94,9 @@ Future:
 
 ## The Attention Engine
 
-Provider-specific events are normalized into common events such as:
-
-- ReviewRequested
-- Mentioned
-- PipelineFailed
-- ConflictDetected
-- BackportNeeded
-
-These are transformed into actionable states like Needs Review, Blocked,
-Ready to Merge, and Waiting on Author.
+Provider-specific events are normalized into common events — reviews requested,
+mentions, CI failures, assignment changes — then folded into actionable states
+like Needs Review, Blocked, Ready to Merge, and Waiting on Author.
 
 ## User-centric Synchronization
 

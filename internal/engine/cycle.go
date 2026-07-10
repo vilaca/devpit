@@ -240,7 +240,7 @@ func (c *conn) logStorage(op operation, inserted int, err error) {
 		Retries:      c.bo.streak,
 		Error:        errText(err),
 	})
-	c.notify.SyncFailed(c.cfg.ID, "local storage error — "+err.Error())
+	c.notify.SyncFailed(c.cfg.ID, "local storage error")
 }
 
 // writeLog persists one sync_log row. A failure here (storage itself is down)

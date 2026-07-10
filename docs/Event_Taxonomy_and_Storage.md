@@ -132,9 +132,10 @@ must not duplicate events; the `UNIQUE` constraint enforces this and writers use
 
 ## Retention
 
-No automatic compaction. User-initiated "clear history older than X" deletes,
-per item, signals older than X and superseded snapshots (all but the latest) —
-but **never** the latest snapshot of a still-open item. Items whose latest state
-is merged/closed/removed and older than X are purged entirely, as are rows whose
-`connection_id` no longer exists in the config. `sync_log` is bounded by the
-same cleanup plus an optional cap.
+**Deferred** — planned for v0.2. No automatic compaction in v0.1. User-initiated
+"clear history older than X" will delete, per item, signals older than X and
+superseded snapshots (all but the latest) — but **never** the latest snapshot of
+a still-open item. Items whose latest state is merged/closed/removed and older
+than X will be purged entirely, as will rows whose `connection_id` no longer
+exists in the config. `sync_log` will be bounded by the same cleanup plus an
+optional cap.

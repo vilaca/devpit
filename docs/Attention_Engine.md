@@ -2,7 +2,7 @@
 
 > **Status:** the fold (read-time computation of buckets and ranking) is
 > **implemented** in `internal/attention`. The user-facing presentation
-> (pinned zone, tags, filters) is **Planned** — the frontend is not built.
+> (pinned zone, tags, filters) is **implemented (v0.1)** in `frontend/`.
 > Decision: `ADR/ADR-0005_Event_Based_Attention_Engine.md` and
 > `ADR/ADR-0016_Presentation_And_Ranking.md`.
 
@@ -68,7 +68,7 @@ merely done.
 - **Repeated same-type signals collapse** to one tag with a count
   ("Mentioned ×3"); the individual signals remain in the detail view.
 
-## Presentation (Planned)
+## Presentation (Implemented v0.1)
 
 - A **single ranked list**, one row per item, states as tags; buckets are
   optional client-side filters, not the primary layout.

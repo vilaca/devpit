@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>DevPit</title>
+    <!-- Runs before first paint to avoid theme flash. -->
+    <script>
+      (function () {
+        var t = localStorage.getItem("theme");
+        if (t !== "dark" && t !== "light")
+          t = window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+        document.documentElement.dataset.theme = t;
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

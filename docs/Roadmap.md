@@ -139,10 +139,10 @@ Noted, not committed to any release.
   a `brew test` block. Single-binary nature makes this straightforward once the
   CI release pipeline is in place.
 
-- Night mode (dark theme), remembered so it is set once. Frontend-only:
-  persist the choice in `localStorage` (single-user instance, no server
-  round-trip needed); default to the OS `prefers-color-scheme` until the
-  user picks explicitly.
+- ~~Night mode (dark theme), remembered so it is set once.~~ ✓ Built — sun/moon
+  toggle in TopBar; `localStorage("theme")` persists the choice; falls back to
+  OS `prefers-color-scheme`; inline script in `index.html` prevents paint flash.
+  See ADR-0020.
 - Issues as first-class attention items (GitHub issues / GitLab issues).
   Issues already appear in the data model (`object_type = issue`) and in
   the Mentioned bucket (`mentions:@me` search includes issues by design,

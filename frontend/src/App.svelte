@@ -8,6 +8,7 @@
   import BucketFilter from "./components/BucketFilter.svelte";
   import AttentionList from "./components/AttentionList.svelte";
   import SyncLogDrawer from "./components/SyncLogDrawer.svelte";
+  import { theme } from "./lib/theme.svelte";
 
   // --- URL state -------------------------------------------------------
   // Bucket filter + sync-log open state live in the URL so a browser refresh
@@ -196,6 +197,31 @@
       <kbd>↵</kbd> open &nbsp;
       <kbd>/</kbd> filter &nbsp;
       <kbd>esc</kbd> clear
+      <span class="shortcuts-sep"></span>
+      <button
+        class="theme-toggle"
+        title={theme.dark ? "Switch to light mode" : "Switch to dark mode"}
+        onclick={() => theme.toggle()}
+        aria-label={theme.dark ? "Switch to light mode" : "Switch to dark mode"}
+      >
+        {#if theme.dark}
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="3.5" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="8" y1="1" x2="8" y2="2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="8" y1="13.5" x2="8" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="1" y1="8" x2="2.5" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="13.5" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="3.05" y1="3.05" x2="4.11" y2="4.11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="11.89" y1="11.89" x2="12.95" y2="12.95" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="12.95" y1="3.05" x2="11.89" y2="4.11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="4.11" y1="11.89" x2="3.05" y2="12.95" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        {:else}
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M13.5 9.5A6 6 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        {/if}
+      </button>
     </footer>
   {/if}
 </div>
@@ -254,5 +280,20 @@
     font-size: 10px;
     background: var(--bg-subtle);
     margin: 0 2px;
+  }
+  .shortcuts-sep {
+    flex: 1;
+  }
+  .theme-toggle {
+    border: none;
+    background: none;
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    color: var(--text-faint);
+    cursor: pointer;
+  }
+  .theme-toggle:hover {
+    color: var(--text-muted);
   }
 </style>

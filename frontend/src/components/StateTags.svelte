@@ -46,7 +46,7 @@
   const staleTitle = $derived(
     `No activity for ${relativeTime(item.updated_at)} (threshold: 7 days)`,
   );
-  const abandonedTitle = $derived(
+  const oldTitle = $derived(
     `No activity for ${relativeTime(item.updated_at)} (threshold: 30 days)`,
   );
 </script>
@@ -86,8 +86,8 @@
     <span class="tag marker-conflict" title={titleForMarker("failing_checks")}>Failing Checks</span>
   {/if}
 
-  {#if item.abandoned}
-    <span class="tag marker-abandoned" title={abandonedTitle}>Abandoned</span>
+  {#if item.old}
+    <span class="tag marker-old" title={oldTitle}>Old</span>
   {:else if item.stale}
     <span class="tag marker-stale" title={staleTitle}>Stale</span>
   {/if}
@@ -121,9 +121,9 @@
     color: var(--marker-stale);
     border-color: var(--marker-stale);
   }
-  .marker-abandoned {
-    color: var(--marker-abandoned);
-    border-color: var(--marker-abandoned);
+  .marker-old {
+    color: var(--marker-old);
+    border-color: var(--marker-old);
   }
   .ready-but-red {
     opacity: 0.85;

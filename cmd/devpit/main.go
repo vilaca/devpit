@@ -76,7 +76,7 @@ func run() error {
 	// attention/sync events out to connected clients (structural satisfaction —
 	// internal/api must not import internal/engine).
 	srv := api.New(db, connectionMeta(cfg.Connections),
-		attention.DefaultStaleThreshold, attention.DefaultAbandonedThreshold)
+		attention.DefaultStaleThreshold, attention.DefaultOldThreshold)
 	var _ engine.Notifier = srv
 
 	// Bind before serving so a port clash (e.g. another instance) is a fatal

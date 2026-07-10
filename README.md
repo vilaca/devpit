@@ -13,7 +13,7 @@ The shift: repositories become context. You are the center of the workflow.
 v0.1.1 complete. Storage, provider SDK (GitHub + GitLab), sync engine, attention
 fold, REST + SSE API, and the Svelte SPA are all built and embedded into a
 single binary. v0.1.1 adds diagnostic markers (`failing_checks`, `merge_conflict`,
-`needs_rebase`), age bands (`stale` / `abandoned`), onset hover text, and pin age.
+`needs_rebase`), age bands (`stale` / `old`), onset hover text, and pin age.
 
 ## How it works
 

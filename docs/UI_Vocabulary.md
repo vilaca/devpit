@@ -19,8 +19,8 @@ show. Seed for future user documentation. Decision record:
 │                                red]                               │
 ├─ stale (idle 7–30d) ──────────────────────────────────────────────┤
 │    Migrate CI config          [blocked] [rebase] [stale]          │
-├─ abandoned (idle > 30d) ───────────────────────────────────────────┤
-│    Dark launch flags          [waiting_on_author] [abandoned]     │
+├─ old (idle > 30d) ───────────────────────────────────────────┤
+│    Dark launch flags          [waiting_on_author] [old]     │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,9 +68,9 @@ not proof of freshness.
 | tag | idle time | effect | hover |
 |---|---|---|---|
 | `stale` | > 7 days, ≤ 30 | sinks below all fresh items | No activity for {N} (threshold: 7 days) |
-| `abandoned` | > 30 days | sinks to the very bottom | No activity for {N} (threshold: 30 days) |
+| `old` | > 30 days | sinks to the very bottom | No activity for {N} (threshold: 30 days) |
 
-Mutually exclusive. Bands sort fresh → stale → abandoned; within a band the
+Mutually exclusive. Bands sort fresh → stale → old; within a band the
 normal order (state precedence, newest first) applies. The pinned zone is
 exempt — pins never sink, but they still show their age tags and pin age.
 

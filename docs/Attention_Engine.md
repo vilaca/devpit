@@ -82,7 +82,7 @@ earliest mention signal's `coalesce(occurred_at, observed_at)` — the state
 never clears while the item is open.
 
 Accuracy is bounded by when DevPit first observed the item and by the poll
-cadence. Onset is not shown for `stale` and `abandoned` (their duration is
+cadence. Onset is not shown for `stale` and `old` (their duration is
 already in the hover text).
 
 ### Known gaps
@@ -102,14 +102,14 @@ stuck there). The exact precedence order is code (`states.go`); the principle
 is that what demands your action outranks what is merely done.
 
 - **Age bands sort the list first** (the single deliberate marker exception):
-  fresh (0) < stale (1) < abandoned (2). Fresh actionable work stays on top;
+  fresh (0) < stale (1) < old (2). Fresh actionable work stays on top;
   rot sinks.
 - **Within a band: state-precedence**, highest first.
 - **Within a state: newest-first**, where an item's timestamp is its newest
   signal (falling back to the latest snapshot's provider-updated time).
 - **Stale badge** once an item's age exceeds 7 days (default, a constant in
-  `fold.go`). **Abandoned badge** once idle more than 30 days. Mutually
-  exclusive: `!abandoned && stale` guards the stale tier.
+  `fold.go`). **Old badge** once idle more than 30 days. Mutually
+  exclusive: `!old && stale` guards the stale tier.
 - **Pinned zone is exempt** from band sorting — a pin is a deliberate user act.
   Pinned items still display their age tags and pin age so rot cannot hide at
   the top.
@@ -125,7 +125,7 @@ is that what demands your action outranks what is merely done.
   local-only (`ADR/ADR-0017_Read_Only_Action_Model.md`).
 - **Three visual tiers of tags**: state chips (primary) > diagnostic badges
   (conflict, rebase, failing checks; alert styling) > age tags (stale,
-  abandoned; muted styling).
+  old; muted styling).
 - **Hover text** adds information beyond the tag label: duration ("for 3d")
   from the `since` map, plus tag-specific extras (blocked shows the provider's
   raw gate detail; ready_to_merge with failing_checks notes the non-required

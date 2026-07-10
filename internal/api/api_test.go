@@ -30,7 +30,7 @@ func openTestDB(t *testing.T) *storage.DB {
 
 func newTestServer(t *testing.T, db *storage.DB) *Server {
 	t.Helper()
-	return New(db, testMeta, attention.DefaultStaleThreshold, attention.DefaultAbandonedThreshold)
+	return New(db, testMeta, attention.DefaultStaleThreshold, attention.DefaultOldThreshold)
 }
 
 func do(t *testing.T, s *Server, method, path string) *httptest.ResponseRecorder {
@@ -184,7 +184,7 @@ func TestConnectionsReturnsAll(t *testing.T) {
 
 func TestConnectionsIdentityNullWhenEmpty(t *testing.T) {
 	meta := []ConnectionMeta{{ID: "gh", Type: "github", Label: "Personal"}} // no Identity
-	s := New(openTestDB(t), meta, attention.DefaultStaleThreshold, attention.DefaultAbandonedThreshold)
+	s := New(openTestDB(t), meta, attention.DefaultStaleThreshold, attention.DefaultOldThreshold)
 	w := do(t, s, "GET", "/connections")
 	var resp connectionsResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {

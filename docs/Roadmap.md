@@ -46,8 +46,8 @@ Decided 2026-07-10 (ADR-0016); implementation plan in
 
 - Markers: `failing_checks` narrowed to CI-only; new `merge_conflict` and
   `needs_rebase`; GitLab starts setting `failing_checks` (`ci_must_pass`).
-- Age tiers: `stale` 7–30 days, `abandoned` >30 days (exclusive); list sorts
-  in age bands (fresh / stale / abandoned) before state precedence; pinned
+- Age tiers: `stale` 7–30 days, `old` >30 days (exclusive); list sorts
+  in age bands (fresh / stale / old) before state precedence; pinned
   zone exempt.
 - UX: combined "ready to merge · optional checks red" rendering; raw
   `gate_detail` as blocked-tooltip; visual separation of state chips /

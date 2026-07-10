@@ -38,7 +38,7 @@ export interface AttentionItem {
   states: State[];
   flagged: boolean;
   stale: boolean;
-  abandoned: boolean;
+  old: boolean;
   updated_at: string; // RFC 3339 UTC
   signal_counts?: Record<string, number>; // present only for counts > 1
   failing_checks: boolean;

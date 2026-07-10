@@ -68,6 +68,10 @@
         <span class="sep">·</span>
         <span class="author">{item.author}</span>
       {/if}
+      {#if item.approvals_count > 0}
+        <span class="sep">·</span>
+        <span class="approvals">{item.approvals_count} approved</span>
+      {/if}
       <span class="sep">·</span>
       <span class="time" title={item.updated_at}>{relativeTime(item.updated_at)}</span>
       <span class="sep">·</span>
@@ -152,6 +156,7 @@
     opacity: 0.5;
   }
   .author,
+  .approvals,
   .time,
   .conn {
     white-space: nowrap;

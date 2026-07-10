@@ -92,6 +92,17 @@ it.
   surfaces own-MR context — typically `waiting_on_author` or
   `changes_requested` state — without adding a separate badge or disturbing
   the ranking.
+- **Approval count in meta-row** (2026-07-10). When at least one reviewer has
+  approved an item, the row's meta-row shows "N approved" between the author
+  and the timestamp. Shown only when N > 0; hidden on drafts. The count is a
+  raw approved-reviewer count (not a gate verdict), so it is informational
+  only and never moves items. GitLab: `approvedBy { count }` from the existing
+  GraphQL join. GitHub: count of `APPROVED` entries in `latestReviews` from
+  the same join. Wire field: `approvals_count int` (-1 = unknown, 0 = hide).
+  The required-approvals denominator is deliberately omitted: GitHub's required
+  count is branch-protection data (admin-only for non-admins) and CODEOWNERS
+  makes raw counts misleading for gate purposes — the existing `needs_approval`
+  badge already carries the honest gate verdict.
 
 ## Rationale
 

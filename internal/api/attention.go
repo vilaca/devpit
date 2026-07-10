@@ -38,6 +38,7 @@ type attentionItem struct {
 	NeedsApproval         bool                 `json:"needs_approval"`
 	UnresolvedDiscussions bool                 `json:"unresolved_discussions"`
 	PolicyDenied          bool                 `json:"policy_denied"`
+	ApprovalsCount        int                  `json:"approvals_count,omitempty"`
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"`
@@ -96,6 +97,7 @@ func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
 		NeedsApproval:         it.NeedsApproval,
 		UnresolvedDiscussions: it.UnresolvedDiscussions,
 		PolicyDenied:          it.PolicyDenied,
+		ApprovalsCount:        it.ApprovalsCount,
 		GateDetail:            it.GateDetail,
 		FlaggedAt:             it.FlaggedAt,
 		Since:                 it.Since,

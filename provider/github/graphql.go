@@ -13,6 +13,54 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
+const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
+	`{pullRequest(number:%d){reviewDecision latestReviews{nodes{state}}}}`
+
+type prItem struct {
+	evIdx  int
+	owner  string
+	repo   string
+	number int
+	draft  bool
+	gate   string
+}
+
+type ghResult struct {
+	reviewDecision string
+	approvalsCount int
+}
+
+type ghPRNode struct {
+	PullRequest struct {
+		ReviewDecision string `json:"reviewDecision"`
+		LatestReviews  struct {
+			Nodes []struct {
+				State string `json:"state"`
+			} `json:"nodes"`
+		} `json:"latestReviews"`
+	} `json:"pullRequest"`
+}
+
+func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, results map[int]ghResult) {
+	for j, it := range batch {
+		raw, ok := data[fmt.Sprintf("a%d", j)]
+		if !ok || raw == nil {
+			continue
+		}
+		var node ghPRNode
+		if json.Unmarshal(raw, &node) != nil {
+			continue
+		}
+		count := 0
+		for _, r := range node.PullRequest.LatestReviews.Nodes {
+			if r.State == "APPROVED" {
+				count++
+			}
+		}
+		results[it.evIdx] = ghResult{node.PullRequest.ReviewDecision, count}
+	}
+}
+
 // doGraphQL POSTs a GraphQL query to the GitHub GraphQL API and returns the "data" map.
 // On non-2xx it returns a classified SDK error. Graceful-degradation callers catch errors and continue.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
@@ -63,15 +111,6 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 // NeedsApproval is set only when reviewDecision == "REVIEW_REQUIRED" && !draft && gate == blocked,
 // avoiding the "ready to merge · missing approvals" contradiction caused by timing skew or drafts.
 func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Event {
-	type prItem struct {
-		evIdx  int
-		owner  string
-		repo   string
-		number int
-		draft  bool
-		gate   string
-	}
-
 	var items []prItem
 	for i, ev := range events {
 		if ev.EventType != eventItemObserved {
@@ -91,7 +130,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		return events
 	}
 
-	decisions := make(map[int]string, len(items))
+	results := make(map[int]ghResult, len(items))
 
 	const batchSize = 30
 	for start := 0; start < len(items); start += batchSize {
@@ -100,8 +139,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		var q strings.Builder
 		q.WriteString("query{")
 		for j, it := range batch {
-			fmt.Fprintf(&q, `a%d:repository(owner:"%s",name:"%s"){pullRequest(number:%d){reviewDecision}}`,
-				j, it.owner, it.repo, it.number)
+			fmt.Fprintf(&q, prQueryFmt, j, it.owner, it.repo, it.number)
 		}
 		q.WriteString("}")
 
@@ -111,35 +149,23 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 			continue
 		}
 
-		for j, it := range batch {
-			raw, ok := data[fmt.Sprintf("a%d", j)]
-			if !ok || raw == nil {
-				continue
-			}
-			var node struct {
-				PullRequest struct {
-					ReviewDecision string `json:"reviewDecision"`
-				} `json:"pullRequest"`
-			}
-			if json.Unmarshal(raw, &node) == nil {
-				decisions[it.evIdx] = node.PullRequest.ReviewDecision
-			}
-		}
+		mergeGHBatchResults(data, batch, results)
 	}
 
-	if len(decisions) == 0 {
+	if len(results) == 0 {
 		return events
 	}
 
 	out := make([]sdk.Event, len(events))
 	copy(out, events)
-	for evIdx, rd := range decisions {
+	for evIdx, r := range results {
 		ev := out[evIdx]
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 		if !ok {
 			continue
 		}
-		pl.NeedsApproval = rd == "REVIEW_REQUIRED" && !pl.Draft && pl.Gate == gateBlocked
+		pl.NeedsApproval = r.reviewDecision == "REVIEW_REQUIRED" && !pl.Draft && pl.Gate == gateBlocked
+		pl.ApprovalsCount = r.approvalsCount
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
 		out[evIdx] = ev

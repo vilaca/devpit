@@ -234,7 +234,7 @@ func TestCycleSuccessInserts(t *testing.T) {
 	notify := &recordNotifier{}
 	c := newTestConn(store, prov, notify)
 
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	log := store.lastLog(t)
 	if log.Outcome != outcomeOK {
@@ -273,7 +273,7 @@ func TestCycleSuccessNoInsert(t *testing.T) {
 	notify := &recordNotifier{}
 	c := newTestConn(store, prov, notify)
 
-	c.cycle(context.Background(), opFastPoll)
+	c.cycle(context.Background(), opFastPoll, false)
 
 	if notify.attention != 0 {
 		t.Errorf("AttentionChanged fired %d times, want 0 when nothing inserted", notify.attention)
@@ -308,7 +308,7 @@ func TestCycleProviderErrors(t *testing.T) {
 			notify := &recordNotifier{}
 			c := newTestConn(store, prov, notify)
 
-			c.cycle(context.Background(), opReconcile)
+			c.cycle(context.Background(), opReconcile, false)
 
 			log := store.lastLog(t)
 			if log.Outcome != tt.wantOut {
@@ -343,7 +343,7 @@ func TestCycleAuthFailure(t *testing.T) {
 	notify := &recordNotifier{}
 	c := newTestConn(store, prov, notify)
 
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	log := store.lastLog(t)
 	if log.Outcome != outcomeAuth {
@@ -364,7 +364,7 @@ func TestCycleRateLimited(t *testing.T) {
 	c := newTestConn(store, prov, notify)
 
 	before := time.Now()
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	log := store.lastLog(t)
 	if log.Outcome != outcomeRateLimited {
@@ -390,7 +390,7 @@ func TestCycleLoadCursorsError(t *testing.T) {
 	notify := &recordNotifier{}
 	c := newTestConn(store, prov, notify)
 
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	if store.lastLog(t).Outcome != outcomeStorage {
 		t.Error("outcome should be storage on LoadCursors failure")
@@ -412,7 +412,7 @@ func TestCycleWriteEventsError(t *testing.T) {
 	notify := &recordNotifier{}
 	c := newTestConn(store, prov, notify)
 
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	if store.lastLog(t).Outcome != outcomeStorage {
 		t.Error("outcome should be storage on WriteEvents failure")
@@ -430,7 +430,7 @@ func TestCycleBackoffGate(t *testing.T) {
 	c := newTestConn(store, prov, &recordNotifier{})
 	c.bo.notBefore = time.Now().Add(time.Hour) // gate closed
 
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	if fast, recon := prov.polls(); fast != 0 || recon != 0 {
 		t.Error("provider must not be called while backing off")
@@ -447,7 +447,7 @@ func TestCycleCancelledContextIsCleanExit(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	c.cycle(ctx, opReconcile)
+	c.cycle(ctx, opReconcile, false)
 
 	if store.logCount() != 0 {
 		t.Error("shutdown must not write a sync_log row (§9)")
@@ -471,7 +471,7 @@ func TestCycleCancelDuringCall(t *testing.T) {
 	}
 	c := newTestConn(store, prov, &recordNotifier{})
 
-	c.cycle(ctx, opReconcile)
+	c.cycle(ctx, opReconcile, false)
 
 	if store.logCount() != 0 {
 		t.Error("a cancel during the provider call is a clean exit, not a failure")
@@ -540,7 +540,7 @@ func TestCycleReResolvesTransientIdentity(t *testing.T) {
 	c := newTestConn(store, prov, &recordNotifier{})
 	c.resolved = false // transient failure earlier
 
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	if !c.resolved {
 		t.Error("identity should be resolved after a successful in-loop retry")
@@ -558,7 +558,7 @@ func TestCycleIdentityStillFailing(t *testing.T) {
 	c := newTestConn(store, prov, &recordNotifier{})
 	c.resolved = false
 
-	c.cycle(context.Background(), opReconcile)
+	c.cycle(context.Background(), opReconcile, false)
 
 	if store.lastLog(t).Outcome != outcomeNetwork {
 		t.Error("a transient identity failure inside cycle classifies as network")

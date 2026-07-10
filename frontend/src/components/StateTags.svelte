@@ -95,10 +95,8 @@
     <span class="tag marker-conflict" title={titleForMarker("policy_denied")}>Policy</span>
   {/if}
 
-  {#if item.old}
-    <span class="tag marker-old" title={oldTitle}>Old</span>
-  {:else if item.stale}
-    <span class="tag marker-stale" title={staleTitle}>Stale</span>
+  {#if item.old || item.stale}
+    <span class="tag marker-stale" title={item.old ? oldTitle : staleTitle}>Stale</span>
   {/if}
 </span>
 
@@ -129,10 +127,6 @@
   .marker-stale {
     color: var(--marker-stale);
     border-color: var(--marker-stale);
-  }
-  .marker-old {
-    color: var(--marker-old);
-    border-color: var(--marker-old);
   }
   .ready-but-red {
     opacity: 0.85;

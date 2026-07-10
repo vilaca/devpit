@@ -80,6 +80,18 @@ it.
   above applies unchanged. The pinned zone is exempt — a pin is a deliberate
   user act — but pinned items still show their age tags and pin age, so rot
   cannot hide at the top.
+- **Age tier presentation** (2026-07-10). Both `stale` and `old` items show
+  a "Stale" tag; the `old` tier is additionally distinguished by a warm amber
+  row background tint (`color-mix` over `--marker-old` at 7% opacity), so the
+  two tiers remain visually distinct without introducing a separate "Old" label.
+  The tag tooltip retains the exact threshold wording so the tier boundary is
+  still discoverable on hover.
+- **Authored-item row tint** (2026-07-10). Items where the authenticated
+  identity of the connection matches the item's author field receive a subtle
+  blue row background (`color-mix` over `--accent` at 7% opacity). This
+  surfaces own-MR context — typically `waiting_on_author` or
+  `changes_requested` state — without adding a separate badge or disturbing
+  the ranking.
 
 ## Rationale
 

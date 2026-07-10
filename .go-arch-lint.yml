@@ -20,6 +20,7 @@ components:
   storage: { in: internal/storage }
   api: { in: internal/api }
   attention: { in: internal/attention }
+  web: { in: internal/web }
   providerGithub: { in: provider/github }
   providerGitlab: { in: provider/gitlab }
 
@@ -33,7 +34,7 @@ deps:
   attention:
     mayDependOn: [sdk, storage]
   api:
-    mayDependOn: [sdk, storage, attention]
+    mayDependOn: [sdk, storage, attention, web]
   engine:
     mayDependOn: [sdk, storage]
   providerGithub:
@@ -41,4 +42,4 @@ deps:
   providerGitlab:
     mayDependOn: [sdk]
   cmd:
-    mayDependOn: [sdk, config, engine, storage, api, attention, providerGithub, providerGitlab]
+    mayDependOn: [sdk, config, engine, storage, api, attention, web, providerGithub, providerGitlab]

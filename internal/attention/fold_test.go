@@ -518,8 +518,12 @@ func TestFoldMarkersFromFacts(t *testing.T) {
 			wantFailing: true, wantDetail: "unstable",
 		},
 		{
-			name:         "merge conflict",
-			mutate:       func(f *sdk.ItemObservedPayload) { f.MergeConflict = true; f.Gate = "blocked"; f.GateDetail = "dirty" },
+			name: "merge conflict",
+			mutate: func(f *sdk.ItemObservedPayload) {
+				f.MergeConflict = true
+				f.Gate = "blocked"
+				f.GateDetail = "dirty"
+			},
 			wantConflict: true, wantDetail: "dirty",
 		},
 		{
@@ -661,8 +665,11 @@ func TestAgeBandAbandonedLast(t *testing.T) {
 	if len(items) != 3 {
 		t.Fatalf("want 3 items, got %d", len(items))
 	}
-	if items[0].NativeID != "acme/api#fresh" || items[1].NativeID != "acme/api#stale" || items[2].NativeID != "acme/api#abandoned" {
-		t.Errorf("band order wrong: %q %q %q", items[0].NativeID, items[1].NativeID, items[2].NativeID)
+	if items[0].NativeID != "acme/api#fresh" ||
+		items[1].NativeID != "acme/api#stale" ||
+		items[2].NativeID != "acme/api#abandoned" {
+		t.Errorf("band order wrong: %q %q %q",
+			items[0].NativeID, items[1].NativeID, items[2].NativeID)
 	}
 }
 

@@ -159,7 +159,10 @@ func TestNormalizeMarkers(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.status, func(t *testing.T) {
-			pl := p.observedFromMR(makeMR(c.status)).Payload.(sdk.ItemObservedPayload)
+			pl, ok := p.observedFromMR(makeMR(c.status)).Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatal("payload type assertion failed")
+			}
 			if pl.Gate != c.wantGate {
 				t.Errorf("gate = %q, want %q", pl.Gate, c.wantGate)
 			}

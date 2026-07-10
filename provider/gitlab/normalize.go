@@ -17,19 +17,33 @@ const objectType = "merge_request"
 // (docs/Event_Taxonomy_and_Storage.md).
 const eventItemObserved = "item.observed"
 
+// Normalized gate and detailed_merge_status values.
+const (
+	dmsMergeable  = "mergeable"
+	dmsCiMustPass = "ci_must_pass"
+	dmsConflict   = "conflict"
+	dmsNeedRebase = "need_rebase"
+	gateReady     = "ready"
+	gateBlocked   = "blocked"
+	gateUnknown   = "unknown"
+	stateOpen     = "open"
+	stateMerged   = "merged"
+	stateClosed   = "closed"
+)
+
 // mergeGate maps detailed_merge_status to the normalized gate class.
 // Transient/draft statuses map to "unknown"; the fold carries the last known
 // gate forward so transient reads don't flap buckets (docs/Event_Taxonomy_and_Storage.md).
 func mergeGate(status string) string {
 	switch status {
-	case "mergeable":
-		return "ready"
+	case dmsMergeable:
+		return gateReady
 	case "unchecked", "checking", "preparing", "approvals_syncing", "ci_still_running", "draft_status", "":
-		return "unknown"
+		return gateUnknown
 	default:
 		// conflict, need_rebase, not_approved, requested_changes,
 		// ci_must_pass, discussions_not_resolved, and the tier-specific gates.
-		return "blocked"
+		return gateBlocked
 	}
 }
 
@@ -70,12 +84,12 @@ func hasUser(users []glUser, handle string) bool {
 }
 
 func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
-	state := "open"
+	state := stateOpen
 	switch mr.State {
-	case "merged":
-		state = "merged"
-	case "closed", "locked":
-		state = "closed"
+	case stateMerged:
+		state = stateMerged
+	case stateClosed, "locked":
+		state = stateClosed
 	}
 
 	roles := []string{}
@@ -100,9 +114,9 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		MyRoles:           roles,
 		Gate:              mergeGate(mr.DetailedMergeStatus),
 		GateDetail:        mr.DetailedMergeStatus,
-		FailingChecks:     mr.DetailedMergeStatus == "ci_must_pass",
-		MergeConflict:     mr.DetailedMergeStatus == "conflict",
-		NeedsRebase:       mr.DetailedMergeStatus == "need_rebase",
+		FailingChecks:     mr.DetailedMergeStatus == dmsCiMustPass,
+		MergeConflict:     mr.DetailedMergeStatus == dmsConflict,
+		NeedsRebase:       mr.DetailedMergeStatus == dmsNeedRebase,
 		ProviderUpdatedAt: mr.UpdatedAt,
 	}
 

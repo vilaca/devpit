@@ -196,7 +196,10 @@ func TestNormalizeMarkers(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.mergeableState, func(t *testing.T) {
-			pl := p.observedFromPull(makePR(c.mergeableState)).Payload.(sdk.ItemObservedPayload)
+			pl, ok := p.observedFromPull(makePR(c.mergeableState)).Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatal("payload type assertion failed")
+			}
 			if pl.Gate != c.wantGate {
 				t.Errorf("gate = %q, want %q", pl.Gate, c.wantGate)
 			}
@@ -216,7 +219,10 @@ func TestNormalizeMarkers(t *testing.T) {
 // TestDirtyPRIsBlockedWithConflict verifies dirty → blocked + merge_conflict, not failing_checks.
 func TestDirtyPRIsBlockedWithConflict(t *testing.T) {
 	p := &Provider{handle: "octocat"}
-	pl := p.observedFromPull(makePR("dirty")).Payload.(sdk.ItemObservedPayload)
+	pl, ok := p.observedFromPull(makePR("dirty")).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
 	if pl.Gate != "blocked" {
 		t.Errorf("gate = %q, want blocked", pl.Gate)
 	}

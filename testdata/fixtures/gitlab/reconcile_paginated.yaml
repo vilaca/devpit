@@ -13,17 +13,16 @@ interactions:
     headers:
       Content-Type:
       - application/json
-      Ratelimit-Remaining:
-      - "1990"
+      X-Next-Page:
+      - "2"
     body: |
       [
         {
           "iid": 7,
           "project_id": 12,
-          "title": "Fix flaky sync test",
+          "title": "Page one MR",
           "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
           "state": "opened",
-          "draft": false,
           "detailed_merge_status": "mergeable",
           "updated_at": "2026-07-08T09:14:02Z",
           "author": {"username": "jdoe"},
@@ -33,6 +32,36 @@ interactions:
         }
       ]
 - id: 1
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/merge_requests?scope=assigned_to_me&state=opened&per_page=100&page=2
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+      X-Next-Page:
+      - ""
+    body: |
+      [
+        {
+          "iid": 8,
+          "project_id": 12,
+          "title": "Page two MR",
+          "web_url": "https://gitlab.com/acme/api/-/merge_requests/8",
+          "state": "opened",
+          "detailed_merge_status": "mergeable",
+          "updated_at": "2026-07-08T08:00:00Z",
+          "author": {"username": "jdoe"},
+          "assignees": [{"username": "octocat"}],
+          "reviewers": [],
+          "references": {"full": "acme/api!8"}
+        }
+      ]
+- id: 2
   request:
     method: GET
     url: https://gitlab.com/api/v4/merge_requests?scope=created_by_me&state=opened&per_page=100
@@ -45,33 +74,4 @@ interactions:
       Content-Type:
       - application/json
     body: |
-      [
-        {
-          "iid": 7,
-          "project_id": 12,
-          "title": "Fix flaky sync test",
-          "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
-          "state": "opened",
-          "draft": false,
-          "detailed_merge_status": "mergeable",
-          "updated_at": "2026-07-08T09:14:02Z",
-          "author": {"username": "octocat"},
-          "assignees": [],
-          "reviewers": [],
-          "references": {"full": "acme/api!7"}
-        },
-        {
-          "iid": 8,
-          "project_id": 12,
-          "title": "Another MR",
-          "web_url": "https://gitlab.com/acme/api/-/merge_requests/8",
-          "state": "opened",
-          "draft": true,
-          "detailed_merge_status": "draft_status",
-          "updated_at": "2026-07-08T08:00:00Z",
-          "author": {"username": "octocat"},
-          "assignees": [],
-          "reviewers": [],
-          "references": {"full": "acme/api!8"}
-        }
-      ]
+      []

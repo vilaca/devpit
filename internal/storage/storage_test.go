@@ -375,6 +375,104 @@ func TestSyncLogOrdering(t *testing.T) {
 	}
 }
 
+func TestReadSyncLogSince(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	// c1 rows straddle the boundary; the c2 row must never leak into a c1 query.
+	entries := []SyncLogEntry{
+		{Ts: base, ConnectionID: "c1", Operation: "fast_poll", Outcome: "ok"},
+		{Ts: base.Add(time.Minute), ConnectionID: "c1", Operation: "reconcile", Outcome: "ok"},
+		{Ts: base.Add(2 * time.Minute), ConnectionID: "c1", Operation: "fast_poll", Outcome: "error", HTTPStatus: new(500)},
+		{Ts: base.Add(time.Minute), ConnectionID: "c2", Operation: "fast_poll", Outcome: "ok"},
+	}
+	for _, e := range entries {
+		if err := db.WriteSyncLog(ctx, e); err != nil {
+			t.Fatalf("WriteSyncLog: %v", err)
+		}
+	}
+
+	// since == the middle row's ts: that row is included (>=), the earlier one is not.
+	got, err := db.ReadSyncLogSince(ctx, "c1", base.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("ReadSyncLogSince: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2 (boundary inclusive, base row excluded)", len(got))
+	}
+	// Newest first.
+	if !got[0].Ts.Equal(base.Add(2 * time.Minute)) {
+		t.Errorf("got[0].Ts = %v, want %v", got[0].Ts, base.Add(2*time.Minute))
+	}
+	if !got[1].Ts.Equal(base.Add(time.Minute)) {
+		t.Errorf("got[1].Ts = %v, want %v", got[1].Ts, base.Add(time.Minute))
+	}
+	for _, e := range got {
+		if e.ConnectionID != "c1" {
+			t.Errorf("leaked connection %q into c1 query", e.ConnectionID)
+		}
+	}
+
+	// A since past every row returns nothing.
+	empty, err := db.ReadSyncLogSince(ctx, "c1", base.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("ReadSyncLogSince future: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("future since returned %d rows, want 0", len(empty))
+	}
+}
+
+func TestLastSyncedAt(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+
+	// No rows yet -> zero time, no error.
+	ts, err := db.LastSyncedAt(ctx, "c1")
+	if err != nil {
+		t.Fatalf("LastSyncedAt empty: %v", err)
+	}
+	if !ts.IsZero() {
+		t.Errorf("ts = %v, want zero for no rows", ts)
+	}
+
+	base := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	// The latest successful sync is the middle row; a later error must not count.
+	entries := []SyncLogEntry{
+		{Ts: base, ConnectionID: "c1", Operation: "fast_poll", Outcome: "error", HTTPStatus: new(500)},
+		{Ts: base.Add(time.Minute), ConnectionID: "c1", Operation: "reconcile", Outcome: "ok"},
+		{Ts: base.Add(2 * time.Minute), ConnectionID: "c1", Operation: "fast_poll", Outcome: "error", HTTPStatus: new(503)},
+	}
+	for _, e := range entries {
+		if err := db.WriteSyncLog(ctx, e); err != nil {
+			t.Fatalf("WriteSyncLog: %v", err)
+		}
+	}
+
+	ts, err = db.LastSyncedAt(ctx, "c1")
+	if err != nil {
+		t.Fatalf("LastSyncedAt: %v", err)
+	}
+	if !ts.Equal(base.Add(time.Minute)) {
+		t.Errorf("ts = %v, want %v (latest ok, ignoring later error)", ts, base.Add(time.Minute))
+	}
+
+	// A connection with only failures has no successful sync.
+	if err := db.WriteSyncLog(ctx, SyncLogEntry{
+		Ts: base, ConnectionID: "c2", Operation: "fast_poll", Outcome: "error", HTTPStatus: new(500),
+	}); err != nil {
+		t.Fatalf("WriteSyncLog c2: %v", err)
+	}
+	ts, err = db.LastSyncedAt(ctx, "c2")
+	if err != nil {
+		t.Fatalf("LastSyncedAt c2: %v", err)
+	}
+	if !ts.IsZero() {
+		t.Errorf("c2 ts = %v, want zero (no successful sync)", ts)
+	}
+}
+
 func TestHandleNextOrdering(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()

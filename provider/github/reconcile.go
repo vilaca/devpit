@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/vilaca/devpit/sdk"
@@ -98,16 +100,50 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 	}, nil
 }
 
+// search runs a Search API query, following the Link header rel="next" until
+// exhausted so large result sets are never silently truncated to page one.
 func (p *Provider) search(ctx context.Context, q string) (*ghSearchResult, *int, error) {
-	u := p.apiBase + "/search/issues?q=" + url.QueryEscape(q)
-	resp, err := p.do(ctx, u, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	rate := rateRemaining(resp.Header)
+	u := p.apiBase + "/search/issues?q=" + url.QueryEscape(q) + "&per_page=100"
 	var res ghSearchResult
-	if err := decodeJSON(resp, &res); err != nil {
-		return nil, nil, err
+	var rate *int
+	for u != "" {
+		resp, err := p.do(ctx, u, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		if r := rateRemaining(resp.Header); r != nil {
+			rate = r
+		}
+		next := nextLink(resp.Header)
+		var page ghSearchResult
+		if err := decodeJSON(resp, &page); err != nil {
+			return nil, nil, err
+		}
+		res.Items = append(res.Items, page.Items...)
+		u = next
 	}
 	return &res, rate, nil
+}
+
+// nextLink returns the rel="next" URL from an RFC 5988 Link header, or "" when
+// there is no further page.
+func nextLink(h http.Header) string {
+	for _, link := range h.Values("Link") {
+		for part := range strings.SplitSeq(link, ",") {
+			segs := strings.Split(part, ";")
+			if len(segs) < 2 {
+				continue
+			}
+			ref := strings.TrimSpace(segs[0])
+			if !strings.HasPrefix(ref, "<") || !strings.HasSuffix(ref, ">") {
+				continue
+			}
+			for _, param := range segs[1:] {
+				if strings.TrimSpace(param) == `rel="next"` {
+					return ref[1 : len(ref)-1]
+				}
+			}
+		}
+	}
+	return ""
 }

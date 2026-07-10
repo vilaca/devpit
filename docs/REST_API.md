@@ -41,12 +41,33 @@ unmatched path so a browser refresh on any client route works.
 ## `GET /attention`
 
 The full ranked list. Pinned items (`flagged: true`) come first in flag order;
-auto-ranked items follow, ordered by state precedence then newest-signal-first
-(`docs/Attention_Engine.md`). Each item carries its connection provenance,
-title/url/repo/author/draft, the `states` array (ordered by precedence), the
-`flagged` and `stale` booleans, an `updated_at`, `signal_counts` (present only
-for counts > 1, driving the "Mentioned ×3" tag), and `failing_checks` (renders
-a marker, never a state).
+auto-ranked items follow, sorted by age band (fresh < stale < abandoned) then
+state precedence then newest-signal-first (`docs/Attention_Engine.md`).
+
+Each item carries:
+- Connection provenance: `connection_id`, `connection_label`, `connection_type`.
+- Item identity: `id`, `object_type`, `native_id`, `title`, `url`, `repo`,
+  `author`, `draft`.
+- `states` — array in precedence order; `states[0]` is the ranking state.
+- `flagged` — true when in the "Handle next" zone.
+- `flagged_at` — RFC 3339 timestamp when the item was pinned; present only when
+  `flagged: true`.
+- `stale` — true when idle more than 7 days (and not abandoned).
+- `abandoned` — true when idle more than 30 days; mutually exclusive with stale.
+- `updated_at` — the item's ranking timestamp (newest signal or provider time).
+- `signal_counts` — present only when a signal type has count > 1 (drives "×N"
+  tags).
+- **Markers** (diagnostic booleans, never affect state):
+  - `failing_checks` — CI/checks red (GitHub: `unstable`; GitLab: `ci_must_pass`).
+  - `merge_conflict` — manual conflict resolution needed (GitHub: `dirty`;
+    GitLab: `conflict`).
+  - `needs_rebase` — mechanical rebase needed (GitHub: `behind`; GitLab:
+    `need_rebase`).
+  - `gate_detail` — raw provider vocabulary for the merge gate (omitted when
+    empty); powers the Blocked tooltip.
+- `since` — map from tag wire name to RFC 3339 onset time; only active tags
+  appear. Onset = start of latest contiguous run of snapshots where the
+  condition holds. `mentioned` onset = earliest mention signal time.
 
 ## `GET /connections`
 

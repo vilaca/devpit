@@ -91,6 +91,20 @@ Decided 2026-07-10 (ADR-0004); implementation plan in
 - Fixes the live bug where an MR showed `failing_checks: true` while GitLab
   reported `headPipeline: RUNNING` until the next reconcile.
 
+## v0.1.4 — Show all involved open items ✓ Built
+
+Decided 2026-07-10 (ADR-0016).
+
+- The fold no longer drops an open item that matches no attention state. Every
+  item in the log is one the user is involved in (assigned/authored sync scopes
+  plus mention signals), so authored MRs waiting on review and MRs with an
+  `unknown` merge gate stay visible instead of silently disappearing.
+- Stateless items render as a plain row (authored blue tint + `draft` marker
+  carry the context) and sort below every stated item within their age band.
+- Fixes the live bug where ~16 of a user's 26 open authored MRs were hidden:
+  11 had gate `unknown` (CI running / gate not yet computed) and 5 were drafts.
+- Wire effect: `states` may be an empty array (`docs/REST_API.md`).
+
 ## v0.2 — More forges + sync hardening
 
 - Providers: Forgejo, Gitea (with capability declaration/degradation, ADR-0003).

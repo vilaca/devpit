@@ -48,7 +48,10 @@ Each item carries:
 - Connection provenance: `connection_id`, `connection_label`, `connection_type`.
 - Item identity: `id`, `object_type`, `native_id`, `title`, `url`, `repo`,
   `author`, `draft`.
-- `states` — array in precedence order; `states[0]` is the ranking state.
+- `states` — array in precedence order; `states[0]` is the ranking state. May
+  be empty (`[]`) for an open item you are involved in that matches no state
+  (e.g. an authored MR waiting on review, or a draft); such items still appear
+  and sort below every stated item.
 - `flagged` — true when in the "Handle next" zone.
 - `flagged_at` — RFC 3339 timestamp when the item was pinned; present only when
   `flagged: true`.

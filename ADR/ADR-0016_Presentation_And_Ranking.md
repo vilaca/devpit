@@ -8,7 +8,8 @@ Accepted
 
 Fold and ranking **Implemented (v0.1)** (`internal/attention`); the user-facing
 presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the
-full UI is built in `frontend/`. See `docs/Roadmap.md`.
+full UI is built in `frontend/`. The marker vocabulary and age bands
+(decision 2026-07-10, below) are **Planned**. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -30,6 +31,29 @@ it.
   threshold as the anti-rot safety net.
 - **Repeated same-type signals collapse** to one tag with a count
   ("Mentioned ×3"); the individual signals remain in the detail view.
+- **Markers carry gate diagnostics; states never do** (2026-07-10). Attention
+  states remain a closed set driven by the provider's merge gate, so Blocked
+  stays trustworthy. Everything that explains *why* an item cannot merge is a
+  marker: `failing_checks` means exactly "CI/checks red" (no longer merge
+  conflicts); `merge_conflict` and `needs_rebase` are distinct because they
+  demand different author effort (manual resolution vs a mechanical rebase).
+  Markers are provider-normalized booleans in the item snapshot, like the gate
+  itself.
+- **Hover text must add information beyond the tag label** (2026-07-10) —
+  never a paraphrase of the tag name. The universal payload is the tag's
+  onset duration ("for 3d"), derived from the item's snapshot history at fold
+  time; tags append genuinely extra facts where they exist (the provider's
+  raw gate reason on Blocked, the non-required-check note on ready-but-red,
+  the no-decay caveat on Mentioned). A tag with nothing beyond its label to
+  say still shows its duration.
+- **Age tiers band the list** (2026-07-10). `stale` (idle 7–30 days) and
+  `abandoned` (idle >30 days) are mutually exclusive tiers, and they are the
+  *single deliberate exception* to "markers never move items": the list sorts
+  by age band (fresh, then stale, then abandoned last) before state
+  precedence, keeping fresh actionable work on top. Within a band the ranking
+  above applies unchanged. The pinned zone is exempt — a pin is a deliberate
+  user act — but pinned items still show their age tags and pin age, so rot
+  cannot hide at the top.
 
 ## Rationale
 

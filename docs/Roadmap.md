@@ -39,6 +39,24 @@ tags, bucket filters, sync-log drawer, failure banner, health dots, keyboard
 navigation, and URL state (`frontend/`, `internal/web`). **v0.1 is complete.**
 See `docs/High_Level_Architecture.md` for the component status.
 
+## v0.1.1 — Marker vocabulary + age bands
+
+Decided 2026-07-10 (ADR-0016); implementation plan in
+`docs/plans/2026-07-10_marker_vocabulary_and_age_bands.md`.
+
+- Markers: `failing_checks` narrowed to CI-only; new `merge_conflict` and
+  `needs_rebase`; GitLab starts setting `failing_checks` (`ci_must_pass`).
+- Age tiers: `stale` 7–30 days, `abandoned` >30 days (exclusive); list sorts
+  in age bands (fresh / stale / abandoned) before state precedence; pinned
+  zone exempt.
+- UX: combined "ready to merge · optional checks red" rendering; raw
+  `gate_detail` as blocked-tooltip; visual separation of state chips /
+  diagnostic badges / age tags; pin zone shows age tags + pin age
+  (`flagged_at` added to the API).
+- Hover text on every tag: onset duration ("for 3d") from snapshot history
+  (new `since` map in the API), plus extra facts where they exist
+  (ADR-0016 tooltip principle).
+
 ## v0.2 — More forges + sync hardening
 
 - Providers: Forgejo, Gitea (with capability declaration/degradation, ADR-0003).
@@ -63,4 +81,17 @@ See `docs/High_Level_Architecture.md` for the component status.
 - Stable Provider SDK for third-party providers.
 - Broaden beyond code forges: Jira, Slack, CI/CD, Sentry, PagerDuty
   (see `docs/Why.md`).
+
+## Unversioned ideas
+
+Noted, not committed to any release.
+
+- Activity-based decay for the Mentioned state: clear the mention once the
+  provider observes the user's own reply/review after it. Requires a new
+  own-activity signal from providers; preferred over time decay or a local
+  dismiss, which are quieter but less honest.
+- Night mode (dark theme), remembered so it is set once. Frontend-only:
+  persist the choice in `localStorage` (single-user instance, no server
+  round-trip needed); default to the OS `prefers-color-scheme` until the
+  user picks explicitly.
 

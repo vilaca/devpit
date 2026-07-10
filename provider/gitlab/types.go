@@ -24,18 +24,20 @@ type glTodo struct {
 }
 
 type glMergeRequest struct {
-	IID                 int      `json:"iid"`
-	ProjectID           int      `json:"project_id"`
-	Title               string   `json:"title"`
-	WebURL              string   `json:"web_url"`
-	State               string   `json:"state"` // opened | merged | closed | locked
-	Draft               bool     `json:"draft"`
-	DetailedMergeStatus string   `json:"detailed_merge_status"`
-	UpdatedAt           string   `json:"updated_at"`
-	Author              glUser   `json:"author"`
-	Assignees           []glUser `json:"assignees"`
-	Reviewers           []glUser `json:"reviewers"`
-	References          struct {
+	IID                         int      `json:"iid"`
+	ProjectID                   int      `json:"project_id"`
+	Title                       string   `json:"title"`
+	WebURL                      string   `json:"web_url"`
+	State                       string   `json:"state"` // opened | merged | closed | locked
+	Draft                       bool     `json:"draft"`
+	DetailedMergeStatus         string   `json:"detailed_merge_status"`
+	HasConflicts                bool     `json:"has_conflicts"`
+	BlockingDiscussionsResolved *bool    `json:"blocking_discussions_resolved"`
+	UpdatedAt                   string   `json:"updated_at"`
+	Author                      glUser   `json:"author"`
+	Assignees                   []glUser `json:"assignees"`
+	Reviewers                   []glUser `json:"reviewers"`
+	References                  struct {
 		Full string `json:"full"` // "group/project!iid"
 	} `json:"references"`
 }

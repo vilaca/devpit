@@ -73,6 +73,8 @@ interactions:
         "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
         "state": "opened",
         "detailed_merge_status": "not_approved",
+        "has_conflicts": false,
+        "blocking_discussions_resolved": true,
         "updated_at": "2026-07-08T09:14:02Z",
         "author": {"username": "jdoe"},
         "assignees": [],
@@ -99,9 +101,25 @@ interactions:
         "web_url": "https://gitlab.com/acme/api/-/merge_requests/8",
         "state": "opened",
         "detailed_merge_status": "not_approved",
+        "has_conflicts": false,
+        "blocking_discussions_resolved": true,
         "updated_at": "2026-07-08T08:00:00Z",
         "author": {"username": "jdoe"},
         "assignees": [{"username": "octocat"}],
         "reviewers": [],
         "references": {"full": "acme/api!8"}
       }
+- id: 4
+  request:
+    method: POST
+    url: https://gitlab.com/api/graphql
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {"data":{"a0":{"mergeRequest":{"approved":false,"shouldBeRebased":false,"headPipeline":null}},"a1":{"mergeRequest":{"approved":false,"shouldBeRebased":false,"headPipeline":null}}}}

@@ -82,3 +82,17 @@ interactions:
           }
         ]
       }
+- id: 3
+  request:
+    method: POST
+    url: https://api.github.com/graphql
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {"data":{"a0":{"pullRequest":{"reviewDecision":null}}}}

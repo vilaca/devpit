@@ -57,6 +57,18 @@ Decided 2026-07-10 (ADR-0016); implementation plan in
   (new `since` map in the API), plus extra facts where they exist
   (ADR-0016 tooltip principle).
 
+## v0.1.2 — Blocked diagnostic badges ✓ Built
+
+Decided 2026-07-10 (ADR-0016). Implementation plan in
+`docs/plans/2026-07-10_blocked_diagnostic_badges.md`.
+
+- Three new cosmetic diagnostic badges: `missing approvals`, `discussions`, `policy`.
+- Parity principle: badge ships only where the provider reports a user-readable verdict.
+- Both providers use a batched GraphQL join (one query per sync cycle).
+- GitLab shows all blocked reasons at once (moved off single-valued `detailed_merge_status`).
+- GitLab `checks failing` now covers any pipeline (closes the non-gating CI gap).
+- Provider parity table in `docs/UI_Vocabulary.md`.
+
 ## v0.2 — More forges + sync hardening
 
 - Providers: Forgejo, Gitea (with capability declaration/degradation, ADR-0003).

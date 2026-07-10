@@ -144,21 +144,24 @@ var Registry = map[string]ProviderFactory{}
 
 // ItemObservedPayload is the payload for event_type "item.observed".
 type ItemObservedPayload struct {
-	Title             string   `json:"title"`
-	URL               string   `json:"url"`
-	Repo              string   `json:"repo"`
-	State             string   `json:"state"` // open | merged | closed
-	Draft             bool     `json:"draft"`
-	Author            string   `json:"author"`
-	MyRoles           []string `json:"my_roles"` // author | reviewer | assignee | mentioned
-	ReviewDecision    string   `json:"review_decision,omitempty"`
-	MyReviewState     string   `json:"my_review_state,omitempty"`
-	Gate              string   `json:"gate"` // ready | blocked | unknown
-	GateDetail        string   `json:"gate_detail,omitempty"`
-	FailingChecks     bool     `json:"failing_checks"`
-	MergeConflict     bool     `json:"merge_conflict"`
-	NeedsRebase       bool     `json:"needs_rebase"`
-	ProviderUpdatedAt string   `json:"provider_updated_at"`
+	Title                 string   `json:"title"`
+	URL                   string   `json:"url"`
+	Repo                  string   `json:"repo"`
+	State                 string   `json:"state"` // open | merged | closed
+	Draft                 bool     `json:"draft"`
+	Author                string   `json:"author"`
+	MyRoles               []string `json:"my_roles"` // author | reviewer | assignee | mentioned
+	ReviewDecision        string   `json:"review_decision,omitempty"`
+	MyReviewState         string   `json:"my_review_state,omitempty"`
+	Gate                  string   `json:"gate"` // ready | blocked | unknown
+	GateDetail            string   `json:"gate_detail,omitempty"`
+	FailingChecks         bool     `json:"failing_checks"`
+	MergeConflict         bool     `json:"merge_conflict"`
+	NeedsRebase           bool     `json:"needs_rebase"`
+	NeedsApproval         bool     `json:"needs_approval"`
+	UnresolvedDiscussions bool     `json:"unresolved_discussions"`
+	PolicyDenied          bool     `json:"policy_denied"`
+	ProviderUpdatedAt     string   `json:"provider_updated_at"`
 }
 
 // item.removed carries no payload (Payload: nil).

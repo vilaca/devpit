@@ -337,7 +337,9 @@ func TestRateRemaining(t *testing.T) {
 
 func TestNormalizeMarkers(t *testing.T) {
 	p := &Provider{handle: "octocat"}
-	// FailingChecks and NeedsRebase are now set by GraphQL join; observedFromMR always emits false.
+	// FailingChecks (ci_must_pass), NeedsRebase (need_rebase), and NeedsApproval (not_approved) are set
+	// from detailed_merge_status by observedFromMR as a REST fallback; the GraphQL join refines them with
+	// the authoritative headPipeline.status / shouldBeRebased / approved fields when available.
 	// MergeConflict comes from has_conflicts REST field; the makeMR helper defaults it to false.
 	// UnresolvedDiscussions uses blocking_discussions_resolved (*bool); makeMR defaults to true (resolved).
 	cases := []struct {
@@ -346,16 +348,17 @@ func TestNormalizeMarkers(t *testing.T) {
 		wantFailing      bool
 		wantConflict     bool
 		wantRebase       bool
+		wantApproval     bool
 		wantUnresolved   bool
 		wantPolicyDenied bool
 	}{
-		{"ci_must_pass", "blocked", false, false, false, false, false},
-		{"conflict", "blocked", false, false, false, false, false},
-		{"need_rebase", "blocked", false, false, false, false, false},
-		{"mergeable", "ready", false, false, false, false, false},
-		{"not_approved", "blocked", false, false, false, false, false},
-		{"policies_denied", "blocked", false, false, false, false, true},
-		{"security_policy_violations", "blocked", false, false, false, false, true},
+		{"ci_must_pass", "blocked", true, false, false, false, false, false},
+		{"conflict", "blocked", false, false, false, false, false, false},
+		{"need_rebase", "blocked", false, false, true, false, false, false},
+		{"mergeable", "ready", false, false, false, false, false, false},
+		{"not_approved", "blocked", false, false, false, true, false, false},
+		{"policies_denied", "blocked", false, false, false, false, false, true},
+		{"security_policy_violations", "blocked", false, false, false, false, false, true},
 	}
 	for _, c := range cases {
 		t.Run(c.status, func(t *testing.T) {
@@ -374,6 +377,9 @@ func TestNormalizeMarkers(t *testing.T) {
 			}
 			if pl.NeedsRebase != c.wantRebase {
 				t.Errorf("needs_rebase = %v, want %v", pl.NeedsRebase, c.wantRebase)
+			}
+			if pl.NeedsApproval != c.wantApproval {
+				t.Errorf("needs_approval = %v, want %v", pl.NeedsApproval, c.wantApproval)
 			}
 			if pl.UnresolvedDiscussions != c.wantUnresolved {
 				t.Errorf("unresolved_discussions = %v, want %v", pl.UnresolvedDiscussions, c.wantUnresolved)
@@ -449,8 +455,8 @@ func TestGraphQLJoinGitLabDegraded(t *testing.T) {
 			if !ok {
 				t.Fatal("payload type assertion failed")
 			}
-			if pl.NeedsApproval {
-				t.Error("needs_approval should be false when GraphQL is degraded")
+			if !pl.NeedsApproval {
+				t.Error("needs_approval should be true: REST gate_detail=not_approved is the fallback when GraphQL is degraded")
 			}
 			return
 		}

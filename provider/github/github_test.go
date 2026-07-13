@@ -396,6 +396,38 @@ func TestGraphQLJoinReviewRequired(t *testing.T) {
 			if !pl.NeedsApproval {
 				t.Error("needs_approval should be true for REVIEW_REQUIRED blocked non-draft PR")
 			}
+			// autoMergeRequest is absent from this GraphQL response — the field
+			// reads as nil and AutoMergeArmed degrades to false with no crash
+			// (the fine-grained-PAT-cannot-read-the-field path).
+			if pl.AutoMergeArmed {
+				t.Error("auto_merge_armed should be false when autoMergeRequest is absent")
+			}
+			return
+		}
+	}
+	t.Fatal("missing item.observed for acme/api#42")
+}
+
+// TestGraphQLJoinAutoMergeArmed verifies a non-null autoMergeRequest in the
+// GraphQL response sets AutoMergeArmed.
+func TestGraphQLJoinAutoMergeArmed(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_auto_merge_armed", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType == "item.observed" && e.NativeID == "acme/api#42" {
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatal("payload type assertion failed")
+			}
+			if !pl.AutoMergeArmed {
+				t.Error("auto_merge_armed should be true when autoMergeRequest is non-null")
+			}
+			if pl.ChecksRunning {
+				t.Error("checks_running is a GitHub parity gap and must stay false")
+			}
 			return
 		}
 	}
@@ -416,6 +448,9 @@ func TestGraphQLJoinDegraded(t *testing.T) {
 			}
 			if pl.NeedsApproval {
 				t.Error("needs_approval should be false when GraphQL is degraded")
+			}
+			if pl.AutoMergeArmed {
+				t.Error("auto_merge_armed should be false when GraphQL is degraded")
 			}
 			return
 		}

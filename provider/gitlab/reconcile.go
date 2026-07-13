@@ -9,14 +9,24 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
-const cursorRecUpdatedAfter = "gl.rec.updated_after"
+// reconcileQueries defines the URL query strings for each reconcile sweep.
+// GitLab's global /merge_requests endpoint accepts scope=assigned_to_me and
+// scope=created_by_me directly; scope=reviewer returns 400. Reviewer MRs need
+// reviewer_username together with scope=all — the endpoint otherwise defaults
+// to scope=created_by_me, which filters out MRs the user reviews but did not
+// author (so reviewer_username alone returns nothing).
+func (p *Provider) reconcileQueries() []string {
+	return []string{
+		"scope=assigned_to_me",
+		"scope=created_by_me",
+		"scope=all&reviewer_username=" + url.QueryEscape(p.handle),
+	}
+}
 
-// GitLab's global /merge_requests endpoint only accepts these scope values;
-// "assigned"/"created" return 400 "scope does not have a valid value".
-var reconcileScopes = []string{"assigned_to_me", "created_by_me"}
+func cursorRecQuery(q string) string { return "gl.rec.updated_after." + q }
 
 // Reconcile implements sdk.Provider: it sweeps the user's involved merge
-// requests across the reconcile scopes and emits item.observed snapshots.
+// requests across the reconcile queries and emits item.observed snapshots.
 func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
 	if state == nil {
 		state = sdk.PollState{}
@@ -25,18 +35,18 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 	maps.Copy(out, state)
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	updatedAfter := state[cursorRecUpdatedAfter]
 
 	seen := map[string]bool{}
 	var events []sdk.Event
 	var rate *int
 
-	for _, scope := range reconcileScopes {
-		base := p.apiBase + "/merge_requests?scope=" + scope + "&state=opened&per_page=100"
+	for _, q := range p.reconcileQueries() {
+		updatedAfter := state[cursorRecQuery(q)]
+		base := p.apiBase + "/merge_requests?" + q + "&state=opened&per_page=100"
 		if updatedAfter != "" {
 			base += "&updated_after=" + url.QueryEscape(updatedAfter)
 		}
-		// Follow GitLab's X-Next-Page cursor so a scope with more than one page
+		// Follow GitLab's X-Next-Page cursor so a query with more than one page
 		// is not silently truncated to the first 100 MRs.
 		for u := base; u != ""; {
 			resp, err := p.do(ctx, u)
@@ -63,6 +73,7 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 			}
 			u = base + "&page=" + next
 		}
+		out[cursorRecQuery(q)] = now
 	}
 
 	events = p.graphqlJoin(ctx, events)
@@ -77,8 +88,6 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 			p.openSnapshots[ev.NativeID] = pl
 		}
 	}
-
-	out[cursorRecUpdatedAfter] = now
 	return sdk.PollResult{
 		Events:        events,
 		State:         out,

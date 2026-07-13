@@ -22,10 +22,20 @@ type Config struct {
 	// Connections is the resolved, validated connection list — Load's
 	// headline output.
 	Connections []sdk.ConnectionConfig
+	// Jira is the optional Jira enrichment config. Nil when the jira: block
+	// is absent from the config file; present means all three fields are set.
+	Jira *JiraConfig
 	// Warnings are non-fatal advisories surfaced at load time (e.g. an
 	// over-permissive config file — ADR-0019). The caller decides how to
 	// present them.
 	Warnings []string
+}
+
+// JiraConfig holds the credentials for the Jira Cloud enricher (ADR-0022).
+type JiraConfig struct {
+	BaseURL  string
+	Email    string
+	APIToken string
 }
 
 // fileConfig mirrors the on-disk YAML shape. Field names are the
@@ -33,6 +43,7 @@ type Config struct {
 type fileConfig struct {
 	DBPath      string           `yaml:"db_path"`
 	Connections []connectionYAML `yaml:"connections"`
+	Jira        *jiraYAML        `yaml:"jira"`
 }
 
 type connectionYAML struct {
@@ -42,6 +53,12 @@ type connectionYAML struct {
 	BaseURL string `yaml:"base_url"`
 	Label   string `yaml:"label"`
 	Handle  string `yaml:"handle"`
+}
+
+type jiraYAML struct {
+	BaseURL  string `yaml:"base_url"`
+	Email    string `yaml:"email"`
+	APIToken string `yaml:"api_token"`
 }
 
 // DefaultPath returns $XDG_CONFIG_HOME/devpit/config.yaml, falling back to
@@ -135,5 +152,22 @@ func validate(raw fileConfig) (Config, error) {
 		})
 	}
 
-	return Config{DBPath: raw.DBPath, Connections: conns}, nil
+	var jira *JiraConfig
+	if raw.Jira != nil {
+		switch {
+		case raw.Jira.BaseURL == "":
+			return Config{}, errors.New("jira: base_url is required")
+		case raw.Jira.Email == "":
+			return Config{}, errors.New("jira: email is required")
+		case raw.Jira.APIToken == "":
+			return Config{}, errors.New("jira: api_token is required")
+		}
+		jira = &JiraConfig{
+			BaseURL:  raw.Jira.BaseURL,
+			Email:    raw.Jira.Email,
+			APIToken: raw.Jira.APIToken,
+		}
+	}
+
+	return Config{DBPath: raw.DBPath, Connections: conns, Jira: jira}, nil
 }

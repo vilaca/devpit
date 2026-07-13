@@ -63,16 +63,18 @@
   </button>
 
   <div class="body">
-    <a
-      class="title"
-      href={item.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={item.title}
-      onclick={(e) => e.stopPropagation()}
-    >
-      {item.title}
-    </a>
+    <div class="title-line">
+      <a
+        class="title"
+        href={item.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={item.title}
+        onclick={(e) => e.stopPropagation()}
+      >
+        {item.title}
+      </a>
+    </div>
     <div class="meta-row">
       {#if item.repo}
         <span class="repo">{item.repo}</span>
@@ -84,6 +86,17 @@
       {#if item.author}
         <span class="sep">·</span>
         <span class="author">{item.author}</span>
+      {/if}
+      {#if item.jira}
+        <span class="sep">·</span>
+        <a
+          class="jira-status"
+          href={item.jira.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={item.jira.key}
+          onclick={(e) => e.stopPropagation()}
+        >{item.jira.status}</a>
       {/if}
       {#if item.approvals_count > 0}
         <span class="sep">·</span>
@@ -150,6 +163,25 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
+  }
+  .title-line {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .jira-status {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-faint);
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .jira-status:hover {
+    color: var(--accent);
+    text-decoration: underline;
   }
   .title {
     font-weight: 500;

@@ -41,4 +41,6 @@ type glMergeRequest struct {
 	References                  struct {
 		Full string `json:"full"` // "group/project!iid"
 	} `json:"references"`
+	SourceBranch string `json:"source_branch"`
+	Description  string `json:"description"`
 }

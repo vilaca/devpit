@@ -81,6 +81,20 @@ interactions:
       []
 - id: 3
   request:
+    method: GET
+    url: https://gitlab.com/api/v4/merge_requests?scope=all&reviewer_username=octocat&state=opened&per_page=100
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      []
+- id: 4
+  request:
     method: POST
     url: https://gitlab.com/api/graphql
     headers: {}

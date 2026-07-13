@@ -40,15 +40,15 @@ role-aware where the fact is inherently about a role (see role scope notes).
 
 | chip | role scope | it means | hover |
 |---|---|---|---|
-| `changes_requested` | author | a reviewer requested changes | for {N} |
-| `review_requested`  | reviewer | your review was requested, not submitted | for {N} |
-| `blocked`           | author | provider merge gate not satisfied | for {N} · provider says: {gate_detail} |
-| `mentioned`         | anyone | you were @-mentioned (shows ×N if repeated) | for {N} · clears when the item closes |
-| `ready_to_merge`    | author | gate satisfied, mergeable now | for {N}; with red checks: · a non-required check is red |
-| `auto_merge_armed`  | author | provider auto-merge / merge-when-pipeline-succeeds is armed | for {N} |
-| `checks_running`    | author | a pipeline is in progress | for {N} |
-| `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; replaces the bare row | for {N} |
-| `review_submitted`  | reviewer | you already reviewed; ball with author | for {N} |
+| `changes_requested` | author | a reviewer requested changes | {N} |
+| `review_requested`  | reviewer | your review was requested, not submitted | {N} |
+| `blocked`           | author | provider merge gate not satisfied | {N} · provider says: {gate_detail} |
+| `mentioned`         | anyone | you were @-mentioned (shows ×N if repeated) | {N} · clears when the item closes |
+| `ready_to_merge`    | author | gate satisfied, mergeable now | {N}; with red checks: · a non-required check is red |
+| `auto_merge_armed`  | author | provider auto-merge / merge-when-pipeline-succeeds is armed | {N} |
+| `checks_running`    | author | a pipeline is in progress | {N} |
+| `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; replaces the bare row | {N} |
+| `review_submitted`  | reviewer | you already reviewed; ball with author | {N} |
 
 `blocked` defers entirely to the provider's merge gate — DevPit never
 re-derives org rules. That is why it is trustworthy.
@@ -65,13 +65,13 @@ re-derives org rules. That is why it is trustworthy.
 
 | badge | meaning (when `blocked`) | GitHub | GitLab | hover |
 |---|---|---|---|---|
-| `conflict` | manual conflict resolution needed | ✓ `has_conflicts` (REST) | ✓ `has_conflicts` (REST) | for {N} |
-| `rebase` | mechanical rebase unlocks it | ⚠ `behind` — only when repo requires up-to-date branches | ✓ `shouldBeRebased` (GraphQL) | for {N} |
-| `checks failing` | CI / pipeline red | ⚠ non-gating CI only (`unstable`); gating-CI failures hide inside `blocked` | ✓ `headPipeline` (GraphQL, any pipeline) | for {N} |
-| `draft` | provider draft; merge gate suspended | draft flag | draft flag | for {N} |
-| `missing approvals` | required approvals not met | ✓ `reviewDecision` (GraphQL) | ✓ `approved` (GraphQL) | for {N} |
-| `discussions` | unresolved threads gate the merge | ✗ gate rule unreadable for non-admins | ✓ `blocking_discussions_resolved` (REST) | for {N} |
-| `policy` | security/org policy denies merge | ✗ no equivalent signal | ⚠ `policies_denied` etc. — masked when a co-present reason wins the verdict field | for {N} |
+| `conflict` | manual conflict resolution needed | ✓ `has_conflicts` (REST) | ✓ `has_conflicts` (REST) | {N} |
+| `rebase` | mechanical rebase unlocks it | ⚠ `behind` — only when repo requires up-to-date branches | ✓ `shouldBeRebased` (GraphQL) | {N} |
+| `checks failing` | CI / pipeline red | ⚠ non-gating CI only (`unstable`); gating-CI failures hide inside `blocked` | ✓ `headPipeline` (GraphQL, any pipeline) | {N} |
+| `draft` | provider draft; merge gate suspended | draft flag | draft flag | {N} |
+| `missing approvals` | required approvals not met | ✓ `reviewDecision` (GraphQL) | ✓ `approved` (GraphQL) | {N} |
+| `discussions` | unresolved threads gate the merge | ✗ gate rule unreadable for non-admins | ✓ `blocking_discussions_resolved` (REST) | {N} |
+| `policy` | security/org policy denies merge | ✗ no equivalent signal | ⚠ `policies_denied` etc. — masked when a co-present reason wins the verdict field | {N} |
 
 Legend: ✓ full signal · ⚠ partial/conditional · ✗ structurally unavailable.
 
@@ -106,11 +106,12 @@ Facts a row carries without a tag:
 |---|---|---|
 | blue row tint | whole row | you authored the item (the connection's identity matches the author) — the only mark of authorship; the tag vocabulary is the same whatever your role |
 | amber row tint | whole row | the `old` age tier (idle > 30 days) — see Age tags above |
-| "N approved" | meta-row, between author and timestamp | raw count of reviewers who approved; informational only (never moves the item), shown when N > 0, hidden on drafts |
+| de-emphasized row | whole row | reviewed-done (`muted`): you are a reviewer who has submitted your review, so nothing is left for you — the row dims, suppresses its chips, and sinks to the bottom; full opacity on hover |
+| "N approved" / "you + N approved" | meta-row (last field) | count of reviewers who approved; informational only (never moves the item), shown when N > 0, hidden on drafts. When you are an approver (`my_review_state == "approved"`) it reads "you approved" or "you + N approved" |
 
 ## Hover-text rule
 
 A tooltip must say something the tag label doesn't. Every tag shows how long
-its condition has held ("for 3d" — minutes, then hours past 1h, then days
+its condition has held ("3 days ago" — minutes, then hours past 1h, then days
 past 1d), computed from the item's observed history (`since` map in the API);
 extra facts are appended only where they exist. No tag restates its own name.

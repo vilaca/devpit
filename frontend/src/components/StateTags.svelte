@@ -13,11 +13,11 @@
     return stateLabel(s);
   }
 
-  // Hover text for a state chip. Rule: "for {onset}" plus tag-specific extras.
+  // Hover text for a state chip. Rule: "{onset}" plus tag-specific extras.
   // Never restates the tag label. Omit tooltip when nothing to add.
   function titleForState(s: State): string | undefined {
     const onset = item.since?.[s];
-    const dur = onset ? `for ${relativeTime(onset)}` : undefined;
+    const dur = onset ? relativeTime(onset) : undefined;
 
     if (s === "blocked") {
       const detail = item.gate_detail ? ` · provider says: ${item.gate_detail}` : "";
@@ -35,7 +35,7 @@
   // Hover text for a diagnostic marker badge.
   function titleForMarker(key: string): string | undefined {
     const onset = item.since?.[key];
-    return onset ? `for ${relativeTime(onset)}` : undefined;
+    return onset ? relativeTime(onset) : undefined;
   }
 
   // When ready_to_merge + failing_checks co-occur, render them as one combined phrase.

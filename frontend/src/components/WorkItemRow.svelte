@@ -21,6 +21,16 @@
     dashboard.connections.find((c) => c.id === item.connection_id)?.identity === item.author,
   );
 
+  // Approval count, phrased to surface that *you* approved when you did.
+  const approvalsLabel = $derived.by(() => {
+    const n = item.approvals_count;
+    if (item.my_review_state === "approved") {
+      const others = n - 1;
+      return others > 0 ? `you + ${others} approved` : "you approved";
+    }
+    return `${n} approved`;
+  });
+
   let rowEl: HTMLDivElement | undefined = $state();
 
   // Scroll focused row into view when keyboard nav lands on it.
@@ -34,6 +44,7 @@
   class="row"
   class:focused
   class:mine
+  class:muted={item.muted}
   class:old={item.old}
   onclick={() => onFocus(item.id)}
   onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") onFocus(item.id); }}
@@ -63,23 +74,27 @@
       {item.title}
     </a>
     <div class="meta-row">
-      <span class="repo">{item.repo || item.connection_label}</span>
+      {#if item.repo}
+        <span class="repo">{item.repo}</span>
+        <span class="sep">·</span>
+      {/if}
+      <span class="conn">{item.connection_label}</span>
+      <span class="sep">·</span>
+      <span class="time" title={item.updated_at}>{relativeTime(item.updated_at)}</span>
       {#if item.author}
         <span class="sep">·</span>
         <span class="author">{item.author}</span>
       {/if}
       {#if item.approvals_count > 0}
         <span class="sep">·</span>
-        <span class="approvals">{item.approvals_count} approved</span>
+        <span class="approvals">{approvalsLabel}</span>
       {/if}
-      <span class="sep">·</span>
-      <span class="time" title={item.updated_at}>{relativeTime(item.updated_at)}</span>
-      <span class="sep">·</span>
-      <span class="conn">{item.connection_label}</span>
     </div>
   </div>
 
-  <StateTags {item} />
+  {#if !item.muted}
+    <StateTags {item} />
+  {/if}
 </div>
 
 <style>
@@ -107,6 +122,13 @@
   }
   .row.old {
     background: color-mix(in srgb, var(--marker-old) 7%, var(--bg-raised));
+  }
+  /* Reviewed-done: nothing left for me. De-emphasized; full opacity on hover. */
+  .row.muted {
+    opacity: 0.55;
+  }
+  .row.muted:hover {
+    opacity: 1;
   }
   .pin {
     border: none;
@@ -160,5 +182,9 @@
   .time,
   .conn {
     white-space: nowrap;
+  }
+  .approvals {
+    color: var(--meta-approvals);
+    font-weight: 500;
   }
 </style>

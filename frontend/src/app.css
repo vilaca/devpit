@@ -40,6 +40,9 @@
   --marker-conflict: #c0392b;
   --marker-draft: #8a929c;
 
+  /* Meta-row highlight: approvals count reads as positive/success. */
+  --meta-approvals: #1a7f37;
+
   --radius: 6px;
   --radius-sm: 4px;
   --gap: 12px;
@@ -80,6 +83,8 @@
     --marker-failing-checks: #f47068;
     --marker-conflict: #f47068;
     --marker-draft: #9aa3ad;
+
+    --meta-approvals: #3fb559;
   }
 }
 
@@ -114,6 +119,8 @@
   --marker-failing-checks: #f47068;
   --marker-conflict: #f47068;
   --marker-draft: #9aa3ad;
+
+  --meta-approvals: #3fb559;
 }
 
 * {

@@ -14,7 +14,7 @@ import (
 )
 
 const mrQueryFmt = `a%d:project(fullPath:"%s")` +
-	`{mergeRequest(iid:"%d"){approved shouldBeRebased headPipeline{status} approvedBy{count}}}`
+	`{mergeRequest(iid:"%d"){approved shouldBeRebased headPipeline{status} approvedBy{count nodes{username}}}}`
 
 // doGraphQL POSTs a GraphQL query to the GitLab GraphQL API and returns the "data" map.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
@@ -71,6 +71,9 @@ type glGraphQLMR struct {
 	HeadPipeline *glPipeline `json:"headPipeline"`
 	ApprovedBy   struct {
 		Count int `json:"count"`
+		Nodes []struct {
+			Username string `json:"username"`
+		} `json:"nodes"`
 	} `json:"approvedBy"`
 }
 
@@ -150,7 +153,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		if !ok {
 			continue
 		}
-		pl = applyGraphQL(pl, mr)
+		pl = applyGraphQL(pl, mr, p.handle)
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
 		out[evIdx] = ev
@@ -160,13 +163,22 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 
 // applyGraphQL merges the GraphQL-derived booleans onto a payload.
 // Draft items keep all these booleans false (draft suppression).
-func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR) sdk.ItemObservedPayload {
+// handle is the authenticated user's username; when it appears in approvedBy the
+// payload records MyReviewState "approved" (GitLab exposes no cheap per-user
+// state for comment-only reviews, so only approval is detected here).
+func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk.ItemObservedPayload {
 	if !pl.Draft {
 		pl.NeedsApproval = !mr.Approved
 		pl.NeedsRebase = mr.ShouldRebase
 		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
 		pl.ChecksRunning = isPipelineRunning(mr.HeadPipeline)
 		pl.ApprovalsCount = mr.ApprovedBy.Count
+		for _, u := range mr.ApprovedBy.Nodes {
+			if u.Username == handle {
+				pl.MyReviewState = "approved"
+				break
+			}
+		}
 	}
 	return pl
 }
@@ -226,7 +238,7 @@ func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, cover
 			if json.Unmarshal(raw, &node) != nil || node.MergeRequest == nil {
 				continue
 			}
-			pl := applyGraphQL(it.payload, *node.MergeRequest)
+			pl := applyGraphQL(it.payload, *node.MergeRequest, p.handle)
 			events = append(events, sdk.Event{
 				ObjectType: objectType,
 				NativeID:   it.nativeID,

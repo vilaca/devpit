@@ -41,8 +41,9 @@ unmatched path so a browser refresh on any client route works.
 ## `GET /attention`
 
 The full ranked list. Pinned items (`flagged: true`) come first in flag order;
-auto-ranked items follow, sorted by age band (fresh < stale < old) then
-state precedence then newest-signal-first (`docs/Attention_Engine.md`).
+auto-ranked items follow, sorted by reviewed-done last (`muted` sinks to the
+bottom), then age band (fresh < stale < old), then state precedence, then
+newest-signal-first (`docs/Attention_Engine.md`).
 
 Each item carries:
 - Connection provenance: `connection_id`, `connection_label`, `connection_type`.
@@ -56,6 +57,14 @@ Each item carries:
   order: `changes_requested`, `review_requested`, `blocked`, `mentioned`,
   `ready_to_merge`, `auto_merge_armed`, `checks_running`, `checking`,
   `review_submitted`.
+- `muted` — true when the item is reviewed-done for you (you are a reviewer, not
+  the author, and your review is submitted). Muted items sort to the very bottom
+  (below `old`), render de-emphasized, and suppress their signal chips. Omitted
+  when false.
+- `my_review_state` — your own review verdict when known: `approved`,
+  `changes_requested`, or `reviewed` (comment-only). Omitted when empty/unknown.
+  GitLab detects only `approved`. Drives `review_submitted`/`muted` and the
+  "you + N approved" meta-row.
 - `flagged` — true when in the "Handle next" zone.
 - `flagged_at` — RFC 3339 timestamp when the item was pinned; present only when
   `flagged: true`.

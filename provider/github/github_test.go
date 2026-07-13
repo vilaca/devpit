@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -378,6 +379,44 @@ func TestNormalizeMarkers(t *testing.T) {
 				t.Errorf("needs_rebase = %v, want %v", pl.NeedsRebase, c.wantRebase)
 			}
 		})
+	}
+}
+
+func TestGHReviewState(t *testing.T) {
+	for in, want := range map[string]string{
+		"APPROVED":          "approved",
+		"CHANGES_REQUESTED": "changes_requested",
+		"COMMENTED":         "reviewed",
+		"DISMISSED":         "",
+		"PENDING":           "",
+	} {
+		if got := ghReviewState(in); got != want {
+			t.Errorf("ghReviewState(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestMergeGHBatchResultsMyReviewState verifies my_review_state is taken from the
+// authenticated user's latest review, and the approval count still counts only APPROVED.
+func TestMergeGHBatchResultsMyReviewState(t *testing.T) {
+	data := map[string]json.RawMessage{
+		"a0": json.RawMessage(`{"pullRequest":{"reviewDecision":"APPROVED",` +
+			`"latestReviews":{"nodes":[` +
+			`{"state":"APPROVED","author":{"login":"octocat"}},` +
+			`{"state":"COMMENTED","author":{"login":"other"}}]}}}`),
+	}
+	results := map[int]ghResult{}
+	mergeGHBatchResults(data, []prItem{{evIdx: 5}}, results, "octocat")
+
+	r, ok := results[5]
+	if !ok {
+		t.Fatal("missing result for evIdx 5")
+	}
+	if r.myReviewState != "approved" {
+		t.Errorf("myReviewState = %q, want approved", r.myReviewState)
+	}
+	if r.approvalsCount != 1 {
+		t.Errorf("approvalsCount = %d, want 1 (only APPROVED counts)", r.approvalsCount)
 	}
 }
 

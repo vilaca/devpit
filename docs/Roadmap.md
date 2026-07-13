@@ -155,7 +155,7 @@ Version-agnostic release-readiness gate: whichever version first ships publicly
 
 ## v0.2 — More forges + sync hardening
 
-- Providers: Forgejo, Gitea (with capability declaration/degradation, ADR-0003).
+- Providers: Forgejo, Gitea, Codeberg (with capability declaration/degradation, ADR-0003). Codeberg is a hosted Forgejo instance; its provider type shares the Forgejo implementation with `base_url` defaulting to `https://codeberg.org`.
 - Needs Backport bucket via a configurable label convention (deferred from
   ADR-0016).
 - Adaptive rate-budget scheduler, replacing basic backoff (ADR-0004).

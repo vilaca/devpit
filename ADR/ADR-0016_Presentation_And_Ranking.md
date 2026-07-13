@@ -16,8 +16,10 @@ UI is built in `frontend/`. The marker vocabulary and age bands (decision
 (v0.1.2)**. Showing all involved open items regardless of state is **Implemented
 (v0.1.4)**. Signal-based presentation (nine neutral provider signals replacing
 the former six attention states) is **Implemented (v0.1.5)**. Reviewed-done
-demotion/muting and the "you + N approved" meta-row (populating `MyReviewState`
-from provider approval data) are **Implemented (v0.1.5)**. See `docs/Roadmap.md`.
+muting (display-only) and the "you + N approved" meta-row (populating
+`MyReviewState` from provider approval data) are **Implemented (v0.1.5)**.
+Age-band-then-recency ranking (signal precedence no longer ranks; muting no
+longer demotes) is **Implemented (v0.1.5)**. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -53,7 +55,8 @@ aimed-at-you **signal stream** (`signal.mentioned`, `signal.review_requested`,
 
 #### Signal set (fixed, no configuration)
 
-Nine signals in precedence order, highest first (index 0 ranks the item). These
+Nine signals in precedence order, highest first (index 0 is the leading chip;
+precedence orders chips within a row, not the ranking of items — see Ranking). These
 are the `State` constants and their wire strings
 (`internal/attention/states.go`):
 
@@ -130,26 +133,32 @@ transient recompute keeps gate `blocked` and does not drop to `checking`.
     we do **not** reconstruct it from `statusCheckRollup`. GitHub leaves
     `ChecksRunning` false; this is a documented ✗ gap in the parity table.
 
-### Ranking
+### Ranking (revised 2026-07-13 — age band then recency)
 
-**Reviewed-done first** (muted items sink to the very bottom, below even `old`),
-then **age band** (fresh < stale < old), then **signal precedence** above, then
-**newest-first**. The pinned "Handle next" zone stays exempt.
+**Ranking is age band then recency** — three tiers, top to bottom: fresh
+(neither stale nor old), then **stale**, then **old**. Within each tier the list
+is ordered purely by **most-recent update first** (the item's ranking timestamp:
+newest signal, else latest snapshot's provider-updated time). Item ID is the
+final stable tiebreak. The pinned "Handle next" zone stays exempt.
 
-Reviewing another person's work (Review Requested, #2) ranks above your own
-Blocked MR (#3): a quick action that unblocks someone else outranks a block you
-will often clear via CI or a rebase anyway.
+Signal precedence **no longer ranks items** — it survives only as the order
+signals appear as chips within a row (`States[0]` is the leading chip). The
+earlier "highest signal ranks the item" model made the list order swing on
+provider verdicts an engineer reads off the chips anyway; ordering by how
+recently something moved is what actually tells you where the live activity is,
+tier by tier, without re-deriving a workflow. What demands action is still
+legible from the chips; it no longer reorders the tier.
 
-#### Reviewed-done demotion and muting (2026-07-13)
+#### Reviewed-done muting is display-only (2026-07-13)
 
 An item where you are a **reviewer** (and not the author) and your review has
 been submitted — `reviewIsDone(MyReviewState)` — has nothing left for *you* to
-do. Such items are **muted** (`muted: true`): they sort below every other item,
-beneath even `old`, and render de-emphasized with their signal chips suppressed
-(a stale `mentioned` no longer keeps them afloat). This is the second deliberate
-exception to "the highest signal ranks the item" — the reviewed-done state
-dominates ranking regardless of any co-present higher signal, because "nothing to
-do" should get out of the way.
+do. Such items are **muted** (`muted: true`): the row renders de-emphasized and
+suppresses its signal chips. Muting is now a **display cue only — it does not
+move the item**. An earlier revision demoted muted items (first to the very
+bottom, then to a band just above stale); both are superseded. A muted item
+sorts in its natural age tier by recency like everything else: an MR you approved
+that is still moving surfaces exactly when it last moved, dimmed but not buried.
 
 This requires `MyReviewState` to actually be populated, which the v0.1.5 signal
 model defined but no provider filled. It is now populated from provider approval
@@ -169,9 +178,10 @@ scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
   lifted out of the auto-ranked list (never shown twice). The flag is
   local-only and never written back to the provider
   (`ADR/ADR-0017_Read_Only_Action_Model.md`).
-- **Ranking is fixed signal-precedence + age tiebreak** — no numeric score, no
-  configuration. Within a signal, newest-first, with a "stale" badge once an
-  item's age exceeds a threshold as the anti-rot safety net.
+- **Ranking is age band then recency** — no numeric score, no configuration
+  (revised 2026-07-13; formerly fixed signal-precedence + age tiebreak). Three
+  tiers (fresh, stale, old); within a tier, most-recent-update-first. The "stale"
+  and "old" badges are the anti-rot safety net that pushes idle work down.
 - **Repeated same-type signals collapse** to one tag with a count
   ("Mentioned ×3"); the individual signals remain in the detail view.
 - **Markers carry gate diagnostics; signals never do** (2026-07-10). The signal
@@ -215,11 +225,11 @@ scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
 - **Age tiers band the list** (2026-07-10). `stale` (idle 7–30 days) and
   `old` (idle >30 days) are mutually exclusive tiers, and they are the
   *single deliberate exception* to "markers never move items": the list sorts
-  by age band (fresh, then stale, then old last) before signal precedence,
-  keeping fresh actionable work on top. Within a band the ranking above applies
-  unchanged. The pinned zone is exempt — a pin is a deliberate user act — but
-  pinned items still show their age tags and pin age, so rot cannot hide at the
-  top.
+  by age band (fresh, then stale, then old last) first, keeping fresh work on
+  top. Within a band, most-recent-update-first applies (revised 2026-07-13 —
+  formerly signal precedence). The pinned zone is exempt — a pin is a deliberate
+  user act — but pinned items still show their age tags and pin age, so rot
+  cannot hide at the top.
 - **Age tier presentation** (2026-07-10). Both `stale` and `old` items show
   a "Stale" tag; the `old` tier is additionally distinguished by a warm amber
   row background tint (`color-mix` over `--marker-old` at 7% opacity), so the
@@ -252,16 +262,19 @@ scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
   one the user is involved in (sync scopes are assigned/authored, plus mention
   signals), so an open MR waiting on reviewers, or one whose merge gate the
   provider has not yet computed (`unknown`), stays visible instead of silently
-  disappearing. Signals still drive tags and ranking; a signal-less item renders
-  as a plain row and sorts below every signaled item within its age band. Only
-  merged/closed and removed items drop out. Wire effect: `states` may be an
-  empty array for non-authored involved items (`docs/REST_API.md`).
+  disappearing. Signals still drive tags; a signal-less item renders as a plain
+  row and sorts by recency within its age band like any other (revised
+  2026-07-13 — signals no longer rank). Only merged/closed and removed items drop
+  out. Wire effect: `states` may be an empty array for non-authored involved
+  items (`docs/REST_API.md`).
 
 ## Rationale
 
-A fixed precedence is trustworthy precisely because it cannot be tuned into
-uselessness; a single list keeps the whole picture in one glance and reduces
-context switching. Showing observed signals rather than an inferred state keeps
+Age-band-then-recency ordering is trustworthy precisely because it cannot be
+tuned into uselessness: fresh work stays on top, rot sinks, and within a tier the
+list mirrors what actually just moved — no provider verdict silently reshuffles
+it. A single list keeps the whole picture in one glance and reduces context
+switching. Showing observed signals rather than an inferred state keeps
 DevPit honest: it reports what the provider says and never assumes a team's
 workflow — the same defer-to-the-provider discipline that keeps Blocked
 trustworthy. Dropping the "your move" framing removes the bare-row gap for
@@ -270,11 +283,12 @@ with the blue tint carrying authorship.
 
 ## Consequences
 
-- The precedence order, the signal set, and the age thresholds are direct
+- The signal set, the chip precedence order, and the age thresholds are direct
   code — they live in `internal/attention/states.go` and
-  `internal/attention/fold.go` (stale: 7 days, old: 30 days), not in prose.
-  The fold and bucket semantics are specified in `docs/Attention_Engine.md`;
-  the wire shape in `docs/REST_API.md`.
+  `internal/attention/fold.go` (stale: 7 days, old: 30 days), not in prose. The
+  ranking is `sortItems` in `fold.go` (age band, then recency, then ID). The fold
+  and bucket semantics are specified in `docs/Attention_Engine.md`; the wire
+  shape in `docs/REST_API.md`.
 - Buckets a provider cannot feed simply produce no items
   (`ADR/ADR-0003_Provider_Plugin_Model.md`).
 - Wire renames from v0.1.4: `needs_review` → `review_requested`;

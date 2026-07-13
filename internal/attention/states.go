@@ -23,8 +23,10 @@ const (
 	StateReviewSubmitted  State = "review_submitted" // was StateWaitingOnAuthor / "waiting_on_author"
 )
 
-// precedence lists signals highest-first. An item sorts by its highest-precedence
-// signal; its States slice is emitted in this order.
+// precedence lists signals highest-first. It drives the order signals appear
+// within an item's States slice (States[0] is the highest-precedence signal and
+// renders as the leading chip). It no longer drives ranking — items rank by age
+// band then recency (ADR-0016).
 var precedence = []State{
 	StateChangesRequested,
 	StateReviewRequested,
@@ -36,15 +38,6 @@ var precedence = []State{
 	StateChecking,
 	StateReviewSubmitted,
 }
-
-// rankOf maps a signal to its precedence index (0 = highest).
-var rankOf = func() map[State]int {
-	m := make(map[State]int, len(precedence))
-	for i, s := range precedence {
-		m[s] = i
-	}
-	return m
-}()
 
 // Normalized fact values — see docs/Event_Taxonomy_and_Storage.md.
 const (

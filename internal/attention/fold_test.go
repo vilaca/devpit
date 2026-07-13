@@ -251,33 +251,29 @@ func TestFoldReappearanceAfterRemovalResumes(t *testing.T) {
 }
 
 func TestFoldRankingOrder(t *testing.T) {
-	// One item per bucket, all same timestamp, to assert precedence ordering.
+	// Within an age band, ranking is pure recency — signal precedence no longer
+	// orders items. A newer review_submitted (#9, lowest precedence, and muted)
+	// outranks an older review_requested (#2, higher precedence).
 	nr := openFacts()
 	nr.MyRoles = []string{"reviewer"}
-	nr.MyReviewState = "requested"
-
-	rtm := openFacts()
-	rtm.MyRoles = []string{"author"}
-	rtm.Gate = "ready"
+	nr.MyReviewState = "requested" // review_requested (#2), older
 
 	woa := openFacts()
 	woa.MyRoles = []string{"reviewer"}
-	woa.MyReviewState = "approved"
+	woa.MyReviewState = "approved" // review_submitted (#9), newer + muted
 
 	events := []storage.StoredEvent{
-		obs(1, "c", "acme/api#woa", woa),
-		obs(2, "c", "acme/api#rtm", rtm),
-		obs(3, "c", "acme/api#nr", nr),
+		obs(1, "c", "acme/api#nr", nr),
+		sig(2, "acme/api#nr", signalMentioned, baseTime.Add(-3*time.Hour)),
+		obs(3, "c", "acme/api#woa", woa),
+		sig(4, "acme/api#woa", signalMentioned, baseTime.Add(-1*time.Hour)),
 	}
 	items := fold(events)
-	if len(items) != 3 {
-		t.Fatalf("want 3 items, got %d", len(items))
+	if len(items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(items))
 	}
-	gotOrder := []State{items[0].States[0], items[1].States[0], items[2].States[0]}
-	// New precedence: review_requested (#2) < ready_to_merge (#5) < review_submitted (#9).
-	want := []State{StateReviewRequested, StateReadyToMerge, StateReviewSubmitted}
-	if !equalStates(gotOrder, want) {
-		t.Errorf("ranking order = %v, want %v", gotOrder, want)
+	if items[0].NativeID != "acme/api#woa" {
+		t.Errorf("newer item should rank first regardless of signal precedence/mute; got %q first", items[0].NativeID)
 	}
 }
 
@@ -625,9 +621,8 @@ func TestAgeTierDisabledThresholds(t *testing.T) {
 // --- Age band sorting tests ---
 
 func TestAgeBandSorting(t *testing.T) {
-	// A fresh lower-precedence item sorts above a stale higher-precedence one:
-	// age band dominates signal precedence. (Reviewed-done items are excluded
-	// here — they mute and sink regardless of age; see TestReviewedDoneMuted.)
+	// Age band is the top-level sort key: a fresh item sorts above a stale one
+	// even though, within a band, order is pure recency (no signal precedence).
 	freshFacts := openFacts()
 	freshFacts.MyRoles = []string{"reviewer"} // mentioned only (#4)
 
@@ -651,18 +646,19 @@ func TestAgeBandSorting(t *testing.T) {
 	}
 }
 
-func TestReviewedDoneMuted(t *testing.T) {
-	// A reviewer who has approved has nothing left to do: the item is muted and
-	// sinks below everything, even a fresher one.
+func TestReviewedDoneMuteDoesNotReorder(t *testing.T) {
+	// Muting is a display cue only: it no longer moves an item. A muted
+	// reviewed-done item that updated more recently still outranks a non-muted
+	// one in the same age band, purely on recency.
 	done := openFacts()
 	done.MyRoles = []string{"reviewer"}
 	done.MyReviewState = "approved"
-	doneSig := sig(2, "acme/api#done", signalMentioned, baseTime.Add(-1*time.Hour)) // fresh
+	doneSig := sig(2, "acme/api#done", signalMentioned, baseTime.Add(-1*time.Hour)) // newer
 
 	active := openFacts()
 	active.MyRoles = []string{"reviewer"}
-	active.MyReviewState = "requested" // review_requested
-	activeSig := sig(4, "acme/api#active", signalMentioned, baseTime.Add(-20*24*time.Hour))
+	active.MyReviewState = "requested" // review_requested, older
+	activeSig := sig(4, "acme/api#active", signalMentioned, baseTime.Add(-2*time.Hour))
 
 	events := []storage.StoredEvent{
 		obs(1, "c", "acme/api#done", done), doneSig,
@@ -672,13 +668,13 @@ func TestReviewedDoneMuted(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("want 2 items, got %d", len(items))
 	}
-	if items[0].NativeID != "acme/api#active" {
-		t.Errorf("muted reviewed-done should sink below the active item; got %q first", items[0].NativeID)
+	if items[0].NativeID != "acme/api#done" {
+		t.Errorf("newer item should rank first regardless of muting; got %q first", items[0].NativeID)
 	}
-	if !items[1].Muted {
-		t.Error("reviewed-done item should be Muted")
+	if !items[0].Muted {
+		t.Error("reviewed-done item should still carry Muted=true")
 	}
-	if items[0].Muted {
+	if items[1].Muted {
 		t.Error("active review_requested item should not be Muted")
 	}
 }
@@ -1030,14 +1026,10 @@ func TestSignalPrecedenceMentionedAndChecking(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("want 1 item, got %d", len(items))
 	}
+	// Chips render in precedence order: mentioned (#4) before checking (#8).
 	want := []State{StateMentioned, StateChecking}
 	if !equalStates(items[0].States, want) {
 		t.Errorf("states = %v, want %v", items[0].States, want)
-	}
-	// Ranks by mentioned (index < checking).
-	if rankOf[StateMentioned] >= rankOf[StateChecking] {
-		t.Errorf("mentioned must rank above checking; mentioned=%d checking=%d",
-			rankOf[StateMentioned], rankOf[StateChecking])
 	}
 }
 

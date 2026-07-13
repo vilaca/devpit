@@ -94,9 +94,10 @@ Two idle tiers, mutually exclusive. Both render the muted **Stale** tag; the
 | `stale` | > 7 days, ≤ 30 | sinks below all fresh items | "Stale" tag | No activity for {N} (threshold: 7 days) |
 | `old` | > 30 days | sinks to the very bottom | "Stale" tag + amber row tint | No activity for {N} (threshold: 30 days) |
 
-Bands sort fresh → stale → old; within a band the normal order (state
-precedence, newest first) applies. The pinned zone is exempt — pins never sink,
-but they still show their age tag and pin age.
+Bands sort fresh → stale → old; within a band the order is pure recency
+(most-recent update first) — signal precedence and the reviewed-done mute do not
+reorder it. The pinned zone is exempt — pins never sink, but they still show
+their age tag and pin age.
 
 ## Row context (tints & meta-row)
 
@@ -106,7 +107,7 @@ Facts a row carries without a tag:
 |---|---|---|
 | blue row tint | whole row | you authored the item (the connection's identity matches the author) — the only mark of authorship; the tag vocabulary is the same whatever your role |
 | amber row tint | whole row | the `old` age tier (idle > 30 days) — see Age tags above |
-| de-emphasized row | whole row | reviewed-done (`muted`): you are a reviewer who has submitted your review, so nothing is left for you — the row dims, suppresses its chips, and sinks to the bottom; full opacity on hover |
+| de-emphasized row | whole row | reviewed-done (`muted`): you are a reviewer who has submitted your review, so nothing is left for you — the row dims and suppresses its chips (a display cue only; muting does not change its position, which is age band + recency); full opacity on hover |
 | "N approved" / "you + N approved" | meta-row (last field) | count of reviewers who approved; informational only (never moves the item), shown when N > 0, hidden on drafts. When you are an approver (`my_review_state == "approved"`) it reads "you approved" or "you + N approved" |
 
 ## Hover-text rule

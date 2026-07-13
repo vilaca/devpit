@@ -385,10 +385,10 @@ func TestNormalizeMarkers(t *testing.T) {
 func TestGHReviewState(t *testing.T) {
 	for in, want := range map[string]string{
 		ghReviewStateApproved: normalizedApproved,
-		"CHANGES_REQUESTED": "changes_requested",
-		"COMMENTED":         "reviewed",
-		"DISMISSED":         "",
-		"PENDING":           "",
+		"CHANGES_REQUESTED":   "changes_requested",
+		"COMMENTED":           "reviewed",
+		"DISMISSED":           "",
+		"PENDING":             "",
 	} {
 		if got := ghReviewState(in); got != want {
 			t.Errorf("ghReviewState(%q) = %q, want %q", in, got, want)

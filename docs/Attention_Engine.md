@@ -2,7 +2,8 @@
 
 > **Status:** the fold (read-time computation of buckets and ranking) is
 > **implemented** in `internal/attention`. The user-facing presentation
-> (pinned zone, tags, filters) is **implemented (v0.1.1)** in `frontend/`.
+> (pinned zone, tags, filters, marker vocabulary, age bands, blocked
+> diagnostic badges) is **implemented** in `frontend/` through v0.1.4.
 > Decision: `ADR/ADR-0005_Event_Based_Attention_Engine.md` and
 > `ADR/ADR-0016_Presentation_And_Ranking.md`.
 
@@ -64,18 +65,24 @@ Six states in v0.1. A WorkItem may carry several at once; they render as tags.
   gate enforces approvals, Changes Requested co-occurs with Blocked; the item
   carries both tags and ranks by the more actionable Changes Requested.
 
-## Markers (v0.1.1)
+## Markers (v0.1.1–v0.1.2)
 
 Markers are diagnostic booleans on the item snapshot, normalized per provider.
 They explain *why* an item is in its state but never change the state itself —
-with one deliberate exception: age bands (see Ranking below).
+with one deliberate exception: age bands (see Ranking below). Since v0.1.2 the
+GitLab markers no longer read a single `detailed_merge_status` value — they come
+from independent REST fields plus a batched GraphQL join, so every applicable
+reason shows at once (`docs/UI_Vocabulary.md` has the provider-parity table).
 
-| Marker | Meaning | GitHub (`mergeable_state`) | GitLab (`detailed_merge_status`) |
+| Marker | Meaning | GitHub | GitLab |
 |---|---|---|---|
-| `failing_checks` | CI / checks are red | `unstable` | `ci_must_pass` |
-| `merge_conflict` | manual conflict resolution needed | `dirty` | `conflict` |
-| `needs_rebase` | mechanical rebase / update-branch needed | `behind` | `need_rebase` |
-| `draft` | item is in draft mode | `draft` | `draft_status` |
+| `failing_checks` | CI / checks are red | `unstable` (non-gating only; gating-CI failures hide inside `blocked`) | `headPipeline.status` red (GraphQL, any pipeline) |
+| `merge_conflict` | manual conflict resolution needed | `dirty` | `has_conflicts` (REST) |
+| `needs_rebase` | mechanical rebase / update-branch needed | `behind` (only when up-to-date branches required) | `shouldBeRebased` (GraphQL) |
+| `needs_approval` | required approvals not met | `reviewDecision` (GraphQL) | `approved` (GraphQL) |
+| `unresolved_discussions` | unresolved threads gate the merge | — (gate rule unreadable for non-admins) | `blocking_discussions_resolved` (REST) |
+| `policy_denied` | security / org policy denies merge | — (no signal) | `policies_denied` / `security_policy_violations` |
+| `draft` | item is in draft mode | draft flag | draft flag |
 
 The gate mapping (`mergeGate` in each provider) is **unchanged** — `dirty`,
 `behind`, `conflict`, `need_rebase`, and `ci_must_pass` still produce gate
@@ -101,9 +108,11 @@ already in the hover text).
 - **GitHub gating-CI failures** are hidden inside `mergeable_state: "blocked"` and
   cannot be distinguished from other block causes; they simply rank `blocked`
   with no CI marker.
-- **GitLab non-gating CI failures** are invisible (no pipeline fetch in v0.1).
 - **GitHub `behind`** is reported only when branch protection *requires*
   up-to-date branches; absence of `needs_rebase` is not proof of freshness.
+
+(The earlier "GitLab non-gating CI invisible" gap was closed in v0.1.2 by the
+`headPipeline` GraphQL join — GitLab now surfaces any red pipeline.)
 
 ## Ranking
 
@@ -119,16 +128,18 @@ is that what demands your action outranks what is merely done.
   involved, no matching state) sort below every stated item in the band.
 - **Within a state: newest-first**, where an item's timestamp is its newest
   signal (falling back to the latest snapshot's provider-updated time).
-- **Stale badge** once an item's age exceeds 7 days (default, a constant in
-  `fold.go`). **Old badge** once idle more than 30 days. Mutually
-  exclusive: `!old && stale` guards the stale tier.
+- Two age tiers, both constants in `fold.go`, mutually exclusive
+  (`!old && stale` guards the stale tier): `stale` once an item's age exceeds
+  7 days, `old` once idle more than 30 days. Both render the muted **"Stale"**
+  tag; the `old` tier is distinguished by a warm amber row tint, not a separate
+  "Old" label (`ADR/ADR-0016_Presentation_And_Ranking.md`).
 - **Pinned zone is exempt** from band sorting — a pin is a deliberate user act.
   Pinned items still display their age tags and pin age so rot cannot hide at
   the top.
 - **Repeated same-type signals collapse** to one tag with a count
   ("Mentioned ×3"); the individual signals remain in the detail view.
 
-## Presentation (Implemented v0.1.1)
+## Presentation (Implemented, v0.1.1–v0.1.4)
 
 - A **single ranked list**, one row per item, states as tags; buckets are
   optional client-side filters, not the primary layout.
@@ -136,12 +147,18 @@ is that what demands your action outranks what is merely done.
   order, lifted out of the auto-ranked list (never shown twice). The flag is
   local-only (`ADR/ADR-0017_Read_Only_Action_Model.md`).
 - **Three visual tiers of tags**: state chips (primary) > diagnostic badges
-  (conflict, rebase, failing checks; alert styling) > age tags (stale,
-  old; muted styling).
+  (conflict, rebase, failing checks, missing approvals, discussions, policy;
+  alert styling) > the muted **Stale** age tag. The `old` tier carries no
+  separate label — it is shown by a warm amber row tint.
 - **Hover text** adds information beyond the tag label: duration ("for 3d")
   from the `since` map, plus tag-specific extras (blocked shows the provider's
   raw gate detail; ready_to_merge with failing_checks notes the non-required
   check; mentioned notes it never clears while open).
 - **Pin age**: pinned items show "pinned N ago" from `flagged_at`.
+- **Row tints** carry context without a badge: a blue tint on items authored by
+  the connection's identity, a warm amber tint on the `old` tier.
+- **Approved count**: the meta-row shows "N approved" when at least one reviewer
+  has approved — a raw count, informational only (never moves the item), hidden
+  on drafts.
 
 The wire shape of the ranked list is specified in `docs/REST_API.md`.

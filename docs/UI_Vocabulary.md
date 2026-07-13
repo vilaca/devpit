@@ -4,7 +4,7 @@ The one-page visual reference for everything a row in the attention list can
 show. Seed for future user documentation. Decision record:
 `ADR/ADR-0016_Presentation_And_Ranking.md`; wire shapes: `docs/REST_API.md`.
 
-**Status:** all items below are live in v0.1.1.
+**Status:** all items below are live (v0.1.1–v0.1.2).
 
 ## Anatomy of the list
 
@@ -20,7 +20,7 @@ show. Seed for future user documentation. Decision record:
 ├─ stale (idle 7–30d) ──────────────────────────────────────────────┤
 │    Migrate CI config          [blocked] [rebase] [stale]          │
 ├─ old (idle > 30d) ───────────────────────────────────────────┤
-│    Dark launch flags          [waiting_on_author] [old]     │
+│    Dark launch flags          [waiting_on_author] [stale]   │  ← amber row tint
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,14 +72,28 @@ gracefully (badges absent, sync_log entry).
 
 ## Age tags (the one exception — they band the list)
 
-| tag | idle time | effect | hover |
-|---|---|---|---|
-| `stale` | > 7 days, ≤ 30 | sinks below all fresh items | No activity for {N} (threshold: 7 days) |
-| `old` | > 30 days | sinks to the very bottom | No activity for {N} (threshold: 30 days) |
+Two idle tiers, mutually exclusive. Both render the muted **Stale** tag; the
+`old` tier adds a warm amber row tint rather than a separate "Old" label
+(`ADR/ADR-0016_Presentation_And_Ranking.md`).
 
-Mutually exclusive. Bands sort fresh → stale → old; within a band the
-normal order (state precedence, newest first) applies. The pinned zone is
-exempt — pins never sink, but they still show their age tags and pin age.
+| tier | idle time | effect | shown as | hover |
+|---|---|---|---|---|
+| `stale` | > 7 days, ≤ 30 | sinks below all fresh items | "Stale" tag | No activity for {N} (threshold: 7 days) |
+| `old` | > 30 days | sinks to the very bottom | "Stale" tag + amber row tint | No activity for {N} (threshold: 30 days) |
+
+Bands sort fresh → stale → old; within a band the normal order (state
+precedence, newest first) applies. The pinned zone is exempt — pins never sink,
+but they still show their age tag and pin age.
+
+## Row context (tints & meta-row)
+
+Facts a row carries without a tag:
+
+| what | where | means |
+|---|---|---|
+| blue row tint | whole row | you authored the item (the connection's identity matches the author) — the only mark of authorship; the tag vocabulary is the same whatever your role |
+| amber row tint | whole row | the `old` age tier (idle > 30 days) — see Age tags above |
+| "N approved" | meta-row, between author and timestamp | raw count of reviewers who approved; informational only (never moves the item), shown when N > 0, hidden on drafts |
 
 ## Hover-text rule
 

@@ -41,8 +41,7 @@ See `docs/High_Level_Architecture.md` for the component status.
 
 ## v0.1.1 — Marker vocabulary + age bands ✓ Built
 
-Decided 2026-07-10 (ADR-0016); implementation plan in
-`docs/plans/2026-07-10_marker_vocabulary_and_age_bands.md`.
+Decided 2026-07-10 (ADR-0016).
 
 - Markers: `failing_checks` narrowed to CI-only; new `merge_conflict` and
   `needs_rebase`; GitLab starts setting `failing_checks` (`ci_must_pass`).
@@ -59,8 +58,7 @@ Decided 2026-07-10 (ADR-0016); implementation plan in
 
 ## v0.1.2 — Blocked diagnostic badges ✓ Built
 
-Decided 2026-07-10 (ADR-0016). Implementation plan in
-`docs/plans/2026-07-10_blocked_diagnostic_badges.md`.
+Decided 2026-07-10 (ADR-0016).
 
 - Three new cosmetic diagnostic badges: `missing approvals`, `discussions`, `policy`.
 - Parity principle: badge ships only where the provider reports a user-readable verdict.
@@ -74,8 +72,7 @@ Decided 2026-07-10 (ADR-0016). Implementation plan in
 
 ## v0.1.3 — GraphQL badge freshness ✓ Built
 
-Decided 2026-07-10 (ADR-0004); implementation plan in
-`docs/plans/2026-07-10_fast_poll_pipeline_freshness.md`.
+Decided 2026-07-10 (ADR-0004).
 
 - Fast_poll now refreshes the three volatile GraphQL-derived booleans
   (`failing_checks`, `needs_approval`, `needs_rebase`) for **all open items**
@@ -105,6 +102,27 @@ Decided 2026-07-10 (ADR-0016).
   11 had gate `unknown` (CI running / gate not yet computed) and 5 were drafts.
 - Wire effect: `states` may be an empty array (`docs/REST_API.md`).
 
+## v0.1.5 — Signal-based presentation (Planned)
+
+Decided 2026-07-13 (ADR-0021). Rows show the neutral provider signals present on
+the item instead of a closed set of viewer-relative "attention states" — no
+inferred workflow. Supersedes the attention-state set of ADR-0016.
+
+- Signal set + fixed precedence: Changes requested, Review requested, Blocked
+  (+ why-badges), Mentioned, Ready to merge, Auto-merge armed, Checks running,
+  Checking (gate `unknown`, replaces the bare row); Review submitted lowest.
+- Authorship is the blue row tint only — no authorship tag; same vocabulary
+  regardless of role.
+- Parity goal: primary state signal is guaranteed identical across GitHub and
+  GitLab; explanatory badges stay best-effort per provider with documented gaps
+  (existing ADR-0016 parity principle).
+- New `auto-merge armed` signal needs a provider field not read today (GitHub
+  `auto_merge`, GitLab `merge_when_pipeline_succeeds`) — verify at implementation.
+- `states` array becomes the signal list and is never empty (worst case
+  `["checking"]`), removing the v0.1.4 empty-array case.
+- Specs (`docs/Attention_Engine.md`, `docs/UI_Vocabulary.md`,
+  `docs/REST_API.md`) update when this ships.
+
 ## v0.2 — More forges + sync hardening
 
 - Providers: Forgejo, Gitea (with capability declaration/degradation, ADR-0003).
@@ -133,6 +151,17 @@ Decided 2026-07-10 (ADR-0016).
 ## Unversioned ideas
 
 Noted, not committed to any release.
+
+- Federation: a possible tier beyond single-user localhost and Planned team
+  visibility (own-token observation). **Needs refinement** — the term is not
+  yet defined. Candidate readings, mutually exclusive and each with different
+  consequences: independent user-owned instances sharing attention data
+  (peer-to-peer or via a hub); a hosted multi-user deployment behind accounts
+  and login (which is what would force authentication, absent today per
+  ADR-0001); or cross-provider identity linking of a single user's own
+  handles. Before this becomes Planned it needs a chosen definition and its
+  own ADR — in particular it is the trigger that would end the "localhost-only,
+  no auth" stance of `ADR/ADR-0001_Local_First_Web_Application.md`.
 
 - Changelog / "what's new since last visit": surface a per-item activity
   feed showing what changed since the user last opened DevPit —

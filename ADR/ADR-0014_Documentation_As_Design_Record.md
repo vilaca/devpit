@@ -61,8 +61,8 @@ A decision can be *made* without being *built*. Keep the axes separate:
 Specs carry a status banner (and inline tags for mixed docs) so a reader never
 mistakes designed-for-later for exists-today. Where a current decision has a
 known future trigger, record it as a **forward-dependency note** in the ADR's
-Consequences (e.g. "no auth while localhost-only; federation forces it —
-revisit then").
+Consequences (e.g. "log kept uncompacted until a real instance proves
+compaction necessary — revisit then").
 
 ## Rationale
 

@@ -55,6 +55,8 @@ type WorkItem struct {
 	Old                   bool                 `json:"old"`
 	UpdatedAt             time.Time            `json:"updated_at"`
 	SignalCounts          map[string]int       `json:"signal_counts,omitempty"` // only types with count > 1
+	AutoMergeArmed        bool                 `json:"auto_merge_armed"`
+	ChecksRunning         bool                 `json:"checks_running"`
 	FailingChecks         bool                 `json:"failing_checks"`
 	MergeConflict         bool                 `json:"merge_conflict"`
 	NeedsRebase           bool                 `json:"needs_rebase"`
@@ -216,6 +218,8 @@ func foldItem(
 		Old:                   old,
 		UpdatedAt:             updatedAt,
 		SignalCounts:          signalCounts(signals),
+		AutoMergeArmed:        facts.AutoMergeArmed,
+		ChecksRunning:         facts.ChecksRunning,
 		FailingChecks:         facts.FailingChecks,
 		MergeConflict:         facts.MergeConflict,
 		NeedsRebase:           facts.NeedsRebase,

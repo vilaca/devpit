@@ -48,10 +48,14 @@ Each item carries:
 - Connection provenance: `connection_id`, `connection_label`, `connection_type`.
 - Item identity: `id`, `object_type`, `native_id`, `title`, `url`, `repo`,
   `author`, `draft`.
-- `states` — array in precedence order; `states[0]` is the ranking state. May
-  be empty (`[]`) for an open item you are involved in that matches no state
-  (e.g. an authored MR waiting on review, or a draft); such items still appear
-  and sort below every stated item.
+- `states` — array of provider signals in precedence order; `states[0]` ranks
+  the item. An authored MR is never bare: worst case `["checking"]` (gate
+  `unknown`, including drafts). A non-authored involved item (assignee, etc.)
+  with a known gate and no reviewer/mention signal may still have `states: []`
+  (marker-only row). The array is never `null`. Nine wire values in precedence
+  order: `changes_requested`, `review_requested`, `blocked`, `mentioned`,
+  `ready_to_merge`, `auto_merge_armed`, `checks_running`, `checking`,
+  `review_submitted`.
 - `flagged` — true when in the "Handle next" zone.
 - `flagged_at` — RFC 3339 timestamp when the item was pinned; present only when
   `flagged: true`.
@@ -71,6 +75,8 @@ Each item carries:
   - `needs_approval` — required approvals not met (GitHub: `reviewDecision`; GitLab: `approved` GraphQL).
   - `unresolved_discussions` — threads block the merge (GitLab: `blocking_discussions_resolved`; GitHub: excluded — gate rule unreadable for non-admins).
   - `policy_denied` — security/org policy denies merge (GitLab: `policies_denied` / `security_policy_violations`; GitHub: no signal).
+  - `auto_merge_armed` — auto-merge is queued (GitHub: `autoMergeRequest`; GitLab: `merge_when_pipeline_succeeds`). Surfaces as the `auto_merge_armed` signal for authored MRs.
+  - `checks_running` — a gating pipeline is in progress (GitLab only: `headPipeline.status` running; GitHub ✗ — gating pipeline hidden inside `blocked`). Surfaces as the `checks_running` signal for authored MRs.
   - `gate_detail` — raw provider vocabulary for the merge gate (omitted when
     empty); powers the Blocked tooltip.
 - `since` — map from tag wire name to RFC 3339 onset time; only active tags

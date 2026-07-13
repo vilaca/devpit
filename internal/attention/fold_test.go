@@ -75,7 +75,7 @@ func TestFoldStateConditions(t *testing.T) {
 				f.MyReviewState = "requested"
 				return f
 			},
-			want: []State{StateNeedsReview},
+			want: []State{StateReviewRequested},
 		},
 		{
 			name: "changes requested",
@@ -111,7 +111,7 @@ func TestFoldStateConditions(t *testing.T) {
 				f.MyReviewState = "changes_requested"
 				return f
 			},
-			want: []State{StateWaitingOnAuthor},
+			want: []State{StateReviewSubmitted},
 		},
 		{
 			name: "draft author is neither blocked nor ready but still shows",
@@ -124,13 +124,13 @@ func TestFoldStateConditions(t *testing.T) {
 			want: []State{}, // present, no state tag (Draft marker carries it)
 		},
 		{
-			name: "gate unknown, author, not draft, no review: shows stateless",
+			name: "gate unknown, author, not draft: checking backstop fires",
 			facts: func(f sdk.ItemObservedPayload) sdk.ItemObservedPayload {
 				f.MyRoles = []string{"author"}
 				f.Gate = "unknown"
 				return f
 			},
-			want: []State{}, // present, no state tag
+			want: []State{StateChecking},
 		},
 	}
 
@@ -180,7 +180,7 @@ func TestFoldMultipleStatesInPrecedenceOrder(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("want 1 item, got %d", len(items))
 	}
-	// changes_requested (rank 1) < blocked (rank 2) < mentioned (rank 4).
+	// changes_requested (#1) < blocked (#3) < mentioned (#4).
 	want := []State{StateChangesRequested, StateBlocked, StateMentioned}
 	if !equalStates(items[0].States, want) {
 		t.Errorf("states = %v, want %v", items[0].States, want)
@@ -201,11 +201,11 @@ func TestFoldDropsClosedItem(t *testing.T) {
 func TestFoldUsesLatestSnapshot(t *testing.T) {
 	old := openFacts()
 	old.MyRoles = []string{"reviewer"}
-	old.MyReviewState = "requested" // would be needs_review
+	old.MyReviewState = "requested" // would be review_requested
 
 	newer := openFacts()
 	newer.MyRoles = []string{"reviewer"}
-	newer.MyReviewState = "approved" // now waiting_on_author
+	newer.MyReviewState = "approved" // now review_submitted
 
 	// Deliberately out of order to prove the fold picks by max ID, not slice order.
 	events := []storage.StoredEvent{
@@ -216,8 +216,8 @@ func TestFoldUsesLatestSnapshot(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("want 1 item, got %d", len(items))
 	}
-	if !equalStates(items[0].States, []State{StateWaitingOnAuthor}) {
-		t.Errorf("states = %v, want [waiting_on_author] (latest snapshot)", items[0].States)
+	if !equalStates(items[0].States, []State{StateReviewSubmitted}) {
+		t.Errorf("states = %v, want [review_submitted] (latest snapshot)", items[0].States)
 	}
 }
 
@@ -274,7 +274,8 @@ func TestFoldRankingOrder(t *testing.T) {
 		t.Fatalf("want 3 items, got %d", len(items))
 	}
 	gotOrder := []State{items[0].States[0], items[1].States[0], items[2].States[0]}
-	want := []State{StateNeedsReview, StateReadyToMerge, StateWaitingOnAuthor}
+	// New precedence: review_requested (#2) < ready_to_merge (#5) < review_submitted (#9).
+	want := []State{StateReviewRequested, StateReadyToMerge, StateReviewSubmitted}
 	if !equalStates(gotOrder, want) {
 		t.Errorf("ranking order = %v, want %v", gotOrder, want)
 	}
@@ -418,7 +419,7 @@ func TestFoldEmptyInput(t *testing.T) {
 func TestPinLiftsFlaggedInFlagOrder(t *testing.T) {
 	// Three auto-ranked items; flag the 3rd then the 1st.
 	items := []WorkItem{
-		{ID: "a", States: []State{StateNeedsReview}},
+		{ID: "a", States: []State{StateReviewRequested}},
 		{ID: "b", States: []State{StateBlocked}},
 		{ID: "c", States: []State{StateMentioned}},
 	}
@@ -440,7 +441,7 @@ func TestPinLiftsFlaggedInFlagOrder(t *testing.T) {
 }
 
 func TestPinNoFlagsIsIdentity(t *testing.T) {
-	items := []WorkItem{{ID: "a", States: []State{StateNeedsReview}}}
+	items := []WorkItem{{ID: "a", States: []State{StateReviewRequested}}}
 	got := pin(items, nil)
 	if len(got) != 1 || got[0].Flagged {
 		t.Errorf("no flags should leave items untouched, got %+v", got)
@@ -448,7 +449,7 @@ func TestPinNoFlagsIsIdentity(t *testing.T) {
 }
 
 func TestPinIgnoresFlagWithNoLiveItem(t *testing.T) {
-	items := []WorkItem{{ID: "a", States: []State{StateNeedsReview}}}
+	items := []WorkItem{{ID: "a", States: []State{StateReviewRequested}}}
 	got := pin(items, []storage.PinnedItem{{ID: "gone"}, {ID: "a"}})
 	if len(got) != 1 || got[0].ID != "a" || !got[0].Flagged {
 		t.Errorf("stale flag should be ignored, got %+v", got)
@@ -463,7 +464,7 @@ func TestListReadsFoldsAndPins(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 
-	// Two authored items: one ready_to_merge, one needs_review.
+	// Two authored items: one ready_to_merge, one review_requested.
 	nr := openFacts()
 	nr.MyRoles = []string{"reviewer"}
 	nr.MyReviewState = "requested"
@@ -480,7 +481,7 @@ func TestListReadsFoldsAndPins(t *testing.T) {
 		t.Fatalf("WriteEvents: %v", err)
 	}
 
-	// Pin the ready_to_merge item, which would otherwise rank below needs_review.
+	// Pin the ready_to_merge item, which would otherwise rank below review_requested.
 	rtmID := itemID(itemKey{"c", "merge_request", "acme/api#rtm"})
 	if err := db.SetHandleNext(ctx, rtmID, true); err != nil {
 		t.Fatalf("SetHandleNext: %v", err)
@@ -497,7 +498,7 @@ func TestListReadsFoldsAndPins(t *testing.T) {
 		t.Errorf("pinned ready_to_merge should lead; got %q flagged=%v", items[0].NativeID, items[0].Flagged)
 	}
 	if items[1].NativeID != "acme/api#nr" || items[1].Flagged {
-		t.Errorf("auto-ranked needs_review should follow unflagged; got %q flagged=%v", items[1].NativeID, items[1].Flagged)
+		t.Errorf("auto-ranked review_requested should follow unflagged; got %q flagged=%v", items[1].NativeID, items[1].Flagged)
 	}
 }
 
@@ -625,11 +626,11 @@ func TestAgeBandSorting(t *testing.T) {
 	// stale needs_review sorts below fresh waiting_on_author (lower-ranked state).
 	freshFacts := openFacts()
 	freshFacts.MyRoles = []string{"reviewer"}
-	freshFacts.MyReviewState = "approved" // waiting_on_author
+	freshFacts.MyReviewState = "approved" // review_submitted
 
 	staleFacts := openFacts()
 	staleFacts.MyRoles = []string{"reviewer"}
-	staleFacts.MyReviewState = "requested" // needs_review
+	staleFacts.MyReviewState = "requested" // review_requested
 
 	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
 	staleSig := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
@@ -643,14 +644,14 @@ func TestAgeBandSorting(t *testing.T) {
 		t.Fatalf("want 2 items, got %d", len(items))
 	}
 	if items[0].NativeID != "acme/api#fresh" {
-		t.Errorf("fresh waiting_on_author should rank above stale needs_review; got %q first", items[0].NativeID)
+		t.Errorf("fresh review_submitted should rank above stale review_requested; got %q first", items[0].NativeID)
 	}
 }
 
 func TestAgeBandOldLast(t *testing.T) {
 	f := openFacts()
 	f.MyRoles = []string{"reviewer"}
-	f.MyReviewState = "requested" // needs_review for all
+	f.MyReviewState = "requested" // review_requested for all
 
 	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
 	staleSig := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
@@ -674,7 +675,7 @@ func TestAgeBandOldLast(t *testing.T) {
 }
 
 func TestAgeBandWithinBandOrderPreserved(t *testing.T) {
-	// Two needs_review items, both fresh; newer should sort first (existing order).
+	// Two review_requested items, both fresh; newer should sort first (existing order).
 	f := openFacts()
 	f.MyRoles = []string{"reviewer"}
 	f.MyReviewState = "requested"
@@ -724,7 +725,7 @@ func TestPinnedItemsIgnoreAgeBand(t *testing.T) {
 
 func TestPinFlaggedAtSurfaces(t *testing.T) {
 	flagTime := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	items := []WorkItem{{ID: "a", States: []State{StateNeedsReview}}}
+	items := []WorkItem{{ID: "a", States: []State{StateReviewRequested}}}
 	pinned := []storage.PinnedItem{{ID: "a", FlaggedAt: flagTime}}
 	got := pin(items, pinned)
 	if len(got) != 1 {
@@ -738,7 +739,7 @@ func TestPinFlaggedAtSurfaces(t *testing.T) {
 // --- Onset (Since) tests ---
 
 func TestOnsetContiguousRun(t *testing.T) {
-	// Three snapshots where needs_review is true throughout → onset = oldest.
+	// Three snapshots where review_requested is true throughout → onset = oldest.
 	f := openFacts()
 	f.MyRoles = []string{"reviewer"}
 	f.MyReviewState = "requested"
@@ -760,9 +761,9 @@ func TestOnsetContiguousRun(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("want 1 item, got %d", len(items))
 	}
-	onset, ok := items[0].Since[string(StateNeedsReview)]
+	onset, ok := items[0].Since[string(StateReviewRequested)]
 	if !ok {
-		t.Fatal("needs_review should have onset in Since map")
+		t.Fatal("review_requested should have onset in Since map")
 	}
 	if !onset.Equal(t3) {
 		t.Errorf("onset = %v, want %v (oldest in run)", onset, t3)
@@ -796,9 +797,9 @@ func TestOnsetBrokenRun(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("want 1 item, got %d", len(items))
 	}
-	onset, ok := items[0].Since[string(StateNeedsReview)]
+	onset, ok := items[0].Since[string(StateReviewRequested)]
 	if !ok {
-		t.Fatal("needs_review should have onset in Since map")
+		t.Fatal("review_requested should have onset in Since map")
 	}
 	// Run is only snapshot 3 (newest), so onset = t1.
 	if !onset.Equal(t1) {
@@ -872,6 +873,218 @@ func TestOnsetAbsentForInactiveTags(t *testing.T) {
 		if _, ok := items[0].Since[key]; ok {
 			t.Errorf("inactive marker %q should not appear in Since", key)
 		}
+	}
+}
+
+// --- Signal-model (v0.1.5) tests ---
+
+func TestSignalAuthoredMRNeverBare(t *testing.T) {
+	// Authored, non-draft, gate unknown → checking (not empty).
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	f.Gate = "unknown"
+	items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if !equalStates(items[0].States, []State{StateChecking}) {
+		t.Errorf("states = %v, want [checking]", items[0].States)
+	}
+}
+
+func TestSignalDraftCheckingRoleNeutral(t *testing.T) {
+	// Draft with gate unknown → checking fires for both authored and reviewer.
+	for _, role := range []string{"author", "reviewer"} {
+		t.Run(role, func(t *testing.T) {
+			f := openFacts()
+			f.MyRoles = []string{role}
+			f.Draft = true
+			f.Gate = "unknown"
+			items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+			if len(items) != 1 {
+				t.Fatalf("role=%s: want 1 item, got %d", role, len(items))
+			}
+			it := items[0]
+			if !it.Draft {
+				t.Errorf("role=%s: item.draft should be true", role)
+			}
+			if !equalStates(it.States, []State{StateChecking}) {
+				t.Errorf("role=%s: states = %v, want [checking]", role, it.States)
+			}
+			for _, s := range it.States {
+				if s == StateBlocked || s == StateReadyToMerge {
+					t.Errorf("role=%s: draft must not carry blocked/ready_to_merge; got %v", role, it.States)
+				}
+			}
+		})
+	}
+}
+
+func TestSignalAuthorScopePreserved(t *testing.T) {
+	// A reviewer on a blocked MR does not get the blocked signal.
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.Gate = "blocked"
+	items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	for _, s := range items[0].States {
+		if s == StateBlocked || s == StateReadyToMerge || s == StateAutoMergeArmed || s == StateChecksRunning {
+			t.Errorf("reviewer must not carry author-scoped signal %q; states = %v", s, items[0].States)
+		}
+	}
+	// Author on same MR does get blocked.
+	f2 := openFacts()
+	f2.MyRoles = []string{"author"}
+	f2.Gate = "blocked"
+	items2 := fold([]storage.StoredEvent{obs(1, "c", "acme/api#2", f2)})
+	if len(items2) != 1 {
+		t.Fatalf("want 1 authored item, got %d", len(items2))
+	}
+	found := false
+	for _, s := range items2[0].States {
+		if s == StateBlocked {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("author on blocked MR must carry blocked; got %v", items2[0].States)
+	}
+}
+
+func TestSignalNonAuthoredCanBeMarkerOnly(t *testing.T) {
+	// Assignee on a ready MR with no mention, no review state → empty states (D2).
+	f := openFacts()
+	f.MyRoles = []string{"assignee"}
+	f.Gate = "ready"
+	items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if len(items[0].States) != 0 {
+		t.Errorf("non-authored assignee on ready MR: states = %v, want []", items[0].States)
+	}
+}
+
+func TestSignalPrecedenceMentionedAndChecking(t *testing.T) {
+	// Authored + mentioned + gate unknown → [mentioned, checking]; ranks by mentioned.
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	f.Gate = "unknown"
+	events := []storage.StoredEvent{
+		obs(1, "c", "acme/api#1", f),
+		sig(2, "acme/api#1", signalMentioned, baseTime),
+	}
+	items := fold(events)
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	want := []State{StateMentioned, StateChecking}
+	if !equalStates(items[0].States, want) {
+		t.Errorf("states = %v, want %v", items[0].States, want)
+	}
+	// Ranks by mentioned (index < checking).
+	if rankOf[StateMentioned] >= rankOf[StateChecking] {
+		t.Errorf("mentioned must rank above checking; mentioned=%d checking=%d",
+			rankOf[StateMentioned], rankOf[StateChecking])
+	}
+}
+
+func TestSignalNewSignalsAutoMergeAndChecksRunning(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*sdk.ItemObservedPayload)
+		want   State
+	}{
+		{
+			name:   "auto_merge_armed authored non-draft",
+			mutate: func(f *sdk.ItemObservedPayload) { f.AutoMergeArmed = true },
+			want:   StateAutoMergeArmed,
+		},
+		{
+			name:   "checks_running authored non-draft",
+			mutate: func(f *sdk.ItemObservedPayload) { f.ChecksRunning = true },
+			want:   StateChecksRunning,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := openFacts()
+			f.MyRoles = []string{"author"}
+			f.Gate = "ready"
+			c.mutate(&f)
+			items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+			if len(items) != 1 {
+				t.Fatalf("want 1 item, got %d", len(items))
+			}
+			found := false
+			for _, s := range items[0].States {
+				if s == c.want {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("want %q in states %v", c.want, items[0].States)
+			}
+
+			// Suppressed on draft.
+			fd := openFacts()
+			fd.MyRoles = []string{"author"}
+			fd.Draft = true
+			fd.Gate = "unknown"
+			c.mutate(&fd)
+			draftItems := fold([]storage.StoredEvent{obs(2, "c", "acme/api#draft", fd)})
+			for _, s := range draftItems[0].States {
+				if s == c.want {
+					t.Errorf("draft must not carry %q; states = %v", c.want, draftItems[0].States)
+				}
+			}
+
+			// Suppressed for reviewer.
+			fr := openFacts()
+			fr.MyRoles = []string{"reviewer"}
+			fr.Gate = "ready"
+			c.mutate(&fr)
+			revItems := fold([]storage.StoredEvent{obs(3, "c", "acme/api#rev", fr)})
+			for _, s := range revItems[0].States {
+				if s == c.want {
+					t.Errorf("reviewer must not carry %q; states = %v", c.want, revItems[0].States)
+				}
+			}
+		})
+	}
+}
+
+func TestSignalCheckingOnsetViaComputeSince(t *testing.T) {
+	// Three unknown-gate snapshots → since["checking"] = oldest (D8).
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	f.Gate = "unknown"
+
+	t3 := baseTime.Add(-3 * time.Hour)
+	t2 := baseTime.Add(-2 * time.Hour)
+	t1 := baseTime.Add(-1 * time.Hour)
+	f1, f2, f3 := f, f, f
+	f1.ProviderUpdatedAt = t1.Format(time.RFC3339)
+	f2.ProviderUpdatedAt = t2.Format(time.RFC3339)
+	f3.ProviderUpdatedAt = t3.Format(time.RFC3339)
+
+	events := []storage.StoredEvent{
+		obs(3, "c", "acme/api#1", f1),
+		obs(2, "c", "acme/api#1", f2),
+		obs(1, "c", "acme/api#1", f3),
+	}
+	items := fold(events)
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	onset, ok := items[0].Since[string(StateChecking)]
+	if !ok {
+		t.Fatal("checking should have onset in Since map")
+	}
+	if !onset.Equal(t3) {
+		t.Errorf("checking onset = %v, want %v (oldest in run)", onset, t3)
 	}
 }
 

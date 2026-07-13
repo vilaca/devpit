@@ -110,8 +110,8 @@ func TestAttentionReturnsItem(t *testing.T) {
 	if item.ConnectionType != "github" {
 		t.Errorf("connection_type = %q, want github", item.ConnectionType)
 	}
-	if len(item.States) == 0 || item.States[0] != attention.StateNeedsReview {
-		t.Errorf("states = %v, want [needs_review]", item.States)
+	if len(item.States) == 0 || item.States[0] != attention.StateReviewRequested {
+		t.Errorf("states = %v, want [review_requested]", item.States)
 	}
 	if item.NativeID != "acme/api#1" {
 		t.Errorf("native_id = %q, want acme/api#1", item.NativeID)

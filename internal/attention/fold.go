@@ -49,9 +49,9 @@ type WorkItem struct {
 	Repo                  string               `json:"repo"`
 	Author                string               `json:"author"`
 	Draft                 bool                 `json:"draft"`
-	States                []State              `json:"states"`  // precedence order; States[0] ranks the item
-	Muted                 bool                 `json:"muted,omitempty"` // reviewed-done: nothing left for me; demoted + de-emphasized
-	Flagged               bool                 `json:"flagged"` // pinned in the "Handle next" zone
+	States                []State              `json:"states"`          // precedence order; States[0] ranks the item
+	Muted                 bool                 `json:"muted,omitempty"` // reviewed-done: demoted + de-emphasized
+	Flagged               bool                 `json:"flagged"`         // pinned in the "Handle next" zone
 	Stale                 bool                 `json:"stale"`
 	Old                   bool                 `json:"old"`
 	UpdatedAt             time.Time            `json:"updated_at"`
@@ -65,7 +65,7 @@ type WorkItem struct {
 	UnresolvedDiscussions bool                 `json:"unresolved_discussions"`
 	PolicyDenied          bool                 `json:"policy_denied"`
 	ApprovalsCount        int                  `json:"approvals_count,omitempty"`
-	MyReviewState         string               `json:"my_review_state,omitempty"` // "approved" | "changes_requested" | "reviewed" | ""
+	MyReviewState         string               `json:"my_review_state,omitempty"` // approved|changes_requested|reviewed|""
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"` // onset of each active tag

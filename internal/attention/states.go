@@ -13,7 +13,7 @@ type State string
 // any-role; checking is role-neutral (the bare-row backstop).
 const (
 	StateChangesRequested State = "changes_requested"
-	StateReviewRequested  State = "review_requested"  // was StateNeedsReview / "needs_review"
+	StateReviewRequested  State = "review_requested" // was StateNeedsReview / "needs_review"
 	StateBlocked          State = "blocked"
 	StateMentioned        State = "mentioned"
 	StateReadyToMerge     State = "ready_to_merge"

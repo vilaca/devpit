@@ -93,7 +93,15 @@ its fields:
     GitHub: no signal).
   - `gate_detail` (v0.1.1) — raw provider vocabulary for the merge gate (opaque
     string; powers the Blocked tooltip).
-  Old `item.observed` events lack the v0.1.1/v0.1.2 fields (unmarshal to
+  - `auto_merge_armed` (v0.1.5) — provider's auto-merge / merge-when-pipeline-succeeds
+    is set. Stored as a boolean; read by the fold as the `auto_merge_armed` signal
+    (GitHub: GraphQL `autoMergeRequest{enabledAt}`, non-null ⇒ armed; GitLab:
+    REST `merge_when_pipeline_succeeds`).
+  - `checks_running` (v0.1.5) — a pipeline is in progress. Stored as a boolean;
+    read by the fold as the `checks_running` signal (GitLab: `headPipeline.status`
+    in the running set via GraphQL; GitHub: not set — documented ✗ gap, hidden
+    inside `blocked`).
+  Old `item.observed` events lack the v0.1.1/v0.1.2/v0.1.5 fields (unmarshal to
   `false`/`""`); the fold reads the latest snapshot, so items pick them up on
   the next poll cycle.
 

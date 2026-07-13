@@ -4,23 +4,23 @@ The one-page visual reference for everything a row in the attention list can
 show. Seed for future user documentation. Decision record:
 `ADR/ADR-0016_Presentation_And_Ranking.md`; wire shapes: `docs/REST_API.md`.
 
-**Status:** all items below are live (v0.1.1–v0.1.2).
+**Status:** all items below are live (v0.1.1–v0.1.5).
 
 ## Anatomy of the list
 
 ```
 ┌─ Handle next ─────────────────────────────────────────────────────┐
-│ 📌 Fix flaky auth test        [needs_review] [conflict] [stale]   │  ← pins: any age,
-│    repo · author · 2w ago · pinned 3w ago                         │    flag order
+│ 📌 Fix flaky auth test        [review_requested] [conflict] [stale]│  ← pins: any age,
+│    repo · author · 2w ago · pinned 3w ago                          │    flag order
 ├─ fresh (idle < 7d) ───────────────────────────────────────────────┤
-│    Add rate limiter           [needs_review]                      │  ← state precedence,
-│    Retry queue draining       [changes_requested] [checks failing]│    newest first
-│    Bump SDK                   [ready to merge · optional checks   │
-│                                red]                               │
+│    Add rate limiter           [review_requested]                   │  ← signal precedence,
+│    Retry queue draining       [changes_requested] [checks failing] │    newest first
+│    Bump SDK                   [ready to merge · optional checks    │
+│                                red]                                │
 ├─ stale (idle 7–30d) ──────────────────────────────────────────────┤
-│    Migrate CI config          [blocked] [rebase] [stale]          │
-├─ old (idle > 30d) ───────────────────────────────────────────┤
-│    Dark launch flags          [waiting_on_author] [stale]   │  ← amber row tint
+│    Migrate CI config          [blocked] [rebase] [stale]           │
+├─ old (idle > 30d) ────────────────────────────────────────────┤
+│    Dark launch flags          [review_submitted] [stale]      │  ← amber row tint
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -32,21 +32,34 @@ Three kinds of tags, three visual weights:
 [age tag]      muted              — how long it has sat (bands the list)
 ```
 
-## Attention states (drive ranking — closed set, fixed precedence)
+## Signals (v0.1.5 — drive ranking, fixed precedence)
 
-Precedence highest → lowest; an item may carry several, the first ranks it.
+Precedence highest → lowest; an item may carry several, the highest ranks it.
+The signal vocabulary is one word-set regardless of your role; conditions stay
+role-aware where the fact is inherently about a role (see role scope notes).
 
-| chip | you are | it means | hover |
+| chip | role scope | it means | hover |
 |---|---|---|---|
-| `needs_review` | reviewer | your review was requested, not submitted | for {N} |
 | `changes_requested` | author | a reviewer requested changes | for {N} |
-| `blocked` | author | provider merge gate not satisfied | for {N} · provider says: {gate_detail} |
-| `ready_to_merge` | author | gate satisfied, mergeable now | for {N}; with red checks: · a non-required check is red |
-| `mentioned` | anyone | you were @-mentioned (shows ×N if repeated) | for {N} · clears when the item closes |
-| `waiting_on_author` | reviewer | you already reviewed; ball with author | for {N} |
+| `review_requested`  | reviewer | your review was requested, not submitted | for {N} |
+| `blocked`           | author | provider merge gate not satisfied | for {N} · provider says: {gate_detail} |
+| `mentioned`         | anyone | you were @-mentioned (shows ×N if repeated) | for {N} · clears when the item closes |
+| `ready_to_merge`    | author | gate satisfied, mergeable now | for {N}; with red checks: · a non-required check is red |
+| `auto_merge_armed`  | author | provider auto-merge / merge-when-pipeline-succeeds is armed | for {N} |
+| `checks_running`    | author | a pipeline is in progress | for {N} |
+| `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; replaces the bare row | for {N} |
+| `review_submitted`  | reviewer | you already reviewed; ball with author | for {N} |
 
 `blocked` defers entirely to the provider's merge gate — DevPit never
 re-derives org rules. That is why it is trustworthy.
+
+**Provider parity for best-effort signals:**
+- `auto_merge_armed`: ships on both GitHub (GraphQL `autoMergeRequest{enabledAt}`,
+  non-null ⇒ armed; degrades to false for PATs that cannot read it) and GitLab
+  (REST `merge_when_pipeline_succeeds`).
+- `checks_running`: **GitLab-only** — GitHub cannot report an in-progress gating
+  pipeline (it hides inside `blocked`); `checks_running` is a documented ✗ gap
+  on GitHub. We do not reconstruct it from `statusCheckRollup`.
 
 ## Diagnostic badges (cosmetic — explain, never move)
 

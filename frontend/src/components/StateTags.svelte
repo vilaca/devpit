@@ -60,7 +60,7 @@
     {#if s === "ready_to_merge" && readyButRed}
       <!-- Combined "ready · optional checks red" phrase — shown once -->
       <span
-        class="tag ready-but-red"
+        class="tag"
         style:color={stateCSSVar(s)}
         style:border-color={stateCSSVar(s)}
         title={titleForState(s)}
@@ -114,7 +114,6 @@
     border-radius: 10px;
     border: 1px solid currentColor;
     white-space: nowrap;
-    opacity: 0.85;
   }
   .marker-draft {
     color: var(--marker-draft);
@@ -127,8 +126,5 @@
   .marker-stale {
     color: var(--marker-stale);
     border-color: var(--marker-stale);
-  }
-  .ready-but-red {
-    opacity: 0.85;
   }
 </style>

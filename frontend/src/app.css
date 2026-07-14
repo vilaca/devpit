@@ -15,33 +15,35 @@
   --text: #1b1f24;
   --text-muted: #5c6570;
   --text-faint: #8a929c;
-  --accent: #2d6cdf;
+  --accent: #2563eb;
 
-  /* Signal chips (internal/attention/states.go precedence order). */
-  --state-changes-requested: #c0392b;
-  --state-review-requested: #b26a00;
-  --state-blocked: #8e44ad;
-  --state-mentioned: #2d6cdf;
-  --state-ready-to-merge: #1a7f37;
-  --state-auto-merge-armed: #0e7c86;
-  --state-checks-running: #8a6d1f;
+  /* Signal chips (internal/attention/states.go precedence order). Hues are the
+     vivid 600/700 range — full-saturation but held above WCAG-AA text contrast
+     on the light canvas. The two lowest-precedence signals stay neutral gray. */
+  --state-changes-requested: #dc2626;
+  --state-review-requested: #c2410c;
+  --state-blocked: #7c3aed;
+  --state-mentioned: #2563eb;
+  --state-ready-to-merge: #15803d;
+  --state-auto-merge-armed: #0e7490;
+  --state-checks-running: #a16207;
   --state-checking: #5c6570;
   --state-review-submitted: #5c6570;
 
   /* Health dots (ADR-0018). */
-  --health-ok: #1a7f37;
-  --health-degraded: #b26a00;
-  --health-failing: #c0392b;
+  --health-ok: #16a34a;
+  --health-degraded: #d97706;
+  --health-failing: #dc2626;
 
   /* Markers. */
-  --marker-stale: #b26a00;
-  --marker-old: #7d3c00;
-  --marker-failing-checks: #c0392b;
-  --marker-conflict: #c0392b;
+  --marker-stale: #c2410c;
+  --marker-old: #92400e;
+  --marker-failing-checks: #dc2626;
+  --marker-conflict: #dc2626;
   --marker-draft: #8a929c;
 
   /* Meta-row highlight: approvals count reads as positive/success. */
-  --meta-approvals: #1a7f37;
+  --meta-approvals: #15803d;
 
   --radius: 6px;
   --radius-sm: 4px;
@@ -62,29 +64,29 @@
     --text: #e6e9ec;
     --text-muted: #9aa3ad;
     --text-faint: #6b747e;
-    --accent: #5b8def;
+    --accent: #60a5fa;
 
-    --state-changes-requested: #f47068;
-    --state-review-requested: #e8a438;
+    --state-changes-requested: #f87171;
+    --state-review-requested: #fbbf24;
     --state-blocked: #c084fc;
-    --state-mentioned: #7eb3ff;
-    --state-ready-to-merge: #3fb559;
-    --state-auto-merge-armed: #4dd0d8;
-    --state-checks-running: #d6b24a;
+    --state-mentioned: #60a5fa;
+    --state-ready-to-merge: #4ade80;
+    --state-auto-merge-armed: #22d3ee;
+    --state-checks-running: #eab308;
     --state-checking: #8b95a1;
     --state-review-submitted: #9aa3ad;
 
-    --health-ok: #3fb559;
-    --health-degraded: #e8a438;
-    --health-failing: #f47068;
+    --health-ok: #4ade80;
+    --health-degraded: #fbbf24;
+    --health-failing: #f87171;
 
-    --marker-stale: #e8a438;
-    --marker-old: #c47a1e;
-    --marker-failing-checks: #f47068;
-    --marker-conflict: #f47068;
+    --marker-stale: #fbbf24;
+    --marker-old: #d98324;
+    --marker-failing-checks: #f87171;
+    --marker-conflict: #f87171;
     --marker-draft: #9aa3ad;
 
-    --meta-approvals: #3fb559;
+    --meta-approvals: #4ade80;
   }
 }
 
@@ -98,29 +100,29 @@
   --text: #e6e9ec;
   --text-muted: #9aa3ad;
   --text-faint: #6b747e;
-  --accent: #5b8def;
+  --accent: #60a5fa;
 
-  --state-changes-requested: #f47068;
-  --state-review-requested: #e8a438;
+  --state-changes-requested: #f87171;
+  --state-review-requested: #fbbf24;
   --state-blocked: #c084fc;
-  --state-mentioned: #7eb3ff;
-  --state-ready-to-merge: #3fb559;
-  --state-auto-merge-armed: #4dd0d8;
-  --state-checks-running: #d6b24a;
+  --state-mentioned: #60a5fa;
+  --state-ready-to-merge: #4ade80;
+  --state-auto-merge-armed: #22d3ee;
+  --state-checks-running: #eab308;
   --state-checking: #8b95a1;
   --state-review-submitted: #9aa3ad;
 
-  --health-ok: #3fb559;
-  --health-degraded: #e8a438;
-  --health-failing: #f47068;
+  --health-ok: #4ade80;
+  --health-degraded: #fbbf24;
+  --health-failing: #f87171;
 
-  --marker-stale: #e8a438;
-  --marker-old: #c47a1e;
-  --marker-failing-checks: #f47068;
-  --marker-conflict: #f47068;
+  --marker-stale: #fbbf24;
+  --marker-old: #d98324;
+  --marker-failing-checks: #f87171;
+  --marker-conflict: #f87171;
   --marker-draft: #9aa3ad;
 
-  --meta-approvals: #3fb559;
+  --meta-approvals: #4ade80;
 }
 
 * {

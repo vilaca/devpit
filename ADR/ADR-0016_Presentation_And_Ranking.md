@@ -267,6 +267,26 @@ scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
   2026-07-13 — signals no longer rank). Only merged/closed and removed items drop
   out. Wire effect: `states` may be an empty array for non-authored involved
   items (`docs/REST_API.md`).
+- **Bucket filters `mine` and the `mentioned` review fold** (2026-07-13). Two
+  client-side filters diverge from the one-signal-per-bucket mapping
+  (`frontend/src/lib/buckets.ts`). The fold and signal table are unchanged; the
+  only wire addition is `my_roles` (see below).
+  - **`mine`** filters the list to items you authored, reusing the same predicate
+    as the authored-item row tint (the connection's identity matches the author).
+    Authorship is derived from connection config, not the event log, so it stays
+    client-side. It shows as the **first filter chip** (after "All", before the
+    signal buckets) and is also reachable directly via `?bucket=mine`. It is an
+    authorship axis, orthogonal to the signal buckets; `Esc` clears it like any
+    active filter.
+  - **`mentioned`** additionally gathers everything on your review plate: an item
+    matches when it carries the `mentioned` signal *or* you are a reviewer. The
+    chip's count badge reflects this expanded set. The `mentioned` signal itself
+    is untouched, so no extra chip appears on reviewer rows. Reviewer-ness is read
+    from the new **`my_roles`** wire field (contains `"reviewer"`), falling back
+    to a non-empty `my_review_state`. `my_roles` is required because a
+    requested-but-not-yet-reviewed reviewer has an empty `my_review_state` (the
+    known `review_requested` gap) and no other wire signal of the reviewer role.
+    `my_roles` is a faithful projection of the item's `MyRoles` fact.
 
 ## Rationale
 

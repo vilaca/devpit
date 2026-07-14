@@ -17,6 +17,11 @@ export type State =
   | "checking"
   | "review_submitted";
 
+// A bucket filter is either a provider signal state or the client-side "mine"
+// axis (author is you). "mine" is not a State — authorship is derived from the
+// connection identity (config), not the event log, so it lives only client-side.
+export type Filter = State | "mine";
+
 // Canonical highest-first precedence, matching internal/attention/states.go.
 // Used for bucket ordering and as a client-side sort fallback.
 export const STATE_PRECEDENCE: State[] = [
@@ -60,6 +65,7 @@ export interface AttentionItem {
   policy_denied: boolean;
   approvals_count: number; // -1=unknown, 0=hide, N=show "N approved"
   my_review_state?: string; // "approved" | "changes_requested" | "reviewed" | ""
+  my_roles?: string[]; // your roles on the item: "author" | "reviewer" | "assignee"
   gate_detail?: string;
   flagged_at?: string; // RFC 3339 UTC; present only when pinned
   since?: Record<string, string>; // tag key → RFC 3339 onset time; active tags only

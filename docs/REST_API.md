@@ -68,6 +68,10 @@ Each item carries:
   `changes_requested`, or `reviewed` (comment-only). Omitted when empty/unknown.
   GitLab detects only `approved`. Drives `review_submitted`/`muted` and the
   "you + N approved" meta-row.
+- `my_roles` — your roles on the item, any of `author`, `reviewer`, `assignee`.
+  Omitted when empty. A faithful projection of the provider fact; the client uses
+  it to fold reviewer items into the `mentioned` filter even before you've
+  reviewed (when `my_review_state` is still empty).
 - `flagged` — true when in the "Handle next" zone.
 - `flagged_at` — RFC 3339 timestamp when the item was pinned; present only when
   `flagged: true`.

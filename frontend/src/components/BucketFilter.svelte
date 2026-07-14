@@ -1,20 +1,21 @@
 <script lang="ts">
-  import type { AttentionItem, State } from "../lib/types";
-  import { BUCKETS, countByState } from "../lib/buckets";
+  import type { AttentionItem, Connection, Filter } from "../lib/types";
+  import { visibleBuckets } from "../lib/buckets";
 
   const {
     items,
+    connections,
     active,
     onSelect,
   }: {
     items: AttentionItem[];
-    active: State | null;
-    onSelect: (s: State | null) => void;
+    connections: Connection[];
+    active: Filter | null;
+    onSelect: (s: Filter | null) => void;
   } = $props();
 
-  const counts = $derived(countByState(items));
   // Only show buckets that have items, so the filter bar stays uncluttered.
-  const visible = $derived(BUCKETS.filter((b) => (counts.get(b.state) ?? 0) > 0));
+  const visible = $derived(visibleBuckets(items, connections));
   const total = $derived(items.filter((i) => !i.flagged).length);
 </script>
 
@@ -27,14 +28,14 @@
     >
       All <span class="badge">{total}</span>
     </button>
-    {#each visible as b (b.state)}
+    {#each visible as b (b.key)}
       <button
         class="chip"
-        class:active={active === b.state}
-        onclick={() => onSelect(active === b.state ? null : b.state)}
+        class:active={active === b.key}
+        onclick={() => onSelect(active === b.key ? null : b.key)}
       >
         {b.label}
-        <span class="badge">{counts.get(b.state)}</span>
+        <span class="badge">{b.count}</span>
       </button>
     {/each}
   </div>

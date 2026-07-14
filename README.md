@@ -52,15 +52,23 @@ timing: [`docs/Roadmap.md`](docs/Roadmap.md).
 
 ## Quickstart
 
-Build the SPA once (it embeds into the binary), then build and run:
-
 ```sh
-npm --prefix frontend ci && npm --prefix frontend run build
-go build -o devpit ./cmd/devpit
-./devpit --config ~/.config/devpit/config.yaml
+npm --prefix frontend ci   # once, after cloning
+scripts/start.sh
 ```
 
-The dashboard and the API are served together at `http://localhost:7474`.
+`scripts/start.sh` builds the SPA (it embeds into the binary), builds the
+binary, stops any running instance, and starts the new one. Or do the same by
+hand:
+
+```sh
+npm --prefix frontend run build
+go build -o devpit ./cmd/devpit
+./devpit   # --config <path> to override the default below
+```
+
+Either way the dashboard and the API are served together at
+`http://localhost:7474`.
 
 Configuration is one YAML file (default `~/.config/devpit/config.yaml`;
 `chmod 600` it — it holds plaintext tokens):

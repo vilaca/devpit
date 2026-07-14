@@ -26,6 +26,9 @@ second decision log — the ADRs are it.
 
 ## Dev workflow
 
+- `scripts/start.sh` is the rebuild-and-restart loop (frontend + backend +
+  instance swap); its header documents the flags (`--no-frontend`,
+  `--no-start`, pass-through args after `--`).
 - Build a binary rather than `go run ./cmd/devpit`. DevPit depends on
   `modernc.org/sqlite`, a pure-Go SQLite that is large and slow to compile; a
   cold build takes ~15–20 s and pegs all cores. `go run` recompiles whenever

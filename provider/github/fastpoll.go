@@ -68,8 +68,16 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 			return sdk.PollResult{}, err
 		}
 		obs := p.observedFromPull(*pr)
+		sigs := p.signalsFromNotification(n, obs.NativeID)
+		// Notifications also arrive for PRs we merely watch (subscribed to the
+		// repo): the reason yields no signal and we hold no role on the PR.
+		// Snapshotting those would surface them as bare rows, since the fold
+		// shows any open item we hold — so drop them at the source.
+		if len(sigs) == 0 && !observedHasRole(obs) {
+			continue
+		}
 		events = append(events, obs)
-		events = append(events, p.signalsFromNotification(n, obs.NativeID)...)
+		events = append(events, sigs...)
 	}
 
 	events = p.graphqlJoin(ctx, events)
@@ -93,6 +101,13 @@ func (p *Provider) fetchPull(ctx context.Context, owner, repo string, number int
 		return nil, err
 	}
 	return &pr, nil
+}
+
+// observedHasRole reports whether an item.observed carries at least one of my
+// roles (author/reviewer/assignee) — i.e. the PR is mine to act on.
+func observedHasRole(ev sdk.Event) bool {
+	pl, ok := ev.Payload.(sdk.ItemObservedPayload)
+	return ok && len(pl.MyRoles) > 0
 }
 
 // signalsFromNotification derives signal events from the notification reason.

@@ -1,14 +1,10 @@
 # Presentation and Ranking
 
-## Status
-
-Accepted — active. Covers the signal model shipped in v0.1.5 (formerly in the
-separate ADR-0021, now folded here per ADR-0014's mutate-by-default convention;
-git history preserves the original ADR-0021 text).
-
 ## Scope
 
-Fold and ranking **Implemented (v0.1)** (`internal/attention`); the user-facing
+Covers the signal model shipped in v0.1.5 (formerly in the separate ADR-0021,
+now folded here per ADR-0014's mutate-by-default convention; git history
+preserves the original ADR-0021 text). Fold and ranking **Implemented (v0.1)** (`internal/attention`); the user-facing
 presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the full
 UI is built in `frontend/`. The marker vocabulary and age bands (decision
 2026-07-10, below) are **Implemented (v0.1.1)**. Blocked diagnostic badges

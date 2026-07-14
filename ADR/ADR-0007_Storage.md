@@ -1,9 +1,5 @@
 # Storage
 
-## Status
-
-Accepted
-
 ## Scope
 
 SQLite in WAL with split read/write pools and a single-instance file lock

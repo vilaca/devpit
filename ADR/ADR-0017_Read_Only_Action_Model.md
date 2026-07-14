@@ -1,9 +1,5 @@
 # Read-Only Action Model
 
-## Status
-
-Accepted
-
 ## Scope
 
 Storage and fold support **Implemented (v0.1)** (the `handle_next` table and

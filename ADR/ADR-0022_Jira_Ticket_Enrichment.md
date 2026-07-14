@@ -1,8 +1,4 @@
-# ADR-0022: Jira Ticket Enrichment
-
-## Status
-
-Accepted
+# Jira Ticket Enrichment
 
 ## Scope
 

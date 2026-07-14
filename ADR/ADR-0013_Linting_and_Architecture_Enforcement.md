@@ -1,9 +1,5 @@
 # Linting and Architecture Enforcement
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented — enforced in CI (`.github/workflows/ci.yml`). See `docs/Roadmap.md`.

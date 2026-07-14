@@ -1,9 +1,5 @@
 # User-centric Synchronization
 
-## Status
-
-Accepted
-
 ## Scope
 
 Tiered polling with basic `Retry-After`/429 backoff **Implemented (v0.1)**

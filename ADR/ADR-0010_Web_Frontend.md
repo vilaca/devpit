@@ -1,9 +1,5 @@
 # Web Frontend Architecture
 
-## Status
-
-Accepted
-
 ## Scope
 
 **Implemented (v0.1)** — the SPA is fully built: Vite + Svelte 5 build

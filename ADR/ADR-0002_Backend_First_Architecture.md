@@ -1,9 +1,5 @@
 # Backend-first Architecture
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented (v0.1) — the backend owns synchronization, storage, business logic,

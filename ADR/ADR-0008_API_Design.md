@@ -1,9 +1,5 @@
 # API Design
 
-## Status
-
-Accepted (supersedes the earlier WebSocket choice)
-
 ## Scope
 
 **Implemented** — the REST surface and SSE stream are built in `internal/api`

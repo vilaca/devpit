@@ -1,9 +1,5 @@
 # Documentation as Design Record
 
-## Status
-
-Accepted
-
 ## Scope
 
 Process decision — applies now to all documentation and code comments.
@@ -47,17 +43,17 @@ are not allowed.
 - **Conflicts** (doc and code, or two docs, actually disagree): a human
   decides which is correct; there is no automatic winner.
 
-### Status vs. Scope
+### Scope
 
-A decision can be *made* without being *built*. Keep the axes separate:
+A decision can be *made* without being *built*. Being in the log is what makes
+an ADR the accepted decision — there is no `Status` field (an unsettled
+decision is not an ADR yet, and a replaced one is folded away, below). What an
+ADR does carry is **`Scope`** — reality: `Implemented (vX)`, `Planned`,
+`Deferred`, `Uncommitted`. Scope links to `docs/Roadmap.md`, which is the
+single source of truth for *timing*; ADRs and specs carry only the coarse tag,
+never a restated milestone list.
 
-- **`Status`** — the decision's standing: `Accepted` or `Proposed`.
-- **`Scope`** — reality: `Implemented (vX)`, `Planned`, `Deferred`,
-  `Uncommitted`. Links to `docs/Roadmap.md`, which is the single source of
-  truth for *timing*; ADRs and specs carry only the coarse tag, never a
-  restated milestone list.
-
-Specs carry a status banner (and inline tags for mixed docs) so a reader never
+Specs carry a scope banner (and inline tags for mixed docs) so a reader never
 mistakes designed-for-later for exists-today. Where a current decision has a
 known future trigger, record it as a **forward-dependency note** in the ADR's
 Consequences (e.g. "log kept uncompacted until a real instance proves

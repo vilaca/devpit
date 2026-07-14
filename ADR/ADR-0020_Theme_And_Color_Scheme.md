@@ -1,8 +1,10 @@
-# ADR-0020: Theme and Color Scheme (Dark Mode)
+# Theme and Color Scheme (Dark Mode)
 
-## Status
+## Scope
 
-Accepted
+Implemented — theme toggle, OS-preference default, and `localStorage`
+persistence live in `frontend/` (`frontend/src/lib/theme.svelte.ts`). See
+`docs/Roadmap.md`.
 
 ## Context
 

@@ -1,9 +1,5 @@
 # Implementation Language (Go)
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented (v0.1). See `docs/Roadmap.md`.

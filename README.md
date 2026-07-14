@@ -53,16 +53,15 @@ timing: [`docs/Roadmap.md`](docs/Roadmap.md).
 ## Quickstart
 
 ```sh
-npm --prefix frontend ci   # once, after cloning
 scripts/start.sh
 ```
 
-`scripts/start.sh` builds the SPA (it embeds into the binary), builds the
-binary, stops any running instance, and starts the new one. Or do the same by
-hand:
+The script installs frontend deps when needed, builds the SPA (it embeds into
+the binary), builds the binary, stops any running instance, and starts the new
+one. Or do the same by hand:
 
 ```sh
-npm --prefix frontend run build
+npm --prefix frontend ci && npm --prefix frontend run build
 go build -o devpit ./cmd/devpit
 ./devpit   # --config <path> to override the default below
 ```

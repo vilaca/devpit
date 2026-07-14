@@ -43,6 +43,11 @@ cd "$REPO"
 mkdir -p "$REPO/bin"
 
 if [[ "$build_frontend" == 1 ]]; then
+  # node_modules missing (fresh clone) or older than the lockfile (dep change).
+  if [[ ! -d frontend/node_modules || frontend/package-lock.json -nt frontend/node_modules ]]; then
+    echo "==> Installing frontend deps (npm ci)"
+    npm --prefix frontend ci
+  fi
   echo "==> Building frontend (vite → internal/web/dist)"
   npm --prefix frontend run build
 else

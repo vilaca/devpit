@@ -77,6 +77,23 @@ leaving a stale copy behind. Supersession is *update-old-and-add-new*, not
 **wholly** replaced; one only *partly* affected is edited down to what still
 stands, not stamped superseded.
 
+### README and Contributing (2026-07-15)
+
+The **README is the public front door**: written for a stranger at release
+time — pitch, feature list, quickstart — never a project log. It carries no
+volatile facts except one status line ("Pre-release, vX.Y") bumped per
+release; everything else is stable prose linking to the live specs (signal
+vocabulary → `docs/Attention_Engine.md`, timing → `docs/Roadmap.md`).
+Developer-workflow advice (build loop, dev server) lives in
+`docs/Contributing.md`, not the README. The hero screenshot, when it lands
+(first-public-release gate in `docs/Roadmap.md`), is captured from seeded
+demo data only — never from a real instance.
+
+**`docs/Contributing.md` is the contributor-facing digest** of this ADR plus
+process facts (dev workflow, coding standards, testing, provider guidelines).
+It restates decisions briefly and links to their homes; it is not a second
+decision log.
+
 ## Rationale
 
 Drift came from copies, so the fix is to forbid copies: one home per fact, at

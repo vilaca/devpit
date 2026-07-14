@@ -22,6 +22,10 @@ const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
 // extra fields and stricter instances.
 const graphQLBatchSize = 12
 
+// reviewStateApproved is the MyReviewState value recorded when the authenticated
+// user appears in a merge request's approvedBy set.
+const reviewStateApproved = "approved"
+
 // graphQLError is returned by doGraphQL when the server responds HTTP 200 but
 // includes a non-empty errors array with null data (e.g. complexity-ceiling rejection).
 type graphQLError struct {
@@ -113,36 +117,21 @@ type glGraphQLMR struct {
 // openSnapshots (B3: fail closed), so good data is never downgraded to nil.
 // Draft suppression: all GraphQL-joined booleans (NeedsApproval, NeedsRebase, FailingChecks)
 // are set to false for draft MRs.
-func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool) {
-	type mrItem struct {
-		evIdx    int
-		fullPath string
-		iid      int
-		draft    bool
-	}
+// glBatchItem identifies one MR to enrich via GraphQL: evIdx is its index in the
+// caller's events slice; fullPath/iid locate it; draft gates suppression.
+type glBatchItem struct {
+	evIdx    int
+	fullPath string
+	iid      int
+	draft    bool
+}
 
-	var items []mrItem
-	for i, ev := range events {
-		if ev.EventType != eventItemObserved {
-			continue
-		}
-		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
-		if !ok {
-			continue
-		}
-		fp, iid, ok := parseGLNativeID(ev.NativeID)
-		if !ok {
-			continue
-		}
-		items = append(items, mrItem{i, fp, iid, pl.Draft})
-	}
-	if len(items) == 0 {
-		return events, false
-	}
-
-	gqlResults := make(map[int]glGraphQLMR, len(items))
+// runGraphQLBatches queries the join fields for items in batches of
+// graphQLBatchSize (kept under GitLab's complexity ceiling) and returns the
+// per-evIdx results plus a degraded flag set when any batch failed.
+func (p *Provider) runGraphQLBatches(ctx context.Context, items []glBatchItem) (map[int]glGraphQLMR, bool) {
+	results := make(map[int]glGraphQLMR, len(items))
 	var degraded bool
-
 	for start := 0; start < len(items); start += graphQLBatchSize {
 		batch := items[start:min(start+graphQLBatchSize, len(items))]
 
@@ -169,10 +158,34 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 				MergeRequest *glGraphQLMR `json:"mergeRequest"`
 			}
 			if json.Unmarshal(raw, &node) == nil && node.MergeRequest != nil {
-				gqlResults[it.evIdx] = *node.MergeRequest
+				results[it.evIdx] = *node.MergeRequest
 			}
 		}
 	}
+	return results, degraded
+}
+
+func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool) {
+	var items []glBatchItem
+	for i, ev := range events {
+		if ev.EventType != eventItemObserved {
+			continue
+		}
+		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			continue
+		}
+		fp, iid, ok := parseGLNativeID(ev.NativeID)
+		if !ok {
+			continue
+		}
+		items = append(items, glBatchItem{i, fp, iid, pl.Draft})
+	}
+	if len(items) == 0 {
+		return events, false
+	}
+
+	gqlResults, degraded := p.runGraphQLBatches(ctx, items)
 
 	if len(gqlResults) == 0 && !degraded {
 		return events, false
@@ -227,7 +240,7 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 		pl.ApprovalsCount = mr.ApprovedBy.Count
 		for _, u := range mr.ApprovedBy.Nodes {
 			if u.Username == handle {
-				pl.MyReviewState = "approved"
+				pl.MyReviewState = reviewStateApproved
 				break
 			}
 		}
@@ -239,7 +252,9 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 // already covered by todo-driven events, merges onto the cached payload, and
 // appends item.observed events. On GraphQL failure it logs and skips the batch
 // — the cycle still succeeds. Returns events and a degraded flag.
-func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, covered map[string]bool) ([]sdk.Event, bool) {
+func (p *Provider) openSetRefresh(
+	ctx context.Context, events []sdk.Event, covered map[string]bool,
+) ([]sdk.Event, bool) {
 	type openItem struct {
 		nativeID string
 		fullPath string

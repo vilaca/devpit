@@ -19,6 +19,13 @@ allow:
 excludeFiles:
   - "cmd/devpit/main.go"
 
+# Local git worktrees: Claude Code agents check out full copies of the tree
+# under .claude/worktrees/. go-arch-lint scans the filesystem, so without this
+# it reports every worktree file as "not attached to any component". CI has no
+# worktrees, so this only affects local `scripts/check.sh arch` runs.
+exclude:
+  - .claude
+
 components:
   sdk: { in: sdk }
   cmd: { in: cmd/** }

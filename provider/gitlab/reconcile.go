@@ -2,8 +2,11 @@ package gitlab
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"maps"
 	"net/url"
+	"sort"
 	"time"
 
 	"github.com/vilaca/devpit/sdk"
@@ -22,6 +25,8 @@ func (p *Provider) reconcileQueries() []string {
 		"scope=all&reviewer_username=" + url.QueryEscape(p.handle),
 	}
 }
+
+const roleSoleApprover = "sole_approver"
 
 func cursorRecQuery(q string) string { return "gl.rec.updated_after." + q }
 
@@ -61,6 +66,69 @@ func (p *Provider) fetchScopeMRs(ctx context.Context, base string, seen map[stri
 	return events, rate, nil
 }
 
+// fetchSoleApproverMRs discovers open MRs on projects where the user is the
+// only merge-capable member (access_level >= 40) and emits item.observed events
+// with the sole_approver role. Drafts and self-authored MRs are skipped.
+func (p *Provider) fetchSoleApproverMRs(ctx context.Context, seen map[string]bool) []sdk.Event {
+	projects, err := p.fetchOwnedProjects(ctx)
+	if err != nil {
+		log.Printf("devpit: gitlab: owned-projects fetch degraded: %v", err)
+		return nil
+	}
+
+	var events []sdk.Event
+	for _, proj := range projects {
+		isSole, err := p.isSoleApproverCached(ctx, proj.PathWithNamespace)
+		if err != nil || !isSole {
+			continue
+		}
+		evs := p.fetchProjectSoleApproverMRs(ctx, proj, seen)
+		events = append(events, evs...)
+	}
+	return events
+}
+
+// fetchProjectSoleApproverMRs fetches all open MRs for a single project and
+// returns item.observed events with the sole_approver role appended. Drafts
+// and self-authored MRs are skipped; seen is used for cross-scope dedup.
+func (p *Provider) fetchProjectSoleApproverMRs(ctx context.Context, proj glProject, seen map[string]bool) []sdk.Event {
+	base := fmt.Sprintf("%s/projects/%d/merge_requests?state=opened&scope=all&per_page=100", p.apiBase, proj.ID)
+	var events []sdk.Event
+	for u := base; u != ""; {
+		resp, err := p.do(ctx, u)
+		if err != nil {
+			log.Printf("devpit: gitlab: sole-approver MR fetch degraded: %v", err)
+			break
+		}
+		next := resp.Header.Get("X-Next-Page")
+		var mrs []glMergeRequest
+		if err := decodeJSON(resp, &mrs); err != nil {
+			log.Printf("devpit: gitlab: sole-approver MR decode degraded: %v", err)
+			break
+		}
+		for _, mr := range mrs {
+			if mr.Draft || mr.Author.Username == p.handle || seen[mr.WebURL] {
+				continue
+			}
+			seen[mr.WebURL] = true
+			ev := p.observedFromMR(mr)
+			if pl, ok := ev.Payload.(sdk.ItemObservedPayload); ok {
+				pl.MyRoles = append(pl.MyRoles, roleSoleApprover)
+				sort.Strings(pl.MyRoles)
+				ev.Payload = pl
+				ev.DedupeKey = observedDedupeKey(pl)
+			}
+			events = append(events, ev)
+		}
+		if next == "" {
+			break
+		}
+		u = fmt.Sprintf("%s/projects/%d/merge_requests?state=opened&scope=all&per_page=100&page=%s",
+			p.apiBase, proj.ID, next)
+	}
+	return events
+}
+
 // Reconcile implements sdk.Provider: it sweeps the user's involved merge
 // requests across the reconcile queries and emits item.observed snapshots.
 func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
@@ -92,6 +160,12 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 			rate = scopeRate
 		}
 	}
+
+	// Sole-approver discovery: MRs on projects where the user is the only
+	// merge-capable member. Uses the shared seen map to deduplicate against the
+	// regular scopes above.
+	soleEvents := p.fetchSoleApproverMRs(ctx, seen)
+	events = append(events, soleEvents...)
 
 	var degraded bool
 	events, degraded = p.graphqlJoin(ctx, events)

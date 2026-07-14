@@ -60,7 +60,7 @@ Each item carries:
   `ready_to_merge`, `auto_merge_armed`, `checks_running`, `checking`,
   `review_submitted`.
 - `muted` — true when the item is reviewed-done for you (you are a reviewer, not
-  the author, and your review is submitted). Muted is a display cue only: the row
+  the author or sole approver, and your review is submitted). Muted is a display cue only: the row
   renders de-emphasized and suppresses its signal chips, but muting does not
   affect ranking (the item sorts by age band + recency like any other). Omitted
   when false.
@@ -68,7 +68,8 @@ Each item carries:
   `changes_requested`, or `reviewed` (comment-only). Omitted when empty/unknown.
   GitLab detects only `approved`. Drives `review_submitted`/`muted` and the
   "you + N approved" meta-row.
-- `my_roles` — your roles on the item, any of `author`, `reviewer`, `assignee`.
+- `my_roles` — your roles on the item, any of `author`, `reviewer`, `assignee`,
+  `sole_approver`.
   Omitted when empty. A faithful projection of the provider fact; the client uses
   it to fold reviewer items into the `mentioned` filter even before you've
   reviewed (when `my_review_state` is still empty).

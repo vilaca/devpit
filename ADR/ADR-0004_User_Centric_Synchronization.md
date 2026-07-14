@@ -82,3 +82,37 @@ whose PR carries none of my roles (author/reviewer/assignee) — the item is
 neither actionable nor mine, so it is never snapshotted
 (`provider/github/fastpoll.go`). Notifications that do carry a signal (mention,
 review_requested, assign, ci_activity) or a role are unaffected.
+
+## Amendment — v0.1.5: sole-approver discovery scope (2026-07-14)
+
+Reconcile now includes a fourth search scope for each provider that surfaces PRs
+and MRs on repos where the authenticated user is the **only account with
+merge-capable permission** — the sole-approver axis. These items are assigned the
+`sole_approver` role (see ADR-0016 amendment for state mappings).
+
+**Scope definition:**
+- **GitHub**: `GET /search/issues?q=is:pr+is:open+user:<handle>` discovers open
+  PRs on repos owned by the user. For each qualifying result, the provider calls
+  `GET /repos/{owner}/{repo}/collaborators?affiliation=direct` to count accounts
+  with `push`, `maintain`, or `admin` permission. Sole iff count == 1 and that
+  account is the authenticated user.
+- **GitLab**: `GET /projects?membership=true&min_access_level=40` lists projects
+  where the user has Maintainer or higher access. For each project,
+  `GET /projects/:path/members/all?min_access_level=40` counts members with
+  `access_level >= 40`. Sole iff count == 1 and that member is the authenticated
+  user.
+
+**Guards (both providers):** draft PRs/MRs and self-authored PRs/MRs are excluded
+from the sole-approver scope — own work is already covered by the `author` role.
+
+**In-memory TTL cache:** collaborator/member counts are cached per repo for 15
+minutes on the Provider struct (`approverCache map[string]approverEntry`). No lock
+is required because FastPoll and Reconcile are serialised per connection.
+**Opportunistic downgrade (GitHub only):** when `graphqlJoin` observes
+`approvalsCount > myCount` for a PR, the repo is immediately written as
+`isSole: false` in the cache — no collaborator probe needed on the next cycle.
+
+**Architecture note:** providers cannot import `internal/storage`; the
+`repo_approvers` DB table added in migration 3 is populated only by explicit
+`UpsertRepoApprover` storage calls (future batch export), never from within a
+provider. The in-memory cache is the authoritative hot path.

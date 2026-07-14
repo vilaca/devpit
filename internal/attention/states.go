@@ -48,6 +48,7 @@ const (
 	decisionChangesRequested = "changes_requested"
 	roleAuthor               = "author"
 	roleReviewer             = "reviewer"
+	roleSoleApprover         = "sole_approver"
 
 	// my_review_state values.
 	reviewStateRequested        = "requested"
@@ -80,17 +81,18 @@ func matches(s State, f sdk.ItemObservedPayload, roles map[string]bool, hasMenti
 	case StateChangesRequested:
 		return roles[roleAuthor] && f.ReviewDecision == decisionChangesRequested
 	case StateReviewRequested:
-		return roles[roleReviewer] && f.MyReviewState == reviewStateRequested
+		return (roles[roleReviewer] && f.MyReviewState == reviewStateRequested) ||
+			(roles[roleSoleApprover] && !f.Draft && !reviewIsDone(f.MyReviewState))
 	case StateBlocked:
-		return roles[roleAuthor] && !f.Draft && f.Gate == gateBlocked
+		return (roles[roleAuthor] || roles[roleSoleApprover]) && !f.Draft && f.Gate == gateBlocked
 	case StateMentioned:
 		return hasMention
 	case StateReadyToMerge:
-		return roles[roleAuthor] && !f.Draft && f.Gate == gateReady
+		return (roles[roleAuthor] || roles[roleSoleApprover]) && !f.Draft && f.Gate == gateReady
 	case StateAutoMergeArmed:
-		return roles[roleAuthor] && !f.Draft && f.AutoMergeArmed
+		return (roles[roleAuthor] || roles[roleSoleApprover]) && !f.Draft && f.AutoMergeArmed
 	case StateChecksRunning:
-		return roles[roleAuthor] && !f.Draft && f.ChecksRunning
+		return (roles[roleAuthor] || roles[roleSoleApprover]) && !f.Draft && f.ChecksRunning
 	case StateChecking:
 		return f.Gate == gateUnknown // role-neutral backstop (D3)
 	case StateReviewSubmitted:

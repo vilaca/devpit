@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/vilaca/devpit/sdk"
 )
@@ -199,6 +200,12 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		return events
 	}
 
+	// Build a lookup from evIdx → "owner/repo" for the opportunistic downgrade below.
+	evIdxToRepo := make(map[int]string, len(items))
+	for _, it := range items {
+		evIdxToRepo[it.evIdx] = it.owner + "/" + it.repo
+	}
+
 	out := make([]sdk.Event, len(events))
 	copy(out, events)
 	for evIdx, r := range results {
@@ -211,6 +218,19 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		pl.ApprovalsCount = r.approvalsCount
 		pl.AutoMergeArmed = r.autoMergeArmed
 		pl.MyReviewState = r.myReviewState
+
+		// Opportunistic downgrade: if approvals exist beyond the user's own,
+		// another account can approve — mark the repo as not-sole-approver immediately.
+		if repoKey, keyOK := evIdxToRepo[evIdx]; keyOK {
+			myCount := 0
+			if r.myReviewState == normalizedApproved {
+				myCount = 1
+			}
+			if r.approvalsCount > myCount {
+				p.approverCache[repoKey] = approverEntry{isSole: false, fetchedAt: time.Now()}
+			}
+		}
+
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
 		out[evIdx] = ev

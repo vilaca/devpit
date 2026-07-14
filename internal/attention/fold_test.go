@@ -1145,6 +1145,89 @@ func TestSignalCheckingOnsetViaComputeSince(t *testing.T) {
 	}
 }
 
+func TestSoleApproverStates(t *testing.T) {
+	t.Run("sole_approver unreviewed gate unknown → review_requested", func(t *testing.T) {
+		f := openFacts()
+		f.MyRoles = []string{"sole_approver"}
+		f.MyReviewState = ""
+		f.Gate = "unknown"
+		items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+		if len(items) != 1 {
+			t.Fatalf("want 1 item, got %d", len(items))
+		}
+		if !equalStates(items[0].States, []State{StateReviewRequested, StateChecking}) {
+			t.Errorf("states = %v, want [review_requested, checking]", items[0].States)
+		}
+	})
+
+	t.Run("sole_approver reviewed gate ready → ready_to_merge not muted", func(t *testing.T) {
+		f := openFacts()
+		f.MyRoles = []string{"sole_approver"}
+		f.MyReviewState = "approved"
+		f.Gate = "ready"
+		items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#2", f)})
+		if len(items) != 1 {
+			t.Fatalf("want 1 item, got %d", len(items))
+		}
+		found := false
+		for _, s := range items[0].States {
+			if s == StateReadyToMerge {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("states = %v, want StateReadyToMerge present", items[0].States)
+		}
+		if items[0].Muted {
+			t.Error("sole_approver must not be muted even after reviewing")
+		}
+	})
+
+	t.Run("sole_approver draft → no review_requested signal", func(t *testing.T) {
+		f := openFacts()
+		f.MyRoles = []string{"sole_approver"}
+		f.Draft = true
+		f.Gate = "unknown"
+		items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#3", f)})
+		if len(items) != 1 {
+			t.Fatalf("want 1 item, got %d", len(items))
+		}
+		for _, s := range items[0].States {
+			if s == StateReviewRequested {
+				t.Errorf("draft sole_approver must not carry review_requested; states = %v", items[0].States)
+			}
+		}
+	})
+
+	t.Run("reviewer-only reviewed → muted", func(t *testing.T) {
+		f := openFacts()
+		f.MyRoles = []string{"reviewer"}
+		f.MyReviewState = "approved"
+		f.Gate = "ready"
+		items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#4", f)})
+		if len(items) != 1 {
+			t.Fatalf("want 1 item, got %d", len(items))
+		}
+		if !items[0].Muted {
+			t.Error("reviewer-only reviewed item must be muted")
+		}
+	})
+
+	t.Run("reviewer + sole_approver reviewed → NOT muted", func(t *testing.T) {
+		f := openFacts()
+		f.MyRoles = []string{"reviewer", "sole_approver"}
+		f.MyReviewState = "approved"
+		f.Gate = "ready"
+		items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#5", f)})
+		if len(items) != 1 {
+			t.Fatalf("want 1 item, got %d", len(items))
+		}
+		if items[0].Muted {
+			t.Error("reviewer+sole_approver must not be muted")
+		}
+	})
+}
+
 func equalStates(a, b []State) bool {
 	if len(a) != len(b) {
 		return false

@@ -662,3 +662,67 @@ func TestHandleNextOrdering(t *testing.T) {
 		t.Fatalf("clear absent: %v", err)
 	}
 }
+
+func TestRepoApprovers(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	sample := RepoApprover{
+		ConnectionID:   "conn1",
+		Repo:           "acme/api",
+		IsSoleApprover: true,
+		FetchedAt:      now,
+	}
+
+	// Insert and verify round-trip.
+	if err := db.UpsertRepoApprover(ctx, sample); err != nil {
+		t.Fatalf("UpsertRepoApprover: %v", err)
+	}
+	got, found, err := db.GetRepoApprover(ctx, "conn1", "acme/api")
+	if err != nil {
+		t.Fatalf("GetRepoApprover: %v", err)
+	}
+	if !found {
+		t.Fatal("GetRepoApprover: found = false, want true")
+	}
+	if got.ConnectionID != sample.ConnectionID || got.Repo != sample.Repo {
+		t.Errorf("identity mismatch: %+v", got)
+	}
+	if !got.IsSoleApprover {
+		t.Errorf("IsSoleApprover = false, want true")
+	}
+	if !got.FetchedAt.Equal(now) {
+		t.Errorf("FetchedAt = %v, want %v", got.FetchedAt, now)
+	}
+
+	// Upsert with IsSoleApprover=false — should update.
+	updated := sample
+	updated.IsSoleApprover = false
+	updated.FetchedAt = now.Add(time.Minute)
+	if err := db.UpsertRepoApprover(ctx, updated); err != nil {
+		t.Fatalf("UpsertRepoApprover (update): %v", err)
+	}
+	got, found, err = db.GetRepoApprover(ctx, "conn1", "acme/api")
+	if err != nil {
+		t.Fatalf("GetRepoApprover after update: %v", err)
+	}
+	if !found {
+		t.Fatal("GetRepoApprover after update: found = false, want true")
+	}
+	if got.IsSoleApprover {
+		t.Errorf("IsSoleApprover = true after update, want false")
+	}
+	if !got.FetchedAt.Equal(now.Add(time.Minute)) {
+		t.Errorf("FetchedAt = %v, want %v", got.FetchedAt, now.Add(time.Minute))
+	}
+
+	// Non-existent key -> found=false, no error.
+	_, found, err = db.GetRepoApprover(ctx, "conn1", "no/such-repo")
+	if err != nil {
+		t.Fatalf("GetRepoApprover missing: %v", err)
+	}
+	if found {
+		t.Error("GetRepoApprover missing: found = true, want false")
+	}
+}

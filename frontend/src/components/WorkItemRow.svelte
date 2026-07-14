@@ -72,6 +72,9 @@
       >
         {item.title}
       </a>
+      {#if !item.muted}
+        <div class="tags-wrap"><StateTags {item} /></div>
+      {/if}
     </div>
     <div class="meta-row">
       {#if item.repo}
@@ -102,10 +105,6 @@
       {/if}
     </div>
   </div>
-
-  {#if !item.muted}
-    <StateTags {item} />
-  {/if}
 </div>
 
 <style>
@@ -164,10 +163,15 @@
   }
   .title-line {
     display: flex;
-    align-items: baseline;
-    gap: 5px;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
-    overflow: hidden;
+  }
+  /* Tags sit on the title line (top-right) and keep their width; the title
+     truncates first so the meta-row below can span the full width. */
+  .tags-wrap {
+    flex-shrink: 0;
+    margin-left: auto;
   }
   .jira-status {
     flex-shrink: 0;
@@ -182,6 +186,8 @@
     text-decoration: underline;
   }
   .title {
+    flex: 1;
+    min-width: 0;
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;

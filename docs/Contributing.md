@@ -24,6 +24,19 @@ second decision log — the ADRs are it.
 - When a decision has a known future trigger, record a forward-dependency note
   in Consequences.
 
+## Dev workflow
+
+- Build a binary rather than `go run ./cmd/devpit`. DevPit depends on
+  `modernc.org/sqlite`, a pure-Go SQLite that is large and slow to compile; a
+  cold build takes ~15–20 s and pegs all cores. `go run` recompiles whenever
+  the build cache is cold — e.g. after a dependency upgrade — so a start/stop
+  loop pays that cost repeatedly. The running binary itself is idle (~0 % CPU
+  between poll cycles).
+- For UI development, `npm --prefix frontend run dev` runs Vite on `:5173` and
+  proxies the API through to a running `devpit`. The Go build works without
+  the frontend build (a committed placeholder page is embedded); you get the
+  real UI only after `npm --prefix frontend run build`.
+
 ## Coding standards
 
 - Go, standard `gofmt`. Linting and architecture enforcement are defined in

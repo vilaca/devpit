@@ -112,6 +112,7 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 		NeedsRebase:       pr.MergeableState == msBehind,
 		ProviderUpdatedAt: pr.UpdatedAt,
 		TicketKeys:        sdk.ExtractTicketKeys(pr.Title, pr.Head.Ref, pr.Body),
+		Labels:            labelsFromGH(pr.Labels),
 	}
 
 	nid := nativeID(repo, pr.Number)
@@ -141,6 +142,7 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 		Gate:              gateUnknown,
 		ProviderUpdatedAt: it.UpdatedAt,
 		TicketKeys:        sdk.ExtractTicketKeys(it.Title),
+		Labels:            labelsFromGH(it.Labels),
 	}
 	return sdk.Event{
 		ObjectType: objectType,
@@ -158,9 +160,22 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 // same facts hash identically so re-polls dedupe, a changed fact makes a new
 // snapshot.
 func observedDedupeKey(p sdk.ItemObservedPayload) string {
-	b, _ := json.Marshal(p) //nolint:errchkjson // payload is JSON-safe (scalar fields only); Marshal cannot fail here
+	b, _ := json.Marshal(p) //nolint:errchkjson // payload has no unmarshalable fields; Marshal cannot fail here
 	sum := sha256.Sum256(b)
 	return "item.observed:" + hex.EncodeToString(sum[:])
+}
+
+// labelsFromGH maps GitHub labels to their names. Returns nil for no labels
+// (JSON field omitted).
+func labelsFromGH(labels []ghLabel) []string {
+	if len(labels) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		out = append(out, l.Name)
+	}
+	return out
 }
 
 func sortedRoles(roles []string) []string {

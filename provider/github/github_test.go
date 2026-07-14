@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -495,6 +496,31 @@ func TestGraphQLJoinDegraded(t *testing.T) {
 		}
 	}
 	t.Fatal("missing item.observed for acme/api#42")
+}
+
+// TestLabelsNames verifies GitHub's label names flow into the payload, and no
+// labels yields nil.
+func TestLabelsNames(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+
+	pr := makePR("clean")
+	pr.Labels = []ghLabel{
+		{Name: "bug"},
+		{Name: "kept"},
+	}
+	pl, ok := p.observedFromPull(pr).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
+	want := []string{"bug", "kept"}
+	if !reflect.DeepEqual(pl.Labels, want) {
+		t.Errorf("labels = %+v, want %+v", pl.Labels, want)
+	}
+
+	bare, _ := p.observedFromPull(makePR("clean")).Payload.(sdk.ItemObservedPayload)
+	if bare.Labels != nil {
+		t.Errorf("labels = %+v, want nil for no labels", bare.Labels)
+	}
 }
 
 // TestDirtyPRIsBlockedWithConflict verifies dirty → blocked + merge_conflict, not failing_checks.

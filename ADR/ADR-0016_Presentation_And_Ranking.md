@@ -257,6 +257,19 @@ scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
     "you approved" (you alone) or "you + N approved" (you plus N others), so your
     own approval is visible at a glance without a separate chip. Otherwise the
     count reads "N approved" as before.
+- **Provider labels as plain text names** (2026-07-14). The labels an MR/PR
+  carries on the provider (GitLab MR labels, GitHub PR labels) render on a
+  dedicated 3rd row below the meta-row, full width, as `#`-prefixed muted text
+  names. These are **provider metadata, deliberately distinct from the signal
+  chips** on the title line: signal chips are DevPit's attention verdicts,
+  labels are the team's own taxonomy. Provider colors are deliberately dropped —
+  label names alone are the useful signal, and rendering each in its own
+  provider color competed visually with the attention chips. Labels show even on
+  muted (reviewed-done) rows — unlike signal chips, which the mute suppresses —
+  because the label set is stable context, not an attention cue. Wire field:
+  `labels`, an array of names (see `docs/REST_API.md`); refreshed on reconcile
+  only, not on fastpoll, since labels change rarely and the GraphQL open-set
+  refresh has no complexity headroom to spare.
 - **Open involved items always show, even stateless** (2026-07-10). The fold
   no longer drops an open item that matches no signal. Every item in the log is
   one the user is involved in (sync scopes are assigned/authored, plus mention

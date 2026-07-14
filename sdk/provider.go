@@ -167,6 +167,7 @@ type ItemObservedPayload struct {
 	ApprovalsCount        int      `json:"approvals_count,omitempty"` // -1=unknown, 0=none/hide, N=show
 	ProviderUpdatedAt     string   `json:"provider_updated_at"`
 	TicketKeys            []string `json:"ticket_keys,omitempty"`
+	Labels                []string `json:"labels,omitempty"` // provider label names (GitLab MR / GitHub PR)
 }
 
 // item.removed carries no payload (Payload: nil).

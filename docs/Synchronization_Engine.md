@@ -80,6 +80,7 @@ classification the engine applies:
 | Outcome | Trigger | Cause shown in the log |
 |---|---|---|
 | ok | 2xx / 304 | — |
+| degraded | cycle succeeded but enrichment partially failed (`PollResult.Degraded`) | — |
 | auth | 401 (permanent 403) | Authentication failed — check the token |
 | rate_limited | 429 / rate 403 | Rate limited — retry in Ns |
 | network | transport only (DNS/TCP/TLS/timeout, no HTTP response) | Couldn't reach {provider} |

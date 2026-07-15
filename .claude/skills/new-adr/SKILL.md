@@ -28,8 +28,9 @@ conventions.
 ## 2. Pick the number
 
 List `ADR/`, find the highest `ADR-NNNN`, add one, zero-pad to four digits.
-Filename is `ADR-NNNN_Title_With_Underscores.md`. Numbers are sequential with no
-gaps — don't reuse or skip.
+Filename is `ADR-NNNN_Title_With_Underscores.md`. Numbers are sequential with
+no gaps — don't reuse or skip; when a fold removes an ADR, renumber the later
+ones and update references in the same change (`docs/Contributing.md`).
 
 ## 3. Draft with the user
 

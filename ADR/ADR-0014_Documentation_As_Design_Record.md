@@ -85,8 +85,9 @@ release; everything else is stable prose linking to the live specs (signal
 vocabulary → `docs/Attention_Engine.md`, timing → `docs/Roadmap.md`).
 Developer-workflow advice (build loop, dev server) lives in
 `docs/Contributing.md`, not the README. The hero screenshot, when it lands
-(first-public-release gate in `docs/Roadmap.md`), is captured from seeded
-demo data only — never from a real instance.
+(`ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md`; timing in
+`docs/Roadmap.md`), is captured from the committed demo forge only — never from
+a real instance.
 
 **`docs/Contributing.md` is the contributor-facing digest** of this ADR plus
 process facts (dev workflow, coding standards, testing, provider guidelines).

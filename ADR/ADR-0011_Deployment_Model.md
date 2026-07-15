@@ -23,3 +23,7 @@ easy deployment path for teams and homelab environments.
 
 This decision establishes a consistent implementation direction while
 remaining open to future refinement if requirements change.
+
+The concrete packaging — artifact matrix, the `ghcr.io/vilaca/devpit` image,
+Homebrew, service integration, and the goreleaser release pipeline — is decided
+in `ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md`.

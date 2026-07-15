@@ -134,35 +134,38 @@ decorator, not a provider — it never emits events); attention items carry an
 optional `jira` ref (key, status, URL) rendered as a status link on the title
 row. Off unless the optional `jira:` config block is present.
 
-## First public release — packaging & distribution gate
+## v0.1.6 — First public release (packaging & distribution)
 
-Version-agnostic release-readiness gate: whichever version first ships publicly
-**must** satisfy all of the following before it goes out.
+DevPit's first public release (ADR-0023). The former version-agnostic
+release-readiness gate is now this release's checklist; every item below ships
+in v0.1.6.
 
 - Homebrew-installable: publish a tap (`homebrew-devpit`) so users can
-  `brew install vilaca/devpit/devpit`. Requires a release binary (GitHub
-  Releases via goreleaser or similar), a formula with the correct SHA256, and a
-  `brew test` block. The single-binary nature makes this straightforward once
-  the CI release pipeline is in place.
-- Self-update awareness: the running app detects when a newer release exists
-  (e.g. polling the GitHub Releases feed) and prompts the user to update. The
-  app does not silently update; it surfaces the availability and lets the user
-  act.
-- Start scripts for all three platforms: first-run/launch scripts for macOS,
-  Windows, and Linux so users can start the app without knowing the invocation.
+  `brew install vilaca/devpit/devpit`, with a goreleaser-generated formula
+  carrying a `service` block and a `test` block (ADR-0023).
+- Self-update awareness: the running app polls the GitHub Releases feed and
+  surfaces a quiet "update available" chip; it never self-updates, only links
+  out (ADR-0023, ADR-0017).
+- Service integration for all platforms: a brew `service` block (macOS), a
+  committed systemd user unit under `packaging/` (Linux), and a `compose.yaml`
+  example (Docker); Windows is a README note only ("use Docker or run
+  `devpit.exe --config …`; best-effort, untested") (ADR-0023).
+- `listen:` config key: an optional bind address (default `localhost:7474`) so a
+  container can bind `:7474` while published examples keep host exposure on
+  loopback (ADR-0023, ADR-0001).
 - Revised logging: review and tighten all log output before public exposure —
   remove debug noise, ensure errors are actionable, and confirm nothing
   sensitive (tokens, URLs with credentials) leaks into the log stream.
-- Docker image: publish an official image (e.g. `ghcr.io/vilaca/devpit`) so
-  users can run the app in a container without a local Go toolchain. The image
-  mounts config and the SQLite DB from the host via a volume.
+- Docker image: publish `ghcr.io/vilaca/devpit` (amd64+arm64) so users can run
+  without a local Go toolchain. Config is mounted; the SQLite DB volume is
+  optional because the store is a disposable cache (ADR-0023).
 - `/up` health endpoint: a lightweight HTTP endpoint that returns `200 OK` when
-  the service is running. Used by Docker health-checks, process supervisors, and
-  start scripts to know when the app is ready.
-- README updated: install (brew), Docker run, start-script, and update
+  the service is ready. Used by Docker health-checks and process supervisors
+  (ADR-0023).
+- README updated: install (brew), Docker run, service integration, and update
   instructions documented; the README reflects the actual first-public-release
-  surface. Includes the hero screenshot — captured from seeded demo data,
-  never from a real instance.
+  surface. Includes the hero screenshot — captured from the committed demo forge,
+  never from a real instance (ADR-0023).
 
 ## v0.2 — More forges + sync hardening
 

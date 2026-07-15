@@ -150,10 +150,21 @@ must not duplicate events; the `UNIQUE` constraint enforces this and writers use
 
 ## Retention
 
-**Deferred** — planned for v0.2. No automatic compaction in v0.1. User-initiated
-"clear history older than X" will delete, per item, signals older than X and
-superseded snapshots (all but the latest) — but **never** the latest snapshot of
-a still-open item. Items whose latest state is merged/closed/removed and older
-than X will be purged entirely, as will rows whose `connection_id` no longer
-exists in the config. `sync_log` will be bounded by the same cleanup plus an
-optional cap.
+Retention in the first public release is **maintainer-operated**, not a
+user-facing feature (`ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md`).
+Three raw-SQL scripts under `scripts/`, run with the instance stopped and
+requiring the `sqlite3` CLI, apply these rules:
+
+- `scripts/db-trim.sh` — a retention pass: per item, delete superseded snapshots
+  (all but the latest) and signals older than a cutoff, but **never** the latest
+  snapshot of a still-open item; purge items whose latest state is
+  merged/closed/removed, and rows whose `connection_id` no longer exists in the
+  config; bound `sync_log`.
+- `scripts/db-cleanup.sh <connection-id>` — purge every row for one source.
+- `scripts/db-reset.sh` — empty every table.
+
+The scripts are named here with their contract; their internals live with the
+scripts themselves (one home per fact). Binary-shipped, user-facing "clear
+history older than X" retention stays **deferred to v0.2** (`docs/Roadmap.md`);
+brew/Docker users have no trim story this release and rely on the maintainer
+scripts or the disposable Docker DB (ADR-0023).

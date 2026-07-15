@@ -2,9 +2,10 @@
 
 ## Scope
 
-Covers the signal model shipped in v0.1.5 (formerly in the separate ADR-0021,
-now folded here per ADR-0014's mutate-by-default convention; git history
-preserves the original ADR-0021 text). Fold and ranking **Implemented (v0.1)** (`internal/attention`); the user-facing
+Covers the signal model shipped in v0.1.5 (formerly a separate signal-design
+ADR, folded here per ADR-0014's mutate-by-default convention and the log
+renumbered; git history preserves the original text). Fold and ranking
+**Implemented (v0.1)** (`internal/attention`); the user-facing
 presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the full
 UI is built in `frontend/`. The marker vocabulary and age bands (decision
 2026-07-10, below) are **Implemented (v0.1.1)**. Blocked diagnostic badges
@@ -90,7 +91,8 @@ role-aware where the fact is inherently about a role:
   is `unknown`, including a draft you only review, so it can backstop a row
   that would otherwise be bare.
 
-Rationale: "same signal vocabulary regardless of your role" (ADR-0021) means
+Rationale: "same signal vocabulary regardless of your role" (the folded
+signal-design ADR, above) means
 one *word-set*, **not** role-free conditions. Making `changes_requested`
 role-neutral would tag the reviewer who *requested* the changes with
 `changes_requested` (#1) alongside their `review_submitted` (#9) — a

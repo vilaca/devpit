@@ -79,7 +79,7 @@ gate_gofmt() {
 }
 gate_build() { go build ./...; }
 gate_vet()   { go vet ./...; }
-gate_test()  { go test ./...; }
+gate_test()  { go test -race ./...; }
 gate_lint()  { ensure_golangci && golangci-lint run; }
 gate_arch()  { ensure_tool go-arch-lint "github.com/fe3dback/go-arch-lint@$ARCHLINT_VERSION" && go-arch-lint check; }
 gate_frontend() {

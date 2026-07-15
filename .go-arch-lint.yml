@@ -35,6 +35,7 @@ components:
   api: { in: internal/api }
   attention: { in: internal/attention }
   jira: { in: internal/jira }
+  update: { in: internal/update }
   web: { in: internal/web }
   providerGithub: { in: provider/github }
   providerGitlab: { in: provider/gitlab }
@@ -67,4 +68,4 @@ deps:
   providerGitlab:
     mayDependOn: [sdk]
   cmd:
-    mayDependOn: [sdk, config, engine, storage, api, attention, jira, web, providerGithub, providerGitlab]
+    mayDependOn: [sdk, config, engine, storage, api, attention, jira, update, web, providerGithub, providerGitlab]

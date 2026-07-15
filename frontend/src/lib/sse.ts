@@ -14,6 +14,8 @@ export interface SseHandlers {
   onAttentionChanged: () => void;
   onSyncCompleted: (payload: ConnEventPayload) => void;
   onSyncFailed: (payload: ConnEventPayload) => void;
+  // Fired when the self-update status changes; the hint rides on /connections.
+  onUpdateAvailable: () => void;
   // Fired on (re)connect so callers can re-hydrate and catch missed changes.
   onOpen: () => void;
   onStateChange?: (state: ConnectionState) => void;
@@ -33,6 +35,7 @@ export function connectEvents(handlers: SseHandlers): () => void {
     "attention.changed": () => handlers.onAttentionChanged(),
     "sync.completed": (e) => handlers.onSyncCompleted(parse(e)),
     "sync.failed": (e) => handlers.onSyncFailed(parse(e)),
+    "update.available": () => handlers.onUpdateAvailable(),
   };
   for (const [name, fn] of Object.entries(named)) {
     es.addEventListener(name, fn as EventListener);

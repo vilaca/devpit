@@ -153,6 +153,7 @@
   <TopBar
     connections={dashboard.connections}
     streamState={dashboard.streamState}
+    update={dashboard.update}
     onShowLog={openLog}
   />
 

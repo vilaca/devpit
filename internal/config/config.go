@@ -19,6 +19,10 @@ import (
 type Config struct {
 	// DBPath is the SQLite database path passed to storage.Open.
 	DBPath string
+	// Listen is the TCP address the dashboard API binds to. Defaults to
+	// DefaultListen; a container config overrides it to ":7474" because a
+	// loopback bind inside a container is unreachable from the host (ADR-0023).
+	Listen string
 	// Connections is the resolved, validated connection list — Load's
 	// headline output.
 	Connections []sdk.ConnectionConfig
@@ -42,9 +46,15 @@ type JiraConfig struct {
 // snake_case keys users write; Load translates to the sdk types.
 type fileConfig struct {
 	DBPath      string           `yaml:"db_path"`
+	Listen      string           `yaml:"listen"`
 	Connections []connectionYAML `yaml:"connections"`
 	Jira        *jiraYAML        `yaml:"jira"`
 }
+
+// DefaultListen is the loopback address the API binds to when listen is unset.
+// Loopback-only because the API is unauthenticated (ADR-0001); non-loopback
+// binds belong inside a container behind a host-side loopback port map.
+const DefaultListen = "localhost:7474"
 
 type connectionYAML struct {
 	ID      string `yaml:"id"`
@@ -119,6 +129,11 @@ func validate(raw fileConfig) (Config, error) {
 		return Config{}, errors.New("db_path is required")
 	}
 
+	listen := raw.Listen
+	if listen == "" {
+		listen = DefaultListen
+	}
+
 	conns := make([]sdk.ConnectionConfig, 0, len(raw.Connections))
 	seen := make(map[string]bool, len(raw.Connections))
 	for i, c := range raw.Connections {
@@ -175,5 +190,5 @@ func validate(raw fileConfig) (Config, error) {
 		}
 	}
 
-	return Config{DBPath: raw.DBPath, Connections: conns, Jira: jira}, nil
+	return Config{DBPath: raw.DBPath, Listen: listen, Connections: conns, Jira: jira}, nil
 }

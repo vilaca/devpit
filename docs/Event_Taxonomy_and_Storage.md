@@ -157,9 +157,9 @@ requiring the `sqlite3` CLI, apply these rules:
 
 - `scripts/db-trim.sh` — a retention pass: per item, delete superseded snapshots
   (all but the latest) and signals older than a cutoff, but **never** the latest
-  snapshot of a still-open item; purge items whose latest state is
-  merged/closed/removed, and rows whose `connection_id` no longer exists in the
-  config; bound `sync_log`.
+  snapshot of a still-open item; purge, once they too age past the cutoff, items
+  whose latest state is merged/closed/removed, and rows whose `connection_id` no
+  longer exists in the config; bound `sync_log`.
 - `scripts/db-cleanup.sh <connection-id>` — purge every row for one source.
 - `scripts/db-reset.sh` — empty every table.
 

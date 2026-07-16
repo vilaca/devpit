@@ -132,7 +132,9 @@ branch → description, first source wins); a config-gated `internal/jira`
 enricher refreshes the persisted `jira_tickets` cache on a 15-minute sweep (a
 decorator, not a provider — it never emits events); attention items carry an
 optional `jira` ref (key, status, URL) rendered as a status link on the title
-row. Off unless the optional `jira:` config block is present.
+row. Off unless the optional `jira:` config block is present. (The refresh
+cadence was subsequently lowered to 5 min in v0.1.6; see the ADR-0021
+amendment.)
 
 ## v0.1.6 — First public release (beta) — packaging & distribution
 
@@ -234,7 +236,7 @@ Noted, not committed to any release.
   `internal/config/config.go` states this explicitly, and config is static per
   `ADR/ADR-0015_Static_Connection_Configuration.md`), and the other cadences are
   hardcoded too: the update check (24h, `internal/update`), the Jira refresh
-  sweep (15m, `internal/jira`), and the sole-approver cache TTL (15m). Letting
+  sweep (5m, `internal/jira`), and the sole-approver cache TTL (15m). Letting
   users tune them needs sane bounds and validation — too-frequent polling burns
   the forge rate budget, so this interacts with the v0.2 adaptive rate-budget
   scheduler — and revisits the constants-not-config stance of ADR-0004/ADR-0015,

@@ -172,6 +172,9 @@ in v0.1.6.
 - Providers: Forgejo, Gitea, Codeberg (with capability declaration/degradation, ADR-0003). Codeberg is a hosted Forgejo instance; its provider type shares the Forgejo implementation with `base_url` defaulting to `https://codeberg.org`.
 - Needs Backport bucket via a configurable label convention (deferred from
   ADR-0016).
+- Reconcile item reaping: a full authoritative sweep emits `item.removed` for
+  merged/closed/un-roled items so they leave the list instead of lingering as
+  ghost rows (ADR-0024).
 - Adaptive rate-budget scheduler, replacing basic backoff (ADR-0004).
 - Snapshot/compaction of the event log, only if a real instance proves it
   necessary (ADR-0005).

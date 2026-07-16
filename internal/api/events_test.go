@@ -115,6 +115,32 @@ func TestEventsStreamEndToEnd(t *testing.T) {
 	waitForClients(t, s, 0)
 }
 
+// nonFlushingWriter wraps an http.ResponseWriter without exposing Flush, so it
+// deliberately does not satisfy http.Flusher — used to exercise handleEvents's
+// "streaming unsupported" guard, which httptest.ResponseRecorder can't reach
+// since it implements Flusher itself.
+type nonFlushingWriter struct {
+	http.ResponseWriter
+}
+
+// TestHandleEventsFlusherUnsupported checks that a ResponseWriter lacking
+// http.Flusher gets a 500 instead of a hung/panicking stream.
+func TestHandleEventsFlusherUnsupported(t *testing.T) {
+	s := newTestServer(t, openTestDB(t))
+	rec := httptest.NewRecorder()
+	w := nonFlushingWriter{ResponseWriter: rec}
+	r := httptest.NewRequestWithContext(context.Background(), "GET", "/events", nil)
+
+	s.handleEvents(w, r)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), errCodeInternal) {
+		t.Errorf("body = %q, want it to contain %q", rec.Body.String(), errCodeInternal)
+	}
+}
+
 // readFrame reads lines until the blank-line frame terminator.
 func readFrame(t *testing.T, r io.Reader) string {
 	t.Helper()

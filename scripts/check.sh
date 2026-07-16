@@ -20,7 +20,8 @@
 #   lint = golangci-lint, arch = go-arch-lint, shell = shellcheck,
 #   frontend = svelte-check + eslint + prettier --check + vitest, tidy = go mod tidy -diff,
 #   actionlint = workflow YAML + embedded shellcheck, links = lychee (offline,
-#   internal markdown links only).
+#   internal markdown links only). test also enforces COVERAGE_FLOOR below — a
+#   ratchet against the total statement coverage silently regressing.
 #   gofmt, shell, and frontend are included on purpose — all recurring sources of
 #   after-the-fact "style: gofmt" / "fix: svelte-check" / broken-script churn
 #   that the old CI never caught. govulncheck is deliberately NOT a gate here —
@@ -40,6 +41,13 @@ ARCHLINT_VERSION="v1.16.0"
 SHELLCHECK_VERSION="v0.10.0"
 ACTIONLINT_VERSION="v1.7.12"
 LYCHEE_VERSION="v0.24.2"
+
+# Coverage ratchet (D4, docs/plans/audit-remediation/04): total statement
+# coverage across ./... must not drop below this. A few points under the
+# ~81% measured when this floor was added — room to move without babysitting
+# every PR, but a regression still fails the build. Bump it up as coverage
+# grows; never down without a reason recorded alongside the change.
+COVERAGE_FLOOR=75
 
 # Linters run from a repo-local dir, keyed by a version stamp: the pinned
 # version is the one that runs even if a different build of the same tool is on
@@ -143,7 +151,14 @@ gate_gofmt() {
 }
 gate_build() { go build ./...; }
 gate_vet()   { go vet ./...; }
-gate_test()  { go test -race ./...; }
+gate_test()  {
+  local profile="$TOOLS/coverage.out" total
+  go test -race -covermode=atomic -coverprofile="$profile" ./... || return 1
+  total="$(go tool cover -func="$profile" | tail -1 | grep -oE '[0-9]+\.[0-9]+')"
+  echo "    total coverage: ${total}% (floor ${COVERAGE_FLOOR}%)"
+  awk -v t="$total" -v f="$COVERAGE_FLOOR" 'BEGIN { exit !(t >= f) }' \
+    || { echo "    coverage ${total}% is below the ${COVERAGE_FLOOR}% floor"; return 1; }
+}
 gate_lint()  { ensure_golangci && golangci-lint run; }
 gate_arch()  { ensure_tool go-arch-lint "github.com/fe3dback/go-arch-lint@$ARCHLINT_VERSION" && go-arch-lint check; }
 gate_shell() {

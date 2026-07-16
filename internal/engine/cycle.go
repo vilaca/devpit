@@ -202,7 +202,14 @@ func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error
 		lf := latestFact{objectType: f.ObjectType, eventID: f.EventID, removed: f.EventType == eventItemRemoved}
 		if f.EventType == eventItemObserved {
 			var pl sdk.ItemObservedPayload
-			if json.Unmarshal(f.Payload, &pl) == nil {
+			if err := json.Unmarshal(f.Payload, &pl); err != nil {
+				// Payloads are engine-written, so this is defensive: a corrupt
+				// snapshot leaves openRoled false, making the item a ghost that
+				// is never reaped nor resurrected. Log it so the corruption is
+				// observable rather than silent. Control flow is unchanged.
+				log.Printf("engine: connection %q: reap: unparseable item.observed payload for %q: %v",
+					c.cfg.ID, f.NativeID, err)
+			} else {
 				lf.openRoled = pl.State == itemStateOpen && len(pl.MyRoles) > 0
 			}
 		}

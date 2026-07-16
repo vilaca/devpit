@@ -22,6 +22,12 @@ const timeFormat = time.RFC3339
 // itemStateOpen is the wire value for an open item; used across storage methods.
 const itemStateOpen = "open"
 
+// eventItemObserved is the fact-stream event type for an observed item
+// snapshot; the string matches the engine constant. AllOpenTicketKeys folds
+// the latest observed/removed fact per item and keeps only those whose latest
+// is this type (docs/Event_Taxonomy_and_Storage.md).
+const eventItemObserved = "item.observed"
+
 // readMaxConns caps concurrent API reads (ADR-0007). A single-user app never
 // needs many; the point is only that reads run on their own pool so a long
 // reconcile write never stalls GET /attention.
@@ -328,11 +334,16 @@ func (db *DB) ReadSyncLogSince(ctx context.Context, connectionID string, since t
 
 // LastSyncedAt returns the timestamp of the most recent successful poll cycle
 // for connectionID. Returns a zero Time when no successful cycle exists yet.
+// A "degraded" cycle counts as a success: it persisted events and cursors and
+// reset backoff (internal/engine/cycle.go), and per ADR-0024 it is the common
+// steady state for accounts hitting the GraphQL complexity ceiling — so a
+// healthy-but-degraded connection must not report as never-synced. Ordering by
+// ts uses the sync_log_by_conn (connection_id, ts) index.
 func (db *DB) LastSyncedAt(ctx context.Context, connectionID string) (time.Time, error) {
 	var ts string
 	err := db.read.QueryRowContext(ctx,
-		`SELECT ts FROM sync_log WHERE connection_id = ? AND outcome = 'ok'
-		ORDER BY id DESC LIMIT 1`,
+		`SELECT ts FROM sync_log WHERE connection_id = ? AND outcome IN ('ok', 'degraded')
+		ORDER BY ts DESC LIMIT 1`,
 		connectionID).Scan(&ts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return time.Time{}, nil
@@ -458,6 +469,13 @@ func (db *DB) ReadEvents(ctx context.Context, connectionID string, since time.Ti
 }
 
 // SetHandleNext sets or clears the "handle next" flag for an item.
+//
+// The itemID is intentionally NOT validated against a live item: liveness is
+// derived from the event fold (there is no items table to cheaply check), and
+// coupling this write to the read model isn't worth it for a single-user,
+// self-hosted app. A flag for a non-existent id is inert — ListHandleNext pins
+// only surface when they match a listed item — so at worst a misbehaving client
+// leaves harmless orphan rows (ADR-0017).
 func (db *DB) SetHandleNext(ctx context.Context, itemID string, flagged bool) error {
 	if !flagged {
 		if _, err := db.write.ExecContext(ctx,
@@ -497,11 +515,11 @@ func (db *DB) ListHandleNext(ctx context.Context) ([]PinnedItem, error) {
 		if err := rows.Scan(&id, &flaggedAtStr); err != nil {
 			return nil, fmt.Errorf("scan handle_next: %w", err)
 		}
-		pi := PinnedItem{ID: id}
-		if t, err := time.Parse(timeFormat, flaggedAtStr); err == nil {
-			pi.FlaggedAt = t
+		flaggedAt, err := parseTime(flaggedAtStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse handle_next flagged_at: %w", err)
 		}
-		items = append(items, pi)
+		items = append(items, PinnedItem{ID: id, FlaggedAt: flaggedAt})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list handle_next: %w", err)
@@ -574,8 +592,8 @@ func (db *DB) GetJiraTickets(ctx context.Context, keys []string) (map[string]Jir
 		if err := rows.Scan(&t.Key, &t.Status, &t.Summary, &t.Assignee, &t.URL, &fetchedAt, &fetchErr); err != nil {
 			return nil, fmt.Errorf("scan jira ticket: %w", err)
 		}
-		if fa, err := parseTime(fetchedAt); err == nil {
-			t.FetchedAt = fa
+		if t.FetchedAt, err = parseTime(fetchedAt); err != nil {
+			return nil, fmt.Errorf("parse jira ticket fetched_at: %w", err)
 		}
 		if fetchErr.Valid {
 			t.FetchError = &fetchErr.String
@@ -611,17 +629,24 @@ func (db *DB) PruneJiraTickets(ctx context.Context, keep []string) error {
 	return nil
 }
 
-// AllOpenTicketKeys returns the union of ticket_keys across all latest
-// item.observed snapshots whose state is "open". Used by the Jira refresher
-// to decide which keys to fetch and which rows to prune.
+// AllOpenTicketKeys returns the union of ticket_keys across every item whose
+// latest fact is an item.observed snapshot in the "open" state. Used by the
+// Jira refresher to decide which keys to fetch and which rows to prune.
+//
+// The latest fact is taken across BOTH item.observed and item.removed (the
+// same max(id) fold LatestItemFacts uses), so an item the engine has reaped —
+// whose latest fact is an item.removed — is excluded even though its last
+// observed snapshot still reads state="open". Scoping the fold to
+// item.observed alone would keep returning reaped items' keys forever, so the
+// jira_tickets rows would never be pruned (ADR-0024, ADR-0021).
 func (db *DB) AllOpenTicketKeys(ctx context.Context) ([]string, error) {
 	rows, err := db.read.QueryContext(ctx, `
-		SELECT e.payload
+		SELECT e.event_type, e.payload
 		FROM events e
 		JOIN (
 			SELECT connection_id, object_type, native_id, max(id) AS id
 			FROM events
-			WHERE event_type = 'item.observed'
+			WHERE event_type IN ('item.observed', 'item.removed')
 			GROUP BY connection_id, object_type, native_id
 		) latest ON e.id = latest.id`)
 	if err != nil {
@@ -632,9 +657,12 @@ func (db *DB) AllOpenTicketKeys(ctx context.Context) ([]string, error) {
 	seen := map[string]bool{}
 	var keys []string
 	for rows.Next() {
-		var payload string
-		if err := rows.Scan(&payload); err != nil {
+		var eventType, payload string
+		if err := rows.Scan(&eventType, &payload); err != nil {
 			return nil, fmt.Errorf("scan payload: %w", err)
+		}
+		if eventType != eventItemObserved {
+			continue // latest fact is a removal — the item is gone, skip its keys
 		}
 		var p struct {
 			State      string   `json:"state"`
@@ -764,7 +792,7 @@ func (db *DB) migrate(ctx context.Context) error {
 
 	var current int
 	err := db.write.QueryRowContext(ctx, `SELECT version FROM schema_version LIMIT 1`).Scan(&current)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		if _, err := db.write.ExecContext(ctx, `INSERT INTO schema_version (version) VALUES (0)`); err != nil {
 			return fmt.Errorf("seed schema_version: %w", err)
 		}
@@ -782,7 +810,9 @@ func (db *DB) migrate(ctx context.Context) error {
 			_ = tx.Rollback()
 			return fmt.Errorf("migration %d: %w", i+1, err)
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ?`, i+1); err != nil {
+		// Scope the bump to the row we just read (single-row invariant): a WHERE
+		// stops a stray second row from being clobbered to the same version.
+		if _, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ? WHERE version = ?`, i+1, i); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("migration %d bump version: %w", i+1, err)
 		}

@@ -67,4 +67,4 @@ interactions:
       Content-Type:
       - application/json
     body: |
-      {"data":{"a0":{"mergeRequest":{"approved":false,"shouldBeRebased":false,"headPipeline":{"status":"FAILED"}}}}}
+      {"data":{"a0":{"mergeRequest":{"approved":false,"shouldBeRebased":false,"conflicts":true,"headPipeline":{"status":"FAILED"}}}}}

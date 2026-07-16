@@ -87,6 +87,8 @@ Decided 2026-07-10 (ADR-0004).
   open-set refresh; the cycle still succeeds.
 - Fixes the live bug where an MR showed `failing_checks: true` while GitLab
   reported `headPipeline: RUNNING` until the next reconcile.
+- _Note: the "merge_conflict never clobbered" and OR-join semantics for
+  `needs_rebase` were later revised in v0.1.6 — see ADR-0004 amendment._
 
 ## v0.1.4 — Show all involved open items ✓ Built
 

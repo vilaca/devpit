@@ -89,7 +89,7 @@ Each item carries:
     identity above).
   - `failing_checks` — CI/checks red (GitHub: `unstable`; GitLab: `headPipeline.status` red via GraphQL).
   - `merge_conflict` — manual conflict resolution needed (GitHub: `dirty`;
-    GitLab: `has_conflicts` REST field).
+    GitLab: `has_conflicts` REST, refined by `conflicts` GraphQL).
   - `needs_rebase` — mechanical rebase needed (GitHub: `behind`; GitLab:
     `shouldBeRebased` GraphQL).
   - `needs_approval` — required approvals not met (GitHub: `reviewDecision`; GitLab: `approved` GraphQL).

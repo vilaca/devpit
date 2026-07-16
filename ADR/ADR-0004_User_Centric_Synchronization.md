@@ -112,3 +112,32 @@ is required because FastPoll and Reconcile are serialised per connection.
 `repo_approvers` DB table added in migration 3 is populated only by explicit
 `UpsertRepoApprover` storage calls (future batch export), never from within a
 provider. The in-memory cache is the authoritative hot path.
+
+## Amendment — v0.1.6: open-set refresh clears badges (2026-07-16)
+
+Supersedes part of the v0.1.3 amendment. Observed live: an MR
+(planning-cloud!30046) kept showing `needs_rebase` + `merge_conflict` after
+GitLab had cleared both. The badges only cleared at the next 15-minute
+Reconcile. Three root causes, all in `provider/gitlab`:
+
+1. **`NeedsRebase` OR-join** — `applyGraphQL` computed
+   `pl.NeedsRebase = pl.NeedsRebase || mr.ShouldRebase || mr.Diverged`. In
+   `openSetRefresh` the left operand is the cached Reconcile snapshot, so a
+   stale `true` ORed itself forward every cycle and could never clear.
+   Fix: the join now **overrides** — `pl.NeedsRebase = mr.ShouldRebase ||
+   mr.Diverged` — the same pattern `FailingChecks` already uses.
+
+2. **`merge_conflict` not in GraphQL** — sourced only from REST `has_conflicts`,
+   so it was pinned to the Reconcile snapshot between sweeps. Fix: the GraphQL
+   query now fetches the `conflicts` scalar and `applyGraphQL` overrides
+   `MergeConflict` from it, outside the draft-suppression block (REST records
+   `has_conflicts` on drafts too). The v0.1.3 statement "REST-derived fields
+   (… merge_conflict …) are never clobbered" no longer covers `merge_conflict`.
+
+3. **FastPoll todo-path didn't update `openSnapshots`** — only Reconcile wrote
+   the cache, so a todo-fresh snapshot could be partially reverted by the next
+   cycle's open-set refresh reading the stale Reconcile baseline. Fix: FastPoll
+   now merges every post-join open-item payload into `openSnapshots` before the
+   open-set-refresh block, mirroring Reconcile's existing loop.
+
+`carryForwardEnrichment` is unchanged (fail-closed OR on degraded batches, B3).

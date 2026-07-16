@@ -3,7 +3,7 @@
   import { SvelteURLSearchParams } from "svelte/reactivity";
   import { dashboard } from "./lib/dashboard.svelte";
   import type { Filter, AttentionItem } from "./lib/types";
-  import { matchesFilter, visibleBuckets } from "./lib/buckets";
+  import { visibleBuckets, visibleOrder, parseFilter } from "./lib/buckets";
   import TopBar from "./components/TopBar.svelte";
   import FailureBanner from "./components/FailureBanner.svelte";
   import BucketFilter from "./components/BucketFilter.svelte";
@@ -22,7 +22,7 @@
   } {
     const p = new URLSearchParams(location.search);
     return {
-      bucket: (p.get("bucket") as Filter | null) ?? null,
+      bucket: parseFilter(p.get("bucket")),
       log: p.has("log"),
       logConn: p.get("logconn") ?? null,
     };
@@ -71,16 +71,11 @@
 
   let focusedId = $state<string | null>(null);
 
-  // The ordered visible list: pinned (in flag order) then ranked (filtered).
-  // Keyboard nav steps through this list.
-  const visibleItems = $derived.by<AttentionItem[]>(() => {
-    const pinned = dashboard.items.filter((i) => i.flagged);
-    const ranked = dashboard.items.filter(
-      (i: AttentionItem) =>
-        !i.flagged && matchesFilter(i, activeBucket, dashboard.connections),
-    );
-    return [...pinned, ...ranked];
-  });
+  // The ordered visible list keyboard nav steps through — the same rows the
+  // renderer shows, in the same order (derived once, in lib/buckets).
+  const visibleItems = $derived(
+    visibleOrder(dashboard.items, activeBucket, dashboard.connections),
+  );
 
   function moveFocus(delta: 1 | -1) {
     const list = visibleItems;

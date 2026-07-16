@@ -139,3 +139,15 @@ which is the correct fix for the compiler-driven gates; go-arch-lint still
 scans the raw filesystem regardless of module boundaries, so it needed its
 own `frontend/node_modules` entry in `.go-arch-lint.yml`'s `exclude:`,
 alongside the existing `.claude` worktree exclusion.
+
+## Amendment — frontend test gate (2026-07-16)
+
+`gate_frontend` now also runs `npm run test` (Vitest), so the frontend has an
+executable-test gate on par with Go's `go test`, not just type/lint checks.
+Vitest reuses the existing Vite/Svelte toolchain (`vitest.config.ts`), so it
+adds a test runner without a second build stack. The CI `frontend` job needs no
+change — it already invokes the whole gate via `scripts/check.sh --ci frontend`.
+The suite deliberately targets pure logic (buckets, relative-time formatting,
+the SSE reconnect state machine, `toggleFlag`) plus one drift guard that asserts
+the frontend state precedence equals Go's `internal/attention/states.go` — no
+component-DOM harness, matching the "smallest thing that works" stance.

@@ -1,8 +1,21 @@
 import type { State, Filter, AttentionItem, Connection } from "./types";
+import { STATE_PRECEDENCE } from "./types";
 
 export interface Bucket {
   state: State;
   label: string;
+}
+
+// The set of accepted bucket filters: every signal state plus the client-side
+// "mine" axis. Used to validate untrusted input (e.g. the ?bucket= URL param)
+// before it reaches matchesFilter, which would otherwise treat unknown junk as a
+// state and silently render "no items match".
+const FILTERS = new Set<Filter>([...STATE_PRECEDENCE, "mine"]);
+
+// parseFilter validates an arbitrary string (typically the ?bucket= query value)
+// against the known Filter set, returning null for anything unrecognized.
+export function parseFilter(value: string | null): Filter | null {
+  return value && FILTERS.has(value as Filter) ? (value as Filter) : null;
 }
 
 // Filter buckets in precedence order (ADR-0016 / internal/attention/states.go).
@@ -87,4 +100,32 @@ export function visibleBuckets(
     if (count > 0) result.push({ key: b.state, label: b.label, count });
   }
   return result;
+}
+
+// partitionVisible splits items into the two groups the list renders: pinned
+// (flag order, never filtered) then ranked (unflagged and matching the active
+// filter). This is the single source of truth for *what is visible*, so the
+// renderer (AttentionList) and the keyboard navigation (App) can't disagree
+// about which rows exist or their order.
+export function partitionVisible(
+  items: AttentionItem[],
+  filter: Filter | null,
+  connections: Connection[],
+): { pinned: AttentionItem[]; ranked: AttentionItem[] } {
+  const pinned = items.filter((i) => i.flagged);
+  const ranked = items.filter(
+    (i) => !i.flagged && matchesFilter(i, filter, connections),
+  );
+  return { pinned, ranked };
+}
+
+// visibleOrder is the flat pinned-then-ranked sequence keyboard nav steps
+// through — the same rows the renderer shows, in the same order.
+export function visibleOrder(
+  items: AttentionItem[],
+  filter: Filter | null,
+  connections: Connection[],
+): AttentionItem[] {
+  const { pinned, ranked } = partitionVisible(items, filter, connections);
+  return [...pinned, ...ranked];
 }

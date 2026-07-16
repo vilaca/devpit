@@ -98,18 +98,21 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 
 	gate := mergeGate(pr.MergeableState)
 	payload := sdk.ItemObservedPayload{
-		Title:             pr.Title,
-		URL:               pr.HTMLURL,
-		Repo:              repo,
-		State:             state,
-		Draft:             pr.Draft,
-		Author:            pr.User.Login,
-		MyRoles:           roles,
-		Gate:              gate,
-		GateDetail:        pr.MergeableState,
-		FailingChecks:     pr.MergeableState == msUnstable,
-		MergeConflict:     pr.MergeableState == msDirty,
-		NeedsRebase:       pr.MergeableState == msBehind,
+		Title:         pr.Title,
+		URL:           pr.HTMLURL,
+		Repo:          repo,
+		State:         state,
+		Draft:         pr.Draft,
+		Author:        pr.User.Login,
+		MyRoles:       roles,
+		Gate:          gate,
+		GateDetail:    pr.MergeableState,
+		FailingChecks: pr.MergeableState == msUnstable,
+		MergeConflict: pr.MergeableState == msDirty,
+		NeedsRebase:   pr.MergeableState == msBehind,
+		// -1 = unknown until the GraphQL join sets the real count; a PR first seen
+		// while GraphQL is degraded must read unknown, not 0/hide-count (A6).
+		ApprovalsCount:    -1,
 		ProviderUpdatedAt: pr.UpdatedAt,
 		TicketKeys:        sdk.ExtractTicketKeys(pr.Title, pr.Head.Ref, pr.Body),
 		Labels:            labelsFromGH(pr.Labels),
@@ -132,14 +135,16 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 // the fold keeps the last known value).
 func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []string) sdk.Event {
 	payload := sdk.ItemObservedPayload{
-		Title:             it.Title,
-		URL:               it.HTMLURL,
-		Repo:              repo,
-		State:             stateOpen,
-		Draft:             it.Draft,
-		Author:            it.User.Login,
-		MyRoles:           roles,
-		Gate:              gateUnknown,
+		Title:   it.Title,
+		URL:     it.HTMLURL,
+		Repo:    repo,
+		State:   stateOpen,
+		Draft:   it.Draft,
+		Author:  it.User.Login,
+		MyRoles: roles,
+		Gate:    gateUnknown,
+		// -1 = unknown until the GraphQL join sets the real count (A6).
+		ApprovalsCount:    -1,
 		ProviderUpdatedAt: it.UpdatedAt,
 		TicketKeys:        sdk.ExtractTicketKeys(it.Title),
 		Labels:            labelsFromGH(it.Labels),

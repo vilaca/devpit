@@ -111,7 +111,7 @@ interactions:
 - id: 4
   request:
     method: GET
-    url: https://api.github.com/repos/octocat/myrepo/collaborators?affiliation=direct&per_page=100
+    url: https://api.github.com/repos/octocat/myrepo/collaborators?affiliation=all&per_page=100
     headers: {}
     body: ""
   response:
@@ -130,7 +130,7 @@ interactions:
 - id: 5
   request:
     method: GET
-    url: https://api.github.com/repos/octocat/sharedrepo/collaborators?affiliation=direct&per_page=100
+    url: https://api.github.com/repos/octocat/sharedrepo/collaborators?affiliation=all&per_page=100
     headers: {}
     body: ""
   response:

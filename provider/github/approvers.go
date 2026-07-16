@@ -48,9 +48,12 @@ func (p *Provider) isSoleApproverCached(ctx context.Context, fullRepo string) (b
 
 // probeIsSoleApprover calls GET /repos/{owner}/{repo}/collaborators and returns
 // true when the authenticated user is the only account with push/maintain/admin
-// permission. fullRepo is "owner/repo".
+// permission. fullRepo is "owner/repo". affiliation=all (not direct) so members
+// who can merge via team/org membership are counted — otherwise a repo with one
+// direct collaborator but a team that can also approve is falsely tagged
+// sole_approver (A5, matching GitLab's /members/all semantics).
 func (p *Provider) probeIsSoleApprover(ctx context.Context, fullRepo string) (bool, error) {
-	u := fmt.Sprintf("%s/repos/%s/collaborators?affiliation=direct&per_page=100", p.apiBase, fullRepo)
+	u := fmt.Sprintf("%s/repos/%s/collaborators?affiliation=all&per_page=100", p.apiBase, fullRepo)
 	var all []ghCollaborator
 	for u != "" {
 		resp, err := p.do(ctx, u, nil)

@@ -101,14 +101,39 @@ func (p *Provider) do(ctx context.Context, url string, hdr http.Header) (*http.R
 	case resp.StatusCode == http.StatusUnauthorized:
 		_ = resp.Body.Close()
 		return nil, sdk.ErrUnauthorized
-	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests:
+	case resp.StatusCode == http.StatusTooManyRequests:
 		d := parseRateDelay(resp)
 		_ = resp.Body.Close()
 		return nil, &sdk.RateLimitError{RetryAfter: d}
+	case resp.StatusCode == http.StatusForbidden:
+		// GitHub returns 403 both for rate limits (primary limit exhausted, or a
+		// secondary limit with Retry-After) and for permission/SSO/scope denials.
+		// Classify as rate-limited only with a rate signal present; otherwise it is
+		// an auth failure that must surface, not retry on backoff forever (A4).
+		if isRateLimited(resp) {
+			d := parseRateDelay(resp)
+			_ = resp.Body.Close()
+			return nil, &sdk.RateLimitError{RetryAfter: d}
+		}
+		_ = resp.Body.Close()
+		return nil, sdk.ErrUnauthorized
 	default:
 		_ = resp.Body.Close()
 		return nil, &sdk.StatusError{Status: resp.StatusCode}
 	}
+}
+
+// isRateLimited reports whether a 403/429 response carries a GitHub rate-limit
+// signal: a Retry-After hint (secondary limit) or the primary-limit marker
+// X-RateLimit-Remaining: 0. A 403 with neither is a permission/SSO/scope denial.
+func isRateLimited(resp *http.Response) bool {
+	if resp.Header.Get("Retry-After") != "" {
+		return true
+	}
+	if r := rateRemaining(resp.Header); r != nil && *r == 0 {
+		return true
+	}
+	return false
 }
 
 // parseRateDelay extracts the retry delay from Retry-After (seconds) and

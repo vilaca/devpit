@@ -228,6 +228,18 @@ Noted, not committed to any release.
   (DevPit is keyboard-first); and whether areas join the deferred local-state
   export path.
 
+- User-configurable timing: expose polling and other timed activities in the
+  config file. Today these are **deliberately constants, not config** — poll
+  intervals and the staleness/old thresholds are engine constants (ADR-0004;
+  `internal/config/config.go` states this explicitly, and config is static per
+  `ADR/ADR-0015_Static_Connection_Configuration.md`), and the other cadences are
+  hardcoded too: the update check (24h, `internal/update`), the Jira refresh
+  sweep (15m, `internal/jira`), and the sole-approver cache TTL (15m). Letting
+  users tune them needs sane bounds and validation — too-frequent polling burns
+  the forge rate budget, so this interacts with the v0.2 adaptive rate-budget
+  scheduler — and revisits the constants-not-config stance of ADR-0004/ADR-0015,
+  so it needs its own ADR before becoming Planned.
+
 - Changelog / "what's new since last visit": surface a per-item activity
   feed showing what changed since the user last opened DevPit —
   new reviews, comments, CI results, state transitions. The storage

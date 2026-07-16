@@ -62,14 +62,14 @@ go green and the list to fill (~60s — GitHub notification signals land on the
 first fast-poll). The README renders the dark shot (`docs/assets/hero-dark.png`);
 keep the light one (`docs/assets/hero.png`) current too. Headless Chrome does both
 (light is the default; `--force-dark-mode` makes the app pick its own dark theme).
-`--force-device-scale-factor=2` shoots at 2× for a crisp image on high-DPI
+`--force-device-scale-factor=3` shoots at 3× for a crisp image on high-DPI
 displays; the window is sized to hug the 900px content column with a slim gutter:
 
 ```sh
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-"$CHROME" --headless=new --hide-scrollbars --window-size=940,1160 --force-device-scale-factor=2 \
+"$CHROME" --headless=new --hide-scrollbars --window-size=940,1160 --force-device-scale-factor=3 \
   --screenshot=docs/assets/hero.png http://localhost:7474
-"$CHROME" --headless=new --hide-scrollbars --window-size=940,1160 --force-device-scale-factor=2 --force-dark-mode \
+"$CHROME" --headless=new --hide-scrollbars --window-size=940,1160 --force-device-scale-factor=3 --force-dark-mode \
   --screenshot=docs/assets/hero-dark.png http://localhost:7474
 ```
 

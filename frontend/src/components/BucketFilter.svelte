@@ -59,7 +59,9 @@
     color: var(--text-muted);
     font-size: 12px;
     white-space: nowrap;
-    transition: border-color 0.1s, color 0.1s;
+    transition:
+      border-color 0.1s,
+      color 0.1s;
   }
   .chip:hover {
     border-color: var(--border-strong);

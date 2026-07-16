@@ -24,7 +24,9 @@
   // by bucket — they're the user's explicit priority regardless of state.
   const pinned = $derived(items.filter((i) => i.flagged));
   const ranked = $derived(
-    items.filter((i) => !i.flagged && matchesFilter(i, activeFilter, connections)),
+    items.filter(
+      (i) => !i.flagged && matchesFilter(i, activeFilter, connections),
+    ),
   );
 </script>
 

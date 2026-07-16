@@ -23,7 +23,10 @@ export class ApiRequestError extends Error {
 }
 
 async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, { headers: { Accept: "application/json" }, signal });
+  const res = await fetch(path, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
   if (!res.ok) {
     let code: ApiError["error"] | "unknown" = "unknown";
     let message = res.statusText;
@@ -39,17 +42,27 @@ async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function getAttention(state?: string, signal?: AbortSignal): Promise<AttentionResponse> {
+export function getAttention(
+  state?: string,
+  signal?: AbortSignal,
+): Promise<AttentionResponse> {
   const q = state ? `?state=${encodeURIComponent(state)}` : "";
   return getJSON<AttentionResponse>(`/attention${q}`, signal);
 }
 
-export function getConnections(signal?: AbortSignal): Promise<ConnectionsResponse> {
+export function getConnections(
+  signal?: AbortSignal,
+): Promise<ConnectionsResponse> {
   return getJSON<ConnectionsResponse>("/connections", signal);
 }
 
-export function getSyncLog(connectionId?: string, signal?: AbortSignal): Promise<SyncLogResponse> {
-  const q = connectionId ? `?connection=${encodeURIComponent(connectionId)}` : "";
+export function getSyncLog(
+  connectionId?: string,
+  signal?: AbortSignal,
+): Promise<SyncLogResponse> {
+  const q = connectionId
+    ? `?connection=${encodeURIComponent(connectionId)}`
+    : "";
   return getJSON<SyncLogResponse>(`/sync-log${q}`, signal);
 }
 
@@ -59,7 +72,11 @@ export function getSyncLog(connectionId?: string, signal?: AbortSignal): Promise
 async function flag(id: string, method: "PUT" | "DELETE"): Promise<void> {
   const res = await fetch(`/items/${encodeURIComponent(id)}/flag`, { method });
   if (!res.ok && res.status !== 204) {
-    throw new ApiRequestError(res.status, "unknown", `failed to ${method} flag`);
+    throw new ApiRequestError(
+      res.status,
+      "unknown",
+      `failed to ${method} flag`,
+    );
   }
 }
 

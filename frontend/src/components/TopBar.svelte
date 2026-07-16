@@ -63,7 +63,10 @@
       </a>
     {/if}
     {#each connections as c (c.id)}
-      <ConnectionHealth connection={c} onShowLog={(id: string) => onShowLog(id)} />
+      <ConnectionHealth
+        connection={c}
+        onShowLog={(id: string) => onShowLog(id)}
+      />
     {/each}
   </nav>
 </header>
@@ -129,8 +132,13 @@
     animation: pulse 1.2s ease-in-out infinite;
   }
   @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
   }
   .sr-only {
     position: absolute;

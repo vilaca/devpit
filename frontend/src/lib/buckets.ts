@@ -22,9 +22,15 @@ export const BUCKETS: Bucket[] = [
 // identity matches the item author. Identity lives in connection config (not the
 // event log), so authorship is a client-side derivation. This is the single
 // source of truth for both the "mine" tint (WorkItemRow) and ?bucket=mine.
-export function isMine(item: AttentionItem, connections: Connection[]): boolean {
+export function isMine(
+  item: AttentionItem,
+  connections: Connection[],
+): boolean {
   if (!item.author) return false;
-  return connections.find((c) => c.id === item.connection_id)?.identity === item.author;
+  return (
+    connections.find((c) => c.id === item.connection_id)?.identity ===
+    item.author
+  );
 }
 
 // isReviewer reports whether you're a reviewer on the item. my_roles is the
@@ -33,7 +39,9 @@ export function isMine(item: AttentionItem, connections: Connection[]): boolean 
 // my_review_state fallback covers providers that drop you from the reviewer list
 // once you've reviewed (e.g. GitHub RequestedReviewers) but still report a state.
 export function isReviewer(item: AttentionItem): boolean {
-  return (item.my_roles?.includes("reviewer") ?? false) || !!item.my_review_state;
+  return (
+    (item.my_roles?.includes("reviewer") ?? false) || !!item.my_review_state
+  );
 }
 
 // matchesFilter reports whether an item belongs under the active filter: null
@@ -47,7 +55,8 @@ export function matchesFilter(
 ): boolean {
   if (!filter) return true;
   if (filter === "mine") return isMine(item, connections);
-  if (filter === "mentioned") return item.states.includes("mentioned") || isReviewer(item);
+  if (filter === "mentioned")
+    return item.states.includes("mentioned") || isReviewer(item);
   return item.states.includes(filter);
 }
 
@@ -62,13 +71,19 @@ export interface VisibleBucket {
 // items, empty ones omitted so the bar stays uncluttered. Counts use
 // matchesFilter so each badge matches what the bucket shows (e.g. "mentioned"
 // folds in your review plate). Pinned items sit outside the ranked list.
-export function visibleBuckets(items: AttentionItem[], connections: Connection[]): VisibleBucket[] {
+export function visibleBuckets(
+  items: AttentionItem[],
+  connections: Connection[],
+): VisibleBucket[] {
   const active = items.filter((i) => !i.flagged);
   const result: VisibleBucket[] = [];
   const mineCount = active.filter((i) => isMine(i, connections)).length;
-  if (mineCount > 0) result.push({ key: "mine", label: "Mine", count: mineCount });
+  if (mineCount > 0)
+    result.push({ key: "mine", label: "Mine", count: mineCount });
   for (const b of BUCKETS) {
-    const count = active.filter((i) => matchesFilter(i, b.state, connections)).length;
+    const count = active.filter((i) =>
+      matchesFilter(i, b.state, connections),
+    ).length;
     if (count > 0) result.push({ key: b.state, label: b.label, count });
   }
   return result;

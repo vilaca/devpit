@@ -17,7 +17,9 @@ time, and Go's default `go vet` catches only a narrow class of issues.
 
 `scripts/check.sh` is the single gate runner and the definition of "green": it
 runs `gofmt`, `go build`/`vet`/`test`, golangci-lint, go-arch-lint, shellcheck
-on the shell scripts, and the frontend `svelte-check`. Contributors run it before a change is done; CI runs the
+on the shell scripts, `go mod tidy -diff`, actionlint on the workflow YAML,
+lychee on tracked markdown, and the frontend `svelte-check` + eslint +
+`prettier --check`. Contributors run it before a change is done; CI runs the
 same script, one job per gate, so a red check names the failing gate and local
 and CI cannot drift — the gate list and the pinned linter versions live only in
 the script, not in the workflow. The two gates that make ADR-0012's layered
@@ -96,3 +98,44 @@ alone — the workflow only invokes it. `go-arch-lint` scans the filesystem, so
 local git worktrees under `.claude/` are excluded in `.go-arch-lint.yml`
 (`exclude:`); the gofmt gate checks tracked files only for the same reason. A
 fresh CI checkout has no worktrees.
+
+## Amendment — v0.1.6: frontend lint parity, tidy/actionlint/links gates, scheduled govulncheck (2026-07-16)
+
+The frontend reaches the same lint stance as `.golangci.yml`: eslint
+(`typescript-eslint` `recommendedTypeChecked` + `eslint-plugin-svelte`
+recommended) with stylistic configs off, and prettier as the frontend's gofmt
+— formatting is enforced, style opinions are not, the same line the Decision
+already draws for Go. Both join `gate_frontend` alongside `svelte-check`.
+
+Three new gates close remaining coverage gaps: `tidy` (`go mod tidy -diff` —
+`go.mod`/`go.sum` drift was previously uncaught), `actionlint` (workflow YAML
+was the one script class no gate covered; it runs the pinned shellcheck
+against `run:` blocks too), and `links` (`lychee --offline` over tracked
+markdown — an offline, internal-link-only check, so it stays deterministic;
+this is the mechanical complement to ADR-0014's link-by-exact-filename
+discipline).
+
+`govulncheck` is deliberately **not** a `scripts/check.sh` gate: a new CVE
+disclosure can flip it red with no code change, which would break "green is
+deterministic, local == CI." It runs instead as a scheduled workflow
+(`.github/workflows/vulncheck.yml`, weekly + `workflow_dispatch`) with its own
+pinned version — the one exception to versions-living-in-`check.sh`, because
+this check deliberately isn't one. A red run there is a to-do, not a broken
+build.
+
+Rejected candidates, so they aren't "helpfully" re-added later: markdownlint
+and vale (prose-style churn, not correctness), yamllint (actionlint already
+covers the YAML that matters), hadolint (one small Dockerfile doesn't
+justify a dedicated linter), nilaway (too false-positive-heavy on this
+codebase's patterns).
+
+Adding eslint pulled in a transitive dependency (`flat-cache` → `flatted`)
+that ships a stray `.go` file inside `frontend/node_modules` — invisible to
+`git ls-files`, but `go build`/`vet`/`test ./...`, golangci-lint, and
+go-arch-lint all discover files by walking the filesystem or the Go module
+graph, not tracked-files-only, so they picked it up as part of this module.
+`frontend/go.mod` declares `frontend/` a separate (source-free) Go module,
+which is the correct fix for the compiler-driven gates; go-arch-lint still
+scans the raw filesystem regardless of module boundaries, so it needed its
+own `frontend/node_modules` entry in `.go-arch-lint.yml`'s `exclude:`,
+alongside the existing `.claude` worktree exclusion.

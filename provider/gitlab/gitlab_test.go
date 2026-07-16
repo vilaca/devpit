@@ -786,17 +786,17 @@ func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, err
 }
 
 // TestGraphQLBatchingUnderCeiling verifies that graphqlJoin never sends a batch
-// larger than graphQLBatchSize, so the complexity ceiling (250 complexity / ≈14
-// per MR → safe up to 17) is never hit. Uses a fake transport that returns a
-// complexity error for any query with more than 17 MR aliases.
+// larger than graphQLBatchSize, so the complexity ceiling (250 complexity / ≈23
+// per MR → safe up to 10) is never hit. Uses a fake transport that returns a
+// complexity error for any query with more than 10 MR aliases.
 func TestGraphQLBatchingUnderCeiling(t *testing.T) {
-	const n = 20 // > 17 would trigger the old bug; batchSize=12 keeps each batch safe
+	const n = 20 // > 10 would trigger the old bug; batchSize=8 keeps each batch safe
 
 	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: testBaseURL})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.http.Transport = &complexityCeilingRT{maxItems: 17}
+	p.http.Transport = &complexityCeilingRT{maxItems: 10}
 	p.handle = "octocat"
 
 	events := make([]sdk.Event, n)

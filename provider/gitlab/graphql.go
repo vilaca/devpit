@@ -18,11 +18,13 @@ const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
 	`headPipeline{status} approvedBy{count nodes{username}} ` +
 	`reviewers{nodes{username mergeRequestInteraction{reviewState}}}}}`
 
-// graphQLBatchSize is the max MRs per GraphQL query. Each MR node costs ≈18
-// complexity (the reviewers connection adds a few over the base fields);
-// GitLab's ceiling is 250. 12 × 18 = 216, still under the ceiling with headroom
+// graphQLBatchSize is the max MRs per GraphQL query. Each MR node costs ≈23
+// complexity in practice — more than the field count suggests, because the
+// approvedBy and reviewers connections are each scored — and GitLab's ceiling is
+// 250. An earlier estimate of ≈18/node put the batch at 12 (× 23 = 276), which
+// overshot the ceiling on real instances. 8 × 23 = 184 stays under with headroom
 // for stricter instances.
-const graphQLBatchSize = 12
+const graphQLBatchSize = 8
 
 // reviewStateApproved is the MyReviewState value recorded when the authenticated
 // user appears in a merge request's approvedBy set.

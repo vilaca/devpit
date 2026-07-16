@@ -63,6 +63,9 @@ role-aware where the fact is inherently about a role (see role scope notes).
 re-derives org rules. That is why it is trustworthy.
 
 **Provider parity for best-effort signals:**
+- `changes_requested`: a reviewer's changes-requested verdict on both, via the
+  GraphQL join — GitHub (`reviewDecision == CHANGES_REQUESTED`) and GitLab
+  (`reviewers.nodes.mergeRequestInteraction.reviewState == REQUESTED_CHANGES`).
 - `auto_merge_armed`: ships on both GitHub (GraphQL `autoMergeRequest{enabledAt}`,
   non-null ⇒ armed; degrades to false for PATs that cannot read it) and GitLab
   (REST `merge_when_pipeline_succeeds`).

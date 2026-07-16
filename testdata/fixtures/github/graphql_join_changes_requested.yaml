@@ -1,0 +1,74 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://api.github.com/notifications
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+      Last-Modified:
+      - Wed, 08 Jul 2026 09:14:02 GMT
+      Etag:
+      - W/"deadbeef"
+    body: |
+      [
+        {
+          "id": "1",
+          "reason": "subscribed",
+          "subject": {
+            "title": "Add rate limiter",
+            "url": "https://api.github.com/repos/acme/api/pulls/42",
+            "type": "PullRequest"
+          },
+          "repository": {"full_name": "acme/api"},
+          "updated_at": "2026-07-08T09:14:02Z"
+        }
+      ]
+- id: 1
+  request:
+    method: GET
+    url: https://api.github.com/repos/acme/api/pulls/42
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {
+        "number": 42,
+        "title": "Add rate limiter",
+        "html_url": "https://github.com/acme/api/pull/42",
+        "state": "open",
+        "draft": false,
+        "merged": false,
+        "mergeable_state": "blocked",
+        "updated_at": "2026-07-08T09:14:02Z",
+        "user": {"login": "octocat"},
+        "requested_reviewers": [],
+        "assignees": [],
+        "base": {"repo": {"full_name": "acme/api"}}
+      }
+- id: 2
+  request:
+    method: POST
+    url: https://api.github.com/graphql
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {"data":{"a0":{"pullRequest":{"reviewDecision":"CHANGES_REQUESTED"}}}}

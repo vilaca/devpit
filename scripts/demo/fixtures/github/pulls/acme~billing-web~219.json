@@ -1,0 +1,17 @@
+{
+  "number": 219,
+  "title": "Upgrade Stripe SDK to v14",
+  "html_url": "https://github.com/acme/billing-web/pull/219",
+  "state": "open",
+  "draft": false,
+  "merged": false,
+  "mergeable_state": "clean",
+  "updated_at": "{{now-5d}}",
+  "user": { "login": "omar-said" },
+  "requested_reviewers": [],
+  "assignees": [],
+  "body": "Bumps stripe-go to v14. @nadia-ellis flagging the webhook signature change for you.",
+  "head": { "ref": "deps/stripe-v14" },
+  "base": { "repo": { "full_name": "acme/billing-web" } },
+  "labels": [{ "name": "dependencies" }]
+}

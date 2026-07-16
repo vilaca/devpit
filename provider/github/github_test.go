@@ -412,6 +412,45 @@ func TestGHReviewState(t *testing.T) {
 	}
 }
 
+func TestGHReviewDecision(t *testing.T) {
+	for in, want := range map[string]string{
+		"CHANGES_REQUESTED":   "changes_requested",
+		ghReviewStateApproved: normalizedApproved,
+		"REVIEW_REQUIRED":     "review_required",
+		"":                    "",
+		"UNKNOWN":             "",
+	} {
+		if got := ghReviewDecision(in); got != want {
+			t.Errorf("ghReviewDecision(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestGraphQLJoinChangesRequested verifies the PR-level reviewDecision
+// CHANGES_REQUESTED surfaces as review_decision "changes_requested" on the
+// joined payload (the author's changes-requested signal).
+func TestGraphQLJoinChangesRequested(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_changes_requested", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType != "item.observed" || e.NativeID != "acme/api#42" {
+			continue
+		}
+		pl, ok := e.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Fatal("payload type assertion failed")
+		}
+		if pl.ReviewDecision != "changes_requested" {
+			t.Errorf("review_decision = %q, want changes_requested", pl.ReviewDecision)
+		}
+		return
+	}
+	t.Fatal("missing item.observed for acme/api#42")
+}
+
 // TestMergeGHBatchResultsMyReviewState verifies my_review_state is taken from the
 // authenticated user's latest review, and the approval count still counts only APPROVED.
 func TestMergeGHBatchResultsMyReviewState(t *testing.T) {

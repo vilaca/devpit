@@ -20,6 +20,10 @@ const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
 const (
 	ghReviewStateApproved = "APPROVED"
 	normalizedApproved    = "approved"
+	// GitHub review-state / reviewDecision enum values and their normalized forms.
+	ghChangesRequested         = "CHANGES_REQUESTED"
+	ghReviewRequired           = "REVIEW_REQUIRED"
+	normalizedChangesRequested = "changes_requested"
 )
 
 type prItem struct {
@@ -85,6 +89,24 @@ func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, result
 	}
 }
 
+// ghReviewDecision maps GitHub's PR-level reviewDecision (the
+// PullRequestReviewDecision enum) to the fold's review_decision vocabulary.
+// Only "changes_requested" drives a chip today (the author's changes-requested
+// signal); the other verdicts are normalized through so the fact stays honest.
+// An empty/unknown decision (e.g. a PAT that cannot read it) reads as "".
+func ghReviewDecision(decision string) string {
+	switch decision {
+	case ghChangesRequested:
+		return normalizedChangesRequested
+	case ghReviewStateApproved:
+		return normalizedApproved
+	case ghReviewRequired:
+		return "review_required"
+	default:
+		return ""
+	}
+}
+
 // ghReviewState maps a GitHub review state to a normalized my_review_state
 // value. Only submitted verdicts count as a completed review; PENDING/DISMISSED
 // leave it empty.
@@ -92,8 +114,8 @@ func ghReviewState(state string) string {
 	switch state {
 	case ghReviewStateApproved:
 		return normalizedApproved
-	case "CHANGES_REQUESTED":
-		return "changes_requested"
+	case ghChangesRequested:
+		return normalizedChangesRequested
 	case "COMMENTED":
 		return "reviewed"
 	default:
@@ -214,7 +236,8 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		if !ok {
 			continue
 		}
-		pl.NeedsApproval = r.reviewDecision == "REVIEW_REQUIRED" && !pl.Draft && pl.Gate == gateBlocked
+		pl.NeedsApproval = r.reviewDecision == ghReviewRequired && !pl.Draft && pl.Gate == gateBlocked
+		pl.ReviewDecision = ghReviewDecision(r.reviewDecision)
 		pl.ApprovalsCount = r.approvalsCount
 		pl.AutoMergeArmed = r.autoMergeArmed
 		pl.MyReviewState = r.myReviewState

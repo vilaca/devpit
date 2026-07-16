@@ -16,12 +16,15 @@
 #   scripts/check.sh --ci GATE ...   # how CI invokes it, one gate per job:
 #                                    # same gates, CI-only install fast paths
 #
-# Gates: gofmt build vet test lint arch shell frontend
+# Gates: gofmt build vet test lint arch shell frontend tidy actionlint links
 #   lint = golangci-lint, arch = go-arch-lint, shell = shellcheck,
-#   frontend = svelte-check.
+#   frontend = svelte-check + eslint + prettier --check, tidy = go mod tidy -diff,
+#   actionlint = workflow YAML + embedded shellcheck, links = lychee (offline,
+#   internal markdown links only).
 #   gofmt, shell, and frontend are included on purpose — all recurring sources of
 #   after-the-fact "style: gofmt" / "fix: svelte-check" / broken-script churn
-#   that the old CI never caught.
+#   that the old CI never caught. govulncheck is deliberately NOT a gate here —
+#   see .github/workflows/vulncheck.yml.
 set -uo pipefail   # NOT -e: run every requested gate, report all failures at the end.
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,6 +38,8 @@ CI_MODE=0
 GOLANGCI_VERSION="v2.12.2"
 ARCHLINT_VERSION="v1.16.0"
 SHELLCHECK_VERSION="v0.10.0"
+ACTIONLINT_VERSION="v1.7.12"
+LYCHEE_VERSION="v0.24.2"
 
 # Linters run from a repo-local dir, keyed by a version stamp: the pinned
 # version is the one that runs even if a different build of the same tool is on
@@ -99,6 +104,33 @@ ensure_shellcheck() {
   return $rc
 }
 
+# lychee also ships prebuilt release binaries only; same download-and-stamp
+# pattern as shellcheck. Its release tags carry a "lychee-" prefix, and each
+# tarball unpacks into a target-triple directory rather than a flat binary.
+ensure_lychee() {
+  have_tool lychee "$LYCHEE_VERSION" && return 0
+  local target
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64|Darwin-aarch64)  target=aarch64-apple-darwin ;;
+    Darwin-x86_64|Darwin-amd64)   target=x86_64-apple-darwin ;;
+    Linux-arm64|Linux-aarch64)    target=aarch64-unknown-linux-gnu ;;
+    Linux-x86_64|Linux-amd64)     target=x86_64-unknown-linux-gnu ;;
+    *) echo "    lychee: unsupported OS/arch $(uname -s)/$(uname -m)" >&2; return 1 ;;
+  esac
+  echo "    installing lychee ($LYCHEE_VERSION, release binary)…"
+  local url tmp rc
+  url="https://github.com/lycheeverse/lychee/releases/download/lychee-$LYCHEE_VERSION/lychee-$target.tar.gz"
+  tmp="$(mktemp -d)"
+  if curl -sSfL "$url" | tar -xz -C "$tmp" \
+     && mv "$tmp/lychee-$target/lychee" "$TOOLS/lychee"; then
+    stamp_tool lychee "$LYCHEE_VERSION"; rc=0
+  else
+    rc=1
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+
 # --- gate definitions: each returns non-zero on failure --------------------
 gate_gofmt() {
   # Tracked files only: `gofmt -l .` recurses into hidden dirs, so it would
@@ -126,15 +158,38 @@ gate_frontend() {
   if [[ ! -d frontend/node_modules || frontend/package-lock.json -nt frontend/node_modules ]]; then
     npm --prefix frontend ci || return 1
   fi
-  npm --prefix frontend run check
+  # Three explicit commands, not one chained script, so a failure names the
+  # tool that failed (svelte-check vs. eslint vs. prettier) in the output.
+  npm --prefix frontend run check \
+    && npm --prefix frontend run lint \
+    && npm --prefix frontend run format:check
+}
+gate_tidy() {
+  # -diff: report drift without touching go.mod/go.sum; non-zero exit if any.
+  go mod tidy -diff
+}
+gate_actionlint() {
+  # actionlint shells out to shellcheck for `run:` blocks when one is on PATH;
+  # ensure the pinned shellcheck is installed first so bin/tools (already
+  # prepended to PATH) is what it finds, not whatever's on the machine's PATH.
+  ensure_shellcheck || return 1
+  ensure_tool actionlint "github.com/rhysd/actionlint/cmd/actionlint@$ACTIONLINT_VERSION" || return 1
+  actionlint
+}
+gate_links() {
+  # Tracked markdown only (same worktree rationale as gofmt/shell). --offline
+  # checks local file links only — external URLs are skipped, not fetched, so
+  # the gate stays deterministic (no flakiness from third-party sites).
+  ensure_lychee || return 1
+  git ls-files -z -- '*.md' | xargs -0 lychee --offline --no-progress
 }
 
-ALL_GATES=(gofmt build vet test lint arch shell frontend)
+ALL_GATES=(gofmt build vet test lint arch shell frontend tidy actionlint links)
 
 # --- select which gates to run ---------------------------------------------
 case "${1:-}" in
   "")            gates=("${ALL_GATES[@]}") ;;
-  --no-frontend) gates=(gofmt build vet test lint arch shell) ;;
+  --no-frontend) gates=(gofmt build vet test lint arch shell tidy actionlint links) ;;
   *)             gates=("$@") ;;
 esac
 

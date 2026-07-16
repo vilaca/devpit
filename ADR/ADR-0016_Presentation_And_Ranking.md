@@ -16,7 +16,9 @@ the former six attention states) is **Implemented (v0.1.5)**. Reviewed-done
 muting (display-only) and the "you + N approved" meta-row (populating
 `MyReviewState` from provider approval data) are **Implemented (v0.1.5)**.
 Age-band-then-recency ranking (signal precedence no longer ranks; muting no
-longer demotes) is **Implemented (v0.1.5)**. See `docs/Roadmap.md`.
+longer demotes) is **Implemented (v0.1.5)**. Blocked-chip suppression when a
+visible marker names the gate's reason is **Implemented (v0.1.6)**. See
+`docs/Roadmap.md`.
 
 ## Context
 
@@ -190,6 +192,23 @@ of `review_requested`. Rationale: a sole-approver item has the same urgency as
 an authored item — it cannot progress without this user's action — so it
 inherits the full gate signal set, and `review_requested` fires without an
 explicit review request because the user is the only merge path.
+
+#### Blocked-chip suppression when a marker names the reason (2026-07-16)
+
+The `blocked` chip is now suppressed in the row when a visible marker badge is
+the specific reason the provider gate names — a **render rule only**: the
+`blocked` signal, its bucket (`frontend/src/lib/buckets.ts`), and the wire
+format are all unchanged; only the per-row chip in `StateTags.svelte` is
+affected.
+
+Matching is **strict**: suppression fires only when the displayed marker maps
+to the item's `gate_detail` (GitLab `detailed_merge_status` / GitHub
+`mergeable_state`), not merely when *any* marker is visible. Loose matching was
+rejected — on GitLab, `needs_approval` is true for nearly every unapproved MR,
+so it would make the chip vanish even when the operative blocker is something
+no marker shows (GitHub's opaque `mergeable_state: "blocked"`, GitLab tier
+gates like `jira_association_missing`) — exactly the cases where the chip and
+its `provider says: …` hover earn their keep.
 
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 

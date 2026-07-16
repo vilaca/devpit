@@ -126,6 +126,9 @@ inferred workflow. Supersedes the attention-state set of ADR-0016.
 - Wire renames: `needs_review` → `review_requested`;
   `waiting_on_author` → `review_submitted`.
 
+(The `blocked` chip is suppressed in v0.1.6 when a visible marker badge already
+names the gate's reason; see the ADR-0016 amendment.)
+
 ## v0.1.5 — Jira ticket enrichment ✓ Built
 
 Decided 2026-07-13 (ADR-0021), shipped alongside the signal work. Providers

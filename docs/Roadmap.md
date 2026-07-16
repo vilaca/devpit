@@ -134,7 +134,7 @@ decorator, not a provider — it never emits events); attention items carry an
 optional `jira` ref (key, status, URL) rendered as a status link on the title
 row. Off unless the optional `jira:` config block is present.
 
-## v0.1.6 — First public release (packaging & distribution)
+## v0.1.6 — First public release (beta) — packaging & distribution
 
 DevPit's first public release (ADR-0023). The former version-agnostic
 release-readiness gate is now this release's checklist; every item below ships

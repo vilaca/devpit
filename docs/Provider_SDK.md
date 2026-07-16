@@ -27,9 +27,11 @@ a provider needs no internal locking.
   declared unavailable; such buckets simply yield no items from that provider.
 - **Two poll tiers.** `FastPoll` (~60 s) is the lightweight change-signal tier;
   `Reconcile` (~15 min) is the full identity-scoped sweep that self-heals
-  anything the fast tier missed. Both take and return an opaque `PollState`
-  cursor map — one shared map with namespaced keys — that the engine persists.
-  An empty result is valid (nothing changed).
+  anything the fast tier missed. Both take an opaque `PollState` cursor map — one
+  shared map with namespaced keys — that the engine persists; `FastPoll` advances
+  it, while `Reconcile` is a cursorless full sweep that reads and returns none and
+  instead sets `Complete` so the engine reaps items that left the sweep
+  (`ADR/ADR-0024_Reconcile_Item_Reaping.md`). An empty result is valid (nothing changed).
 - **Error contract.** When `FastPoll` or `Reconcile` returns a non-nil error the
   engine **discards the returned result entirely and leaves cursors
   untouched** — providers need not accumulate partial events or state alongside

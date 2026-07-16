@@ -126,3 +126,17 @@ interactions:
       - application/json
     body: |
       {"data":{"a0":{"mergeRequest":{"approved":true,"shouldBeRebased":false,"headPipeline":null}},"a1":{"mergeRequest":{"approved":false,"shouldBeRebased":false,"headPipeline":null}}}}
+- id: 4
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/projects?membership=true&min_access_level=40&archived=false&per_page=100
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      []

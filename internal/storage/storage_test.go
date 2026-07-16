@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -612,6 +613,78 @@ func TestAllOpenTicketKeys(t *testing.T) {
 	}
 	if got["RPC-9"] {
 		t.Error("RPC-9 from merged item should not appear")
+	}
+}
+
+func TestLatestItemFacts(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+
+	// #1 open (latest fact is observed-open); #2 merged; #3 removed after an
+	// observed; #4 open with a *newer signal* (signals must be ignored — the
+	// latest fact is still the observed-open); #5 signals only (no fact event).
+	events := []sdk.Event{
+		{ObjectType: "merge_request", NativeID: "g/p#1", EventType: "item.observed",
+			DedupeKey: "o1", Payload: sdk.ItemObservedPayload{State: "open", MyRoles: []string{"author"}}},
+		{ObjectType: "merge_request", NativeID: "g/p#2", EventType: "item.observed",
+			DedupeKey: "o2a", Payload: sdk.ItemObservedPayload{State: "open", MyRoles: []string{"reviewer"}}},
+		{ObjectType: "merge_request", NativeID: "g/p#2", EventType: "item.observed",
+			DedupeKey: "o2b", Payload: sdk.ItemObservedPayload{State: "merged"}},
+		{ObjectType: "merge_request", NativeID: "g/p#3", EventType: "item.observed",
+			DedupeKey: "o3", Payload: sdk.ItemObservedPayload{State: "open", MyRoles: []string{"author"}}},
+		{ObjectType: "merge_request", NativeID: "g/p#3", EventType: "item.removed", DedupeKey: "r3"},
+		{ObjectType: "merge_request", NativeID: "g/p#4", EventType: "item.observed",
+			DedupeKey: "o4", Payload: sdk.ItemObservedPayload{State: "open"}}, // role-less
+		{ObjectType: "merge_request", NativeID: "g/p#4", EventType: "signal.mentioned",
+			DedupeKey: "s4", Payload: sdk.SignalMentionedPayload{Direct: true}},
+		{ObjectType: "merge_request", NativeID: "g/p#5", EventType: "signal.mentioned",
+			DedupeKey: "s5", Payload: sdk.SignalMentionedPayload{Direct: true}},
+	}
+	if _, err := db.WriteEvents(ctx, "c1", events); err != nil {
+		t.Fatalf("WriteEvents: %v", err)
+	}
+	// A different connection must never leak into the result.
+	if _, err := db.WriteEvents(ctx, "c2", []sdk.Event{
+		{ObjectType: "merge_request", NativeID: "g/p#1", EventType: "item.observed",
+			DedupeKey: "o1", Payload: sdk.ItemObservedPayload{State: "open", MyRoles: []string{"author"}}},
+	}); err != nil {
+		t.Fatalf("WriteEvents c2: %v", err)
+	}
+
+	facts, err := db.LatestItemFacts(ctx, "c1")
+	if err != nil {
+		t.Fatalf("LatestItemFacts: %v", err)
+	}
+
+	byID := map[string]ItemFact{}
+	for _, f := range facts {
+		byID[f.NativeID] = f
+	}
+	// #5 has no fact event, so it is absent entirely.
+	if len(facts) != 4 {
+		t.Fatalf("got %d facts, want 4 (one per item with a fact event): %+v", len(facts), facts)
+	}
+	if f := byID["g/p#1"]; f.EventType != "item.observed" {
+		t.Errorf("#1 latest fact = %q, want item.observed", f.EventType)
+	}
+	if f := byID["g/p#2"]; f.EventType != "item.observed" {
+		t.Errorf("#2 latest fact type = %q, want item.observed (merged snapshot)", f.EventType)
+	} else {
+		var pl sdk.ItemObservedPayload
+		_ = json.Unmarshal(f.Payload, &pl)
+		if pl.State != "merged" {
+			t.Errorf("#2 state = %q, want merged", pl.State)
+		}
+	}
+	if f := byID["g/p#3"]; f.EventType != "item.removed" {
+		t.Errorf("#3 latest fact = %q, want item.removed", f.EventType)
+	}
+	// #4: the newer mention signal must not hide the observed-open fact.
+	if f := byID["g/p#4"]; f.EventType != "item.observed" {
+		t.Errorf("#4 latest fact = %q, want item.observed (signals ignored)", f.EventType)
+	}
+	if _, ok := byID["g/p#5"]; ok {
+		t.Error("#5 (signals only) must not appear — it has no fact event")
 	}
 }
 

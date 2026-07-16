@@ -265,6 +265,31 @@ func TestFoldReappearanceAfterRemovalResumes(t *testing.T) {
 	}
 }
 
+// TestFoldSaltedResurrectionOrdering pins the exit-side of ADR-0024: after the
+// engine reaps an item (observed → removed) and later salts a resurrection, the
+// resurrected snapshot carries a *higher id than the removal* even though its
+// facts are identical to the pre-removal snapshot. The fold compares by id, so
+// the higher-id observed supersedes the removal and the item is visible again.
+// Complements TestFoldRemovedAfterSnapshotDropsItem (removal wins when it is the
+// higher id).
+func TestFoldSaltedResurrectionOrdering(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	events := []storage.StoredEvent{
+		obs(10, "c", "acme/api#1", f), // episode 1 snapshot
+		{ID: 20, ConnectionID: "c", ObjectType: "merge_request", NativeID: "acme/api#1",
+			EventType: eventItemRemoved, DedupeKey: "item.removed:10", Payload: json.RawMessage(`{}`), ObservedAt: baseTime},
+		obs(30, "c", "acme/api#1", f), // salted resurrection: identical facts, higher id
+	}
+	items := fold(events)
+	if len(items) != 1 {
+		t.Fatalf("resurrected item should be visible, got %d items", len(items))
+	}
+	if items[0].NativeID != "acme/api#1" || len(items[0].MyRoles) == 0 {
+		t.Errorf("resurrected item = %+v, want acme/api#1 with its role restored", items[0])
+	}
+}
+
 func TestFoldRankingOrder(t *testing.T) {
 	// Within an age band, ranking is pure recency — signal precedence no longer
 	// orders items. A newer review_submitted (#9, lowest precedence, and muted)

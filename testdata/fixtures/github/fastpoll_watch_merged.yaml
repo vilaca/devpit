@@ -1,0 +1,72 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://api.github.com/notifications
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+      X-Ratelimit-Remaining:
+      - "4998"
+    body: |
+      [
+        {
+          "id": "1",
+          "reason": "subscribed",
+          "subject": {
+            "title": "Rewrite in Rust",
+            "url": "https://api.github.com/repos/kelseyhightower/nocode/pulls/5695",
+            "type": "PullRequest"
+          },
+          "repository": {"full_name": "kelseyhightower/nocode"},
+          "updated_at": "2026-07-08T09:14:02Z"
+        }
+      ]
+- id: 1
+  request:
+    method: GET
+    url: https://api.github.com/repos/kelseyhightower/nocode/pulls/5695
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {
+        "number": 5695,
+        "title": "Rewrite in Rust",
+        "html_url": "https://github.com/kelseyhightower/nocode/pull/5695",
+        "state": "closed",
+        "draft": false,
+        "merged": true,
+        "mergeable_state": "clean",
+        "updated_at": "2026-07-08T09:14:02Z",
+        "user": {"login": "u0-a138"},
+        "requested_reviewers": [],
+        "assignees": [],
+        "base": {"repo": {"full_name": "kelseyhightower/nocode"}}
+      }
+- id: 2
+  request:
+    method: POST
+    url: https://api.github.com/graphql
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {"data":{"a0":null}}

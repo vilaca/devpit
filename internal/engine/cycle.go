@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,14 @@ import (
 
 	"github.com/vilaca/devpit/internal/storage"
 	"github.com/vilaca/devpit/sdk"
+)
+
+// Fact-stream event types and the open item state, folded here to reap items
+// that left a complete reconcile sweep (docs/Event_Taxonomy_and_Storage.md).
+const (
+	eventItemObserved = "item.observed"
+	eventItemRemoved  = "item.removed"
+	itemStateOpen     = "open"
 )
 
 // operation identifies which poll tier a cycle is running. Its String is the
@@ -97,22 +106,36 @@ func (c *conn) cycle(ctx context.Context, op operation, startup bool) {
 		return
 	}
 
-	// Success path: events first (durable), then cursors — a crash between them
-	// leaves the cursor unadvanced, so events are re-fetched, never lost. Both
-	// are no-ops on empty input.
-	inserted, werr := c.store.WriteEvents(ctx, c.cfg.ID, result.Events)
-	if werr != nil {
-		if ctx.Err() != nil {
+	c.persist(ctx, op, result)
+}
+
+// persist runs the success path for a completed poll: reap (on a complete
+// sweep), then events first (durable) then cursors, then the sync_log row and
+// notifications. A crash between events and cursors leaves the cursor
+// unadvanced, so events are re-fetched, never lost; both writes are no-ops on
+// empty input. Any storage failure is logged via logStorage and aborts the rest.
+func (c *conn) persist(ctx context.Context, op operation, result sdk.PollResult) {
+	// On a complete authoritative sweep, reap items that left it and salt any
+	// resurrection so it supersedes a prior removal (ADR-0024). Only Reconcile
+	// sets Complete, so FastPoll's partial results never reap. The synthesized
+	// removals ride the same durable WriteEvents path below and count toward
+	// inserted, so AttentionChanged fires with no extra wiring.
+	if result.Complete {
+		removals, rerr := c.reap(ctx, result.Events)
+		if rerr != nil {
+			c.abortStorage(ctx, op, 0, rerr)
 			return
 		}
-		c.logStorage(op, 0, werr)
+		result.Events = append(result.Events, removals...)
+	}
+
+	inserted, werr := c.store.WriteEvents(ctx, c.cfg.ID, result.Events)
+	if werr != nil {
+		c.abortStorage(ctx, op, 0, werr)
 		return
 	}
 	if werr = c.store.SaveCursors(ctx, c.cfg.ID, result.State); werr != nil {
-		if ctx.Err() != nil {
-			return
-		}
-		c.logStorage(op, inserted, werr)
+		c.abortStorage(ctx, op, inserted, werr)
 		return
 	}
 
@@ -133,6 +156,90 @@ func (c *conn) cycle(ctx context.Context, op operation, startup bool) {
 		c.notify.AttentionChanged()
 	}
 	c.notify.SyncCompleted(c.cfg.ID)
+}
+
+// abortStorage records a local storage failure during the success path, unless
+// the context was cancelled (a shutdown, which writes no row).
+func (c *conn) abortStorage(ctx context.Context, op operation, inserted int, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	c.logStorage(op, inserted, err)
+}
+
+// reap diffs a complete reconcile sweep against the store's latest per-item facts
+// and returns item.removed events for the open roled items the sweep no longer
+// sees — merged, closed, or access/role lost (ADR-0024). It also salts, in place,
+// the dedupe key of any swept snapshot whose latest stored fact is a removal, so
+// an item re-observed with an identical fact set still inserts a fresh superseding
+// snapshot instead of being dropped by INSERT OR IGNORE. A store read failure is
+// returned so the caller can treat it like any storage failure and persist nothing.
+func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error) {
+	facts, err := c.store.LatestItemFacts(ctx, c.cfg.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// swept = native_ids of the item.observed snapshots in this sweep.
+	swept := make(map[string]bool, len(events))
+	for _, e := range events {
+		if e.EventType == eventItemObserved {
+			swept[e.NativeID] = true
+		}
+	}
+
+	// Index each item's latest stored fact, parsing the observed payload for the
+	// engine's own view of open-ness and roles (mention-only items carry no role
+	// and are outside reconcile's authority, so they are never reaped).
+	type latestFact struct {
+		objectType string
+		eventID    int64
+		removed    bool
+		openRoled  bool
+	}
+	latest := make(map[string]latestFact, len(facts))
+	for _, f := range facts {
+		lf := latestFact{objectType: f.ObjectType, eventID: f.EventID, removed: f.EventType == eventItemRemoved}
+		if f.EventType == eventItemObserved {
+			var pl sdk.ItemObservedPayload
+			if json.Unmarshal(f.Payload, &pl) == nil {
+				lf.openRoled = pl.State == itemStateOpen && len(pl.MyRoles) > 0
+			}
+		}
+		latest[f.NativeID] = lf
+	}
+
+	// Reap: an open roled item absent from a complete sweep is genuinely gone.
+	// Key the removal to the superseded observed event's id — per-episode, so a
+	// reopen→re-merge yields a fresh, higher-id removal, and an already-removed
+	// item (latest fact is a removal) is skipped, so a still-gone item is not
+	// re-removed every cycle.
+	var removals []sdk.Event
+	for nid, lf := range latest {
+		if lf.openRoled && !swept[nid] {
+			removals = append(removals, sdk.Event{
+				ObjectType: lf.objectType,
+				NativeID:   nid,
+				EventType:  eventItemRemoved,
+				DedupeKey:  fmt.Sprintf("item.removed:%d", lf.eventID),
+			})
+		}
+	}
+
+	// Resurrect: a swept snapshot whose latest stored fact is a removal must
+	// supersede it even if the fact set is unchanged — salt its dedupe key with
+	// the removal's event id so INSERT OR IGNORE inserts a fresh, higher-id row.
+	for i := range events {
+		e := &events[i]
+		if e.EventType != eventItemObserved {
+			continue
+		}
+		if lf, ok := latest[e.NativeID]; ok && lf.removed {
+			e.DedupeKey = fmt.Sprintf("%s:resurrect:%d", e.DedupeKey, lf.eventID)
+		}
+	}
+
+	return removals, nil
 }
 
 // fail classifies a provider error into a sync-log outcome, applies backoff,

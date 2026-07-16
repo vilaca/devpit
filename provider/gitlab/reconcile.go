@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"maps"
 	"net/url"
 	"sort"
-	"time"
 
 	"github.com/vilaca/devpit/sdk"
 )
@@ -27,8 +25,6 @@ func (p *Provider) reconcileQueries() []string {
 }
 
 const roleSoleApprover = "sole_approver"
-
-func cursorRecQuery(q string) string { return "gl.rec.updated_after." + q }
 
 // fetchScopeMRs fetches all opened MRs for one reconcile scope, following
 // GitLab's X-Next-Page cursor so a multi-page query is not silently truncated
@@ -68,43 +64,59 @@ func (p *Provider) fetchScopeMRs(ctx context.Context, base string, seen map[stri
 
 // fetchSoleApproverMRs discovers open MRs on projects where the user is the
 // only merge-capable member (access_level >= 40) and emits item.observed events
-// with the sole_approver role. Drafts and self-authored MRs are skipped.
-func (p *Provider) fetchSoleApproverMRs(ctx context.Context, seen map[string]bool) []sdk.Event {
+// with the sole_approver role. Drafts and self-authored MRs are skipped. The
+// bool return is false when any enumeration step silently degraded (owned-projects
+// fetch, a sole-approver probe, or a per-project MR page), so the caller can
+// suppress reaping on an incomplete identity set (ADR-0024).
+func (p *Provider) fetchSoleApproverMRs(ctx context.Context, seen map[string]bool) ([]sdk.Event, bool) {
 	projects, err := p.fetchOwnedProjects(ctx)
 	if err != nil {
 		log.Printf("devpit: gitlab: owned-projects fetch degraded: %v", err)
-		return nil
+		return nil, false
 	}
 
 	var events []sdk.Event
+	complete := true
 	for _, proj := range projects {
 		isSole, err := p.isSoleApproverCached(ctx, proj.PathWithNamespace)
-		if err != nil || !isSole {
+		if err != nil {
+			// Probe failed: cannot say whether this project is sole-approver, so the
+			// set is incomplete. Skip it but mark the sweep non-authoritative.
+			complete = false
 			continue
 		}
-		evs := p.fetchProjectSoleApproverMRs(ctx, proj, seen)
+		if !isSole {
+			continue
+		}
+		evs, projComplete := p.fetchProjectSoleApproverMRs(ctx, proj, seen)
 		events = append(events, evs...)
+		if !projComplete {
+			complete = false
+		}
 	}
-	return events
+	return events, complete
 }
 
 // fetchProjectSoleApproverMRs fetches all open MRs for a single project and
 // returns item.observed events with the sole_approver role appended. Drafts
-// and self-authored MRs are skipped; seen is used for cross-scope dedup.
-func (p *Provider) fetchProjectSoleApproverMRs(ctx context.Context, proj glProject, seen map[string]bool) []sdk.Event {
+// and self-authored MRs are skipped; seen is used for cross-scope dedup. The
+// bool return is false when a page fetch or decode failed mid-enumeration.
+func (p *Provider) fetchProjectSoleApproverMRs(
+	ctx context.Context, proj glProject, seen map[string]bool,
+) ([]sdk.Event, bool) {
 	base := fmt.Sprintf("%s/projects/%d/merge_requests?state=opened&scope=all&per_page=100", p.apiBase, proj.ID)
 	var events []sdk.Event
 	for u := base; u != ""; {
 		resp, err := p.do(ctx, u)
 		if err != nil {
 			log.Printf("devpit: gitlab: sole-approver MR fetch degraded: %v", err)
-			break
+			return events, false
 		}
 		next := resp.Header.Get("X-Next-Page")
 		var mrs []glMergeRequest
 		if err := decodeJSON(resp, &mrs); err != nil {
 			log.Printf("devpit: gitlab: sole-approver MR decode degraded: %v", err)
-			break
+			return events, false
 		}
 		for _, mr := range mrs {
 			if mr.Draft || mr.Author.Username == p.handle || seen[mr.WebURL] {
@@ -126,31 +138,22 @@ func (p *Provider) fetchProjectSoleApproverMRs(ctx context.Context, proj glProje
 		u = fmt.Sprintf("%s/projects/%d/merge_requests?state=opened&scope=all&per_page=100&page=%s",
 			p.apiBase, proj.ID, next)
 	}
-	return events
+	return events, true
 }
 
 // Reconcile implements sdk.Provider: it sweeps the user's involved merge
-// requests across the reconcile queries and emits item.observed snapshots.
-func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
-	if state == nil {
-		state = sdk.PollState{}
-	}
-	out := sdk.PollState{}
-	maps.Copy(out, state)
-
-	now := time.Now().UTC().Format(time.RFC3339)
-
+// requests across the reconcile queries and emits item.observed snapshots. The
+// sweep is authoritative — it enumerates every open roled MR with no incremental
+// cursor, so the engine can reap items that left it (ADR-0024). Complete is true
+// unless a sole-approver enumeration step silently degraded; it is independent of
+// Degraded (a GraphQL enrichment failure never suppresses reaping).
+func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResult, error) {
 	seen := map[string]bool{}
 	var events []sdk.Event
 	var rate *int
 
-	queries := p.reconcileQueries()
-	for _, q := range queries {
-		updatedAfter := state[cursorRecQuery(q)]
+	for _, q := range p.reconcileQueries() {
 		base := p.apiBase + "/merge_requests?" + q + "&state=opened&per_page=100"
-		if updatedAfter != "" {
-			base += "&updated_after=" + url.QueryEscape(updatedAfter)
-		}
 		scopeEvents, scopeRate, err := p.fetchScopeMRs(ctx, base, seen)
 		if err != nil {
 			return sdk.PollResult{}, err
@@ -163,24 +166,12 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 
 	// Sole-approver discovery: MRs on projects where the user is the only
 	// merge-capable member. Uses the shared seen map to deduplicate against the
-	// regular scopes above.
-	soleEvents := p.fetchSoleApproverMRs(ctx, seen)
+	// regular scopes above. A silent degrade here clears Complete.
+	soleEvents, complete := p.fetchSoleApproverMRs(ctx, seen)
 	events = append(events, soleEvents...)
 
 	var degraded bool
 	events, degraded = p.graphqlJoin(ctx, events)
-
-	// Advance the per-scope cursors only when this cycle's enrichment succeeded.
-	// graphqlJoin is a single cross-scope batch, so a degraded join means no
-	// scope's items were reliably enriched — hold every cursor at its prior value
-	// (out starts as a copy of state) so the next reconcile re-fetches and retries.
-	// Advancing here would assert those items are current when they were never
-	// enriched, locking in stale approval/pipeline/rebase state.
-	if !degraded {
-		for _, q := range queries {
-			out[cursorRecQuery(q)] = now
-		}
-	}
 
 	// Merge the freshly-joined snapshots into the open-set cache so FastPoll's
 	// open-set refresh always starts from a full REST+GraphQL payload.
@@ -194,9 +185,9 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 	}
 	return sdk.PollResult{
 		Events:        events,
-		State:         out,
 		RateRemaining: rate,
 		ItemsChanged:  len(events),
 		Degraded:      degraded,
+		Complete:      complete,
 	}, nil
 }

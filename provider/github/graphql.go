@@ -171,6 +171,9 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 // graphqlJoin enriches item.observed events with GitHub GraphQL data
 // (reviewDecision, approvals, and auto-merge state).
 // On any GraphQL error it logs and returns the original events unchanged (graceful degradation).
+// Invariant: it never drops or reorders events — every input event appears in the output,
+// enriched or verbatim. The engine relies on this to derive the reconcile swept set from
+// the result's events (ADR-0024); a future edit must preserve it.
 // NeedsApproval is set only when reviewDecision == "REVIEW_REQUIRED" && !draft && gate == blocked,
 // avoiding the "ready to merge · missing approvals" contradiction caused by timing skew or drafts.
 // AutoMergeArmed is set from autoMergeRequest (non-null ⇒ armed); it degrades to false when the

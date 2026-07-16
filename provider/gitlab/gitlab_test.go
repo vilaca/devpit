@@ -504,6 +504,43 @@ func TestApplyGraphQLMyReviewState(t *testing.T) {
 	}
 }
 
+// TestApplyGraphQLMyReviewStateFromReviewers verifies the viewer's own reviewer
+// interaction (changes_requested / reviewed / approved) is recorded as
+// MyReviewState, while pending verdicts and other reviewers are ignored — and
+// draft suppression still applies.
+func TestApplyGraphQLMyReviewStateFromReviewers(t *testing.T) {
+	reviewers := func(state string) glGraphQLMR {
+		var mr glGraphQLMR
+		if err := json.Unmarshal([]byte(
+			`{"reviewers":{"nodes":[`+
+				`{"username":"other","mergeRequestInteraction":{"reviewState":"APPROVED"}},`+
+				`{"username":"octocat","mergeRequestInteraction":{"reviewState":"`+state+`"}}]}}`,
+		), &mr); err != nil {
+			t.Fatal(err)
+		}
+		return mr
+	}
+
+	cases := map[string]string{
+		"REQUESTED_CHANGES": reviewStateChangesRequested,
+		"REVIEWED":          reviewStateReviewed,
+		"APPROVED":          reviewStateApproved,
+		"REVIEW_STARTED":    "", // pending — item stays review_requested
+		"UNREVIEWED":        "",
+	}
+	for glState, want := range cases {
+		if pl := applyGraphQL(sdk.ItemObservedPayload{}, reviewers(glState), "octocat"); pl.MyReviewState != want {
+			t.Errorf("reviewState %s: MyReviewState = %q, want %q", glState, pl.MyReviewState, want)
+		}
+	}
+
+	// A draft suppresses the derived state.
+	draft := applyGraphQL(sdk.ItemObservedPayload{Draft: true}, reviewers("REQUESTED_CHANGES"), "octocat")
+	if draft.MyReviewState != "" {
+		t.Errorf("MyReviewState = %q, want empty on a draft (suppressed)", draft.MyReviewState)
+	}
+}
+
 func TestApplyGraphQLReviewDecision(t *testing.T) {
 	var changes glGraphQLMR
 	if err := json.Unmarshal([]byte(

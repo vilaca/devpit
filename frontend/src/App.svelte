@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { SvelteURLSearchParams } from "svelte/reactivity";
   import { dashboard } from "./lib/dashboard.svelte";
   import type { Filter, AttentionItem } from "./lib/types";
   import { matchesFilter, visibleBuckets } from "./lib/buckets";
@@ -24,7 +25,7 @@
   }
 
   function writeUrl(state: { bucket: Filter | null; log: boolean; logConn: string | null }) {
-    const p = new URLSearchParams();
+    const p = new SvelteURLSearchParams();
     if (state.bucket) p.set("bucket", state.bucket);
     if (state.log) p.set("log", "1");
     if (state.log && state.logConn) p.set("logconn", state.logConn);
@@ -183,8 +184,8 @@
         connections={dashboard.connections}
         activeFilter={activeBucket}
         {focusedId}
-        onToggleFlag={(item) => void dashboard.toggleFlag(item)}
-        onFocus={(id) => { focusedId = id; }}
+        onToggleFlag={(item: AttentionItem) => void dashboard.toggleFlag(item)}
+        onFocus={(id: string) => { focusedId = id; }}
       />
     {/if}
   </main>
@@ -232,7 +233,7 @@
     connections={dashboard.connections}
     filterConnectionId={logConnFilter}
     onClose={closeLog}
-    onFilterChange={(id) => { logConnFilter = id; }}
+    onFilterChange={(id: string | null) => { logConnFilter = id; }}
   />
 {/if}
 

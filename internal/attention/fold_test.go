@@ -105,13 +105,24 @@ func TestFoldStateConditions(t *testing.T) {
 			want: []State{StateReadyToMerge},
 		},
 		{
-			name: "waiting on author",
+			name: "reviewer approved: review_submitted only (muted, hidden)",
+			facts: func(f sdk.ItemObservedPayload) sdk.ItemObservedPayload {
+				f.MyRoles = []string{"reviewer"}
+				f.MyReviewState = "approved"
+				return f
+			},
+			want: []State{StateReviewSubmitted},
+		},
+		{
+			name: "reviewer requested changes: changes_requested chip rides with review_submitted",
 			facts: func(f sdk.ItemObservedPayload) sdk.ItemObservedPayload {
 				f.MyRoles = []string{"reviewer"}
 				f.MyReviewState = "changes_requested"
 				return f
 			},
-			want: []State{StateReviewSubmitted},
+			// changes_requested (#1) leads; review_submitted (#9) still computed.
+			// The chip is what the muted row surfaces (see TestReviewerChangesRequestedIsMutedButChipped).
+			want: []State{StateChangesRequested, StateReviewSubmitted},
 		},
 		{
 			name: "draft author is neither blocked nor ready but still shows",
@@ -764,6 +775,27 @@ func TestAuthorNeverMuted(t *testing.T) {
 	}
 	if items[0].Muted {
 		t.Error("an authored item must never be muted")
+	}
+}
+
+func TestReviewerChangesRequestedIsMutedButChipped(t *testing.T) {
+	// A reviewer who requested changes stays muted (ball is with the author), but
+	// unlike an approve/comment the changes_requested chip rides along so the dim
+	// row says why it's dim and that the user is the one blocking it. The frontend
+	// filters the muted row down to this chip; the fold's job is to (a) mute and
+	// (b) include changes_requested in States.
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "changes_requested"
+	items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if !items[0].Muted {
+		t.Error("reviewer-side changes_requested item should be muted (ball with author)")
+	}
+	if len(items[0].States) == 0 || items[0].States[0] != StateChangesRequested {
+		t.Errorf("states = %v, want changes_requested leading", items[0].States)
 	}
 }
 

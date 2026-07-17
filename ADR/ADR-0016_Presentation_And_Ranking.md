@@ -62,7 +62,7 @@ are the `State` constants and their wire strings
 
 | # | wire value | label | condition |
 |---|---|---|---|
-| 1 | `changes_requested` | Changes Requested | `roles[author] && ReviewDecision == "changes_requested"` |
+| 1 | `changes_requested` | Changes Requested | `(roles[author] && ReviewDecision == "changes_requested") \|\| (roles[reviewer] && MyReviewState == "changes_requested")` |
 | 2 | `review_requested`  | Review Requested  | `(roles[reviewer] && MyReviewState == "requested") \|\| (roles[sole_approver] && !Draft && !reviewIsDone(MyReviewState))` |
 | 3 | `blocked`           | Blocked           | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "blocked"` |
 | 4 | `mentioned`         | Mentioned         | `hasMention` |
@@ -158,7 +158,8 @@ legible from the chips; it no longer reorders the tier.
 An item where you are a **reviewer** (and not the author) and your review has
 been submitted — `reviewIsDone(MyReviewState)` — has nothing left for *you* to
 do. Such items are **muted** (`muted: true`): the row renders de-emphasized and
-suppresses its signal chips. Muting is now a **display cue only — it does not
+suppresses its signal chips (one exception — a reviewer-side `changes_requested`
+verdict still shows its chip; see the 2026-07-17 amendment). Muting is now a **display cue only — it does not
 move the item**. An earlier revision demoted muted items (first to the very
 bottom, then to a band just above stale); both are superseded. A muted item
 sorts in its natural age tier by recency like everything else: an MR you approved
@@ -253,6 +254,26 @@ ranking reflects when the verdict actually occurred:
 
 Both providers implement draft suppression and emit signals via the
 `sdk.SignalApprovedPayload` / `sdk.SignalChangesRequestedPayload` types.
+
+#### Reviewer-side `changes_requested` escapes the mute (2026-07-17)
+
+The `changes_requested` chip (#1) now fires reviewer-side too: its condition ORs
+`roles[reviewer] && MyReviewState == "changes_requested"` onto the author-side
+clause (the two are mutually exclusive — no one is author and reviewer of one
+item). A reviewer who requested changes was previously indistinguishable from one
+who approved or commented — all three are `reviewIsDone`, so the row was muted and
+chipless, hiding *why* it was dim and that the user is the one blocking it.
+
+This is the **sole exception** to "muting suppresses signal chips": a muted row
+renders the `changes_requested` chip alone (all other chips, the draft/marker
+badges and the stale tag stay suppressed — the frontend's `StateTags` self-filters
+on `muted`). The item stays muted and its ranking is unchanged — this is a
+visibility fix, not a promotion. It is a **pure read-layer + frontend** change: the
+`MyReviewState == "changes_requested"` fact was already populated on both
+providers (GitHub `latestReviews`, GitLab own reviewer `reviewState`), and it
+clears itself when the provider drops the verdict (e.g. the author re-requests
+review), needing no dismissal state. `review_submitted` (#9) still fires for the
+approved/commented reviewed-done cases (computed, hidden by the mute).
 
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 

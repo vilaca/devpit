@@ -79,7 +79,12 @@ func statesFor(f sdk.ItemObservedPayload, hasMention bool) []State {
 func matches(s State, f sdk.ItemObservedPayload, roles map[string]bool, hasMention bool) bool {
 	switch s {
 	case StateChangesRequested:
-		return roles[roleAuthor] && f.ReviewDecision == decisionChangesRequested
+		// Author-side: a reviewer requested changes on my MR (bright, actionable).
+		// Reviewer-side: I requested changes on someone's MR (muted row — I asked,
+		// ball is with the author). Same chip; row brightness conveys whose court.
+		// The two clauses are mutually exclusive (can't be author+reviewer of one MR).
+		return (roles[roleAuthor] && f.ReviewDecision == decisionChangesRequested) ||
+			(roles[roleReviewer] && f.MyReviewState == reviewStateChangesRequested)
 	case StateReviewRequested:
 		return (roles[roleReviewer] && f.MyReviewState == reviewStateRequested) ||
 			(roles[roleSoleApprover] && !f.Draft && !reviewIsDone(f.MyReviewState))

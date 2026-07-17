@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +16,8 @@ import (
 )
 
 const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
-	`{pullRequest(number:%d){reviewDecision latestReviews{nodes{state author{login}}} autoMergeRequest{enabledAt}}}`
+	`{pullRequest(number:%d){reviewDecision ` +
+	`latestReviews{nodes{state submittedAt author{login}}} autoMergeRequest{enabledAt}}}`
 
 const (
 	ghReviewStateApproved = "APPROVED"
@@ -24,6 +26,13 @@ const (
 	ghChangesRequested         = "CHANGES_REQUESTED"
 	ghReviewRequired           = "REVIEW_REQUIRED"
 	normalizedChangesRequested = "changes_requested"
+)
+
+// Rank-advancing review-verdict signal event types (duplicated from the GitLab
+// provider on purpose — providers share no helpers, ADR-0003).
+const (
+	signalApproved         = "signal.approved"
+	signalChangesRequested = "signal.changes_requested"
 )
 
 type prItem struct {
@@ -40,6 +49,7 @@ type ghResult struct {
 	approvalsCount int
 	autoMergeArmed bool
 	myReviewState  string
+	verdictSigs    []sdk.Event // verdict signals to append after the enriched events
 }
 
 type ghPRNode struct {
@@ -51,8 +61,9 @@ type ghPRNode struct {
 		ReviewDecision string `json:"reviewDecision"`
 		LatestReviews  struct {
 			Nodes []struct {
-				State  string `json:"state"`
-				Author struct {
+				State       string `json:"state"`
+				SubmittedAt string `json:"submittedAt"`
+				Author      struct {
 					Login string `json:"login"`
 				} `json:"author"`
 			} `json:"nodes"`
@@ -89,6 +100,8 @@ func mergeGHBatchResults(
 		}
 		count := 0
 		var myReviewState string
+		var verdictSigs []sdk.Event
+		nativeID := it.owner + "/" + it.repo + "#" + strconv.Itoa(it.number)
 		for _, r := range node.PullRequest.LatestReviews.Nodes {
 			if r.State == ghReviewStateApproved {
 				count++
@@ -96,10 +109,42 @@ func mergeGHBatchResults(
 			if r.Author.Login == handle {
 				myReviewState = ghReviewState(r.State)
 			}
+			// Emit verdict signals for non-draft PRs with a real provider timestamp.
+			// COMMENTED and DISMISSED states carry no verdict ranking signal.
+			// Skip nodes without a parsable submittedAt — never fall back to our clock.
+			if !it.draft && r.SubmittedAt != "" {
+				t := parseTime(r.SubmittedAt)
+				if t == nil {
+					continue
+				}
+				switch r.State {
+				case ghReviewStateApproved:
+					verdictSigs = append(verdictSigs, sdk.Event{
+						ObjectType: objectType,
+						NativeID:   nativeID,
+						EventType:  signalApproved,
+						OccurredAt: t,
+						Actor:      r.Author.Login,
+						DedupeKey:  signalApproved + ":review:" + r.Author.Login + ":" + r.SubmittedAt,
+						Payload:    sdk.SignalApprovedPayload{Approver: r.Author.Login},
+					})
+				case ghChangesRequested:
+					verdictSigs = append(verdictSigs, sdk.Event{
+						ObjectType: objectType,
+						NativeID:   nativeID,
+						EventType:  signalChangesRequested,
+						OccurredAt: t,
+						Actor:      r.Author.Login,
+						DedupeKey:  signalChangesRequested + ":review:" + r.Author.Login + ":" + r.SubmittedAt,
+						Payload:    sdk.SignalChangesRequestedPayload{Reviewer: r.Author.Login},
+					})
+				}
+			}
 		}
 		results[it.evIdx] = ghResult{
 			node.PullRequest.ReviewDecision, count,
 			node.PullRequest.AutoMergeRequest != nil, myReviewState,
+			verdictSigs,
 		}
 	}
 	return degraded
@@ -323,10 +368,11 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 		evIdxToRepo[it.evIdx] = it.owner + "/" + it.repo
 	}
 
-	out := make([]sdk.Event, len(events))
-	copy(out, events)
+	enriched := make([]sdk.Event, len(events))
+	copy(enriched, events)
+	var verdicts []sdk.Event
 	for evIdx, r := range results {
-		ev := out[evIdx]
+		ev := enriched[evIdx]
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 		if !ok {
 			continue
@@ -351,8 +397,21 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
-		out[evIdx] = ev
+		enriched[evIdx] = ev
+
+		// Verdict signals ride after all input events (ADR-0024). Only emit for open
+		// non-draft PRs; r.verdictSigs is already filtered to non-draft in mergeGHBatchResults.
+		if pl.State == stateOpen {
+			verdicts = append(verdicts, r.verdictSigs...)
+		}
 	}
+
+	// Verdict signals ride after the enriched item.observed events, which keep
+	// their positions — the reconcile reap derives its swept set regardless of
+	// order, preserving the no-drop/no-reorder invariant (ADR-0024).
+	out := make([]sdk.Event, 0, len(enriched)+len(verdicts))
+	out = append(out, enriched...)
+	out = append(out, verdicts...)
 	return out, degraded, nil
 }
 

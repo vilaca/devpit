@@ -13,7 +13,7 @@ import (
 // tiered cadence is a property of the design, not something a user tunes.
 const (
 	defaultFastEvery    = 60 * time.Second
-	defaultReconEvery   = 15 * time.Minute
+	defaultReconEvery   = 3 * time.Minute
 	defaultCloseTimeout = 10 * time.Second
 )
 

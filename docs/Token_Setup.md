@@ -23,7 +23,7 @@ comes only from that feed, so the two token kinds are not equivalent:
 | | Classic PAT | Fine-grained PAT |
 |---|---|---|
 | Fast signals (mentions, review requests, CI) | ✓ via the notifications feed | ✗ not available |
-| Item discovery (authored / reviewing / assigned) | ✓ | ✓ — 15-minute reconcile only |
+| Item discovery (authored / reviewing / assigned) | ✓ | ✓ — 3-minute reconcile only |
 | Merge gate + diagnostic badges | ✓ | ✓ |
 | Read-only (no write access) | ✓ public-only (`notifications` alone); ✗ private repos need `repo`, which grants write | ✓ always |
 

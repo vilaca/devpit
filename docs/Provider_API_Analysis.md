@@ -72,7 +72,7 @@ absorbs easily.
 > token-driven capability degradation are **not yet implemented**. `FastPoll`
 > polls `/notifications` unconditionally and GitHub mention signals arrive only
 > from it, so a fine-grained PAT loses the fast tier and mentions entirely (only
-> the 15-minute reconcile runs). The practical token trade-off users face is in
+> the 3-minute reconcile runs). The practical token trade-off users face is in
 > `docs/Token_Setup.md`; the "recommended default" and "optional tier" framing
 > here is aspirational until the fallback lands.
 
@@ -81,7 +81,12 @@ absorbs easily.
 One GraphQL request per cycle, aliasing multiple `search()` calls
 (`type: ISSUE`), each selecting on PullRequest:
 `number, title, url, updatedAt, isDraft, mergeStateStatus,
-reviewDecision, repository { nameWithOwner }`.
+reviewDecision, latestReviews { nodes { state submittedAt author { login } } },
+repository { nameWithOwner }`. The `latestReviews` nodes (latest non-dismissed
+review per reviewer) power the rank-only `signal.approved` /
+`signal.changes_requested` verdict signals; `submittedAt` is the real provider
+timestamp used as `OccurredAt` (`docs/Event_Taxonomy_and_Storage.md`,
+`ADR/ADR-0016`).
 
 | Bucket | Search query | Post-filter |
 |--------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
@@ -193,7 +198,13 @@ author's `changes_requested` signal, and the *viewer's own* node sets
 `my_review_state` (`changes_requested` / `reviewed` / `approved`), overridden to
 `approved` when they also appear in `approvedBy`. This makes the per-MR reviewers
 endpoint above unnecessary. Pending verdicts (`UNREVIEWED`, `REVIEW_STARTED`)
-leave `my_review_state` empty so the item stays `review_requested`.
+leave `my_review_state` empty so the item stays `review_requested`. The same
+`approvedBy` nodes and `REQUESTED_CHANGES` reviewers also drive the rank-only
+`signal.approved` / `signal.changes_requested` verdict signals. GitLab has no
+verdict timestamp on `approvedBy`/`reviewState`, so on each new or changed
+verdict the provider makes one extra REST call — `GET /projects/:id/merge_requests/:iid/notes?order_by=created_at&sort=desc&per_page=100` — to find the
+system note's `created_at` (the true verdict time). See the baseline-diff logic
+in `ADR/ADR-0016` and `docs/Event_Taxonomy_and_Storage.md`.
 
 ### Merge-gate mapping (`detailed_merge_status`)
 
@@ -235,7 +246,7 @@ minimum supported GitLab version]**.
 |----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------|
 | Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items (v0.1.3) | 60s (obey `X-Poll-Interval` on GitHub) |
 | Detail fetch | included in GraphQL responses | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
-| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | 15 min |
+| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | 3 min |
 
 Cadences are proposed defaults (fixed in v0.1); the reconciliation
 sweep also self-heals anything the fast tier missed (deleted todos,

@@ -207,3 +207,20 @@ type SignalAssignedPayload struct {
 type SignalCIFailedPayload struct {
 	CheckName string `json:"check_name,omitempty"`
 }
+
+// SignalApprovedPayload is the payload for event_type "signal.approved" — a
+// reviewer's approval verdict on the item. Rank-only: it advances the item's
+// ranking timestamp (docs/Attention_Engine.md) so a fresh approval resurfaces
+// the item, but it adds no chip.
+type SignalApprovedPayload struct {
+	Approver string `json:"approver,omitempty"`
+}
+
+// SignalChangesRequestedPayload is the payload for event_type
+// "signal.changes_requested" — a reviewer's requested-changes verdict on the
+// item. Rank-only: like SignalApprovedPayload it advances the ranking timestamp
+// but adds no chip (the changes_requested chip is driven by the item.observed
+// review_decision fact, not this signal).
+type SignalChangesRequestedPayload struct {
+	Reviewer string `json:"reviewer,omitempty"`
+}

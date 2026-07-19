@@ -1,0 +1,19 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://api.github.com/user
+    headers:
+      Authorization:
+      - token test-token
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {"login":"octocat","name":"The Octocat"}

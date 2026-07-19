@@ -1,0 +1,77 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/merge_requests?scope=assigned&state=opened
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+      Ratelimit-Remaining:
+      - "1990"
+    body: |
+      [
+        {
+          "iid": 7,
+          "project_id": 12,
+          "title": "Fix flaky sync test",
+          "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
+          "state": "opened",
+          "draft": false,
+          "detailed_merge_status": "mergeable",
+          "updated_at": "2026-07-08T09:14:02Z",
+          "author": {"username": "jdoe"},
+          "assignees": [{"username": "octocat"}],
+          "reviewers": [],
+          "references": {"full": "acme/api!7"}
+        }
+      ]
+- id: 1
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/merge_requests?scope=created&state=opened
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      [
+        {
+          "iid": 7,
+          "project_id": 12,
+          "title": "Fix flaky sync test",
+          "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
+          "state": "opened",
+          "draft": false,
+          "detailed_merge_status": "mergeable",
+          "updated_at": "2026-07-08T09:14:02Z",
+          "author": {"username": "octocat"},
+          "assignees": [],
+          "reviewers": [],
+          "references": {"full": "acme/api!7"}
+        },
+        {
+          "iid": 8,
+          "project_id": 12,
+          "title": "Another MR",
+          "web_url": "https://gitlab.com/acme/api/-/merge_requests/8",
+          "state": "opened",
+          "draft": true,
+          "detailed_merge_status": "draft_status",
+          "updated_at": "2026-07-08T08:00:00Z",
+          "author": {"username": "octocat"},
+          "assignees": [],
+          "reviewers": [],
+          "references": {"full": "acme/api!8"}
+        }
+      ]

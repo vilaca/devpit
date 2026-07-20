@@ -31,6 +31,7 @@ type ConnectionMeta struct {
 type Server struct {
 	db         *storage.DB
 	mux        *http.ServeMux
+	hub        *hub
 	conns      []ConnectionMeta
 	connByID   map[string]ConnectionMeta
 	staleThres time.Duration
@@ -42,6 +43,7 @@ func New(db *storage.DB, connections []ConnectionMeta, staleThreshold time.Durat
 	s := &Server{
 		db:         db,
 		mux:        http.NewServeMux(),
+		hub:        newHub(),
 		conns:      connections,
 		connByID:   make(map[string]ConnectionMeta, len(connections)),
 		staleThres: staleThreshold,
@@ -50,6 +52,7 @@ func New(db *storage.DB, connections []ConnectionMeta, staleThreshold time.Durat
 		s.connByID[c.ID] = c
 	}
 	s.mux.HandleFunc("GET /attention", s.handleAttention)
+	s.mux.HandleFunc("GET /events", s.handleEvents)
 	s.mux.HandleFunc("GET /connections", s.handleConnections)
 	s.mux.HandleFunc("GET /sync-log", s.handleSyncLog)
 	s.mux.HandleFunc("PUT /items/{id}/flag", s.handleFlagSet)

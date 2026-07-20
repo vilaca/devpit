@@ -36,6 +36,6 @@ semantics, and keeps token scopes read-only
 
 - Least-privilege read-only tokens are sufficient; a leaked token cannot write.
 - The flag lives in `handle_next` (see `internal/storage`); the flag REST
-  endpoints are specified in `docs/REST_API.md` (Planned).
+  endpoints are specified in `docs/REST_API.md` and implemented in `internal/api`.
 - Provider write actions (approve, comment) are out of scope; if added later
   they become an explicit, opt-in capability, not a default.

@@ -6,8 +6,8 @@ Accepted (supersedes the earlier WebSocket choice)
 
 ## Scope
 
-**Planned** — the REST surface and SSE stream are designed but not yet built
-(`internal/api` is a stub). See `docs/Roadmap.md`.
+**Implemented** — the REST surface and SSE stream are built in `internal/api`
+and wired up in `cmd/devpit`. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -32,7 +32,8 @@ avoids bidirectional-channel complexity.
 
 - Supersedes the earlier WebSocket choice.
 - The REST surface and SSE event set are specified in `docs/REST_API.md`
-  (which includes the SSE stream); both are **Planned**, not implemented.
+  (which includes the SSE stream); both are **Implemented (v0.1)** in
+  `internal/api`.
 - The SSE events feed the health indicators and sync-log view
   (`ADR/ADR-0018_Sync_Observability.md`) and the live attention list
   (`ADR/ADR-0016_Presentation_And_Ranking.md`).

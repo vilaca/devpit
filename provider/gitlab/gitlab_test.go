@@ -78,7 +78,10 @@ func TestFastPoll(t *testing.T) {
 			if e.NativeID != "acme/api!7" {
 				t.Errorf("native id = %q", e.NativeID)
 			}
-			pl := e.Payload.(sdk.ItemObservedPayload)
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatalf("item.observed payload has unexpected type %T", e.Payload)
+			}
 			if pl.Gate != "blocked" {
 				t.Errorf("gate = %q, want blocked", pl.Gate)
 			}

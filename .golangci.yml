@@ -1,0 +1,78 @@
+version: "2"
+
+# Maximal linter set: enable everything golangci-lint ships, then carve out
+# only the linters that are actively counter-productive for this codebase.
+# depguard is configured below to enforce the provider plugin boundary; the
+# full component dependency graph is enforced separately by go-arch-lint
+# (.go-arch-lint.yml).
+linters:
+  default: all
+  disable:
+    # Opinionated style/formatting linters we deliberately don't enforce. Kept
+    # off so a lint failure always signals a real correctness/quality issue.
+    - wsl # blank-line "cuddle" rules
+    - wsl_v5 # newer wsl; same objection
+    - nlreturn # blank line before every return
+    - varnamelen # rejects short names like i, db, tx, ok
+    - exhaustruct # every struct literal must set every field
+    - paralleltest # requires t.Parallel() in every test
+    - tagliatelle # dictates struct-tag casing
+    - err113 # forbids dynamic fmt.Errorf / errors.New
+    - wrapcheck # wrap every error crossing a boundary
+    - nonamedreturns # we use named returns intentionally (e.g. dsns)
+    - gochecknoglobals # package-level vars are used deliberately
+    - gochecknoinits # provider registration uses init()
+    - mnd # magic-number detector; too many false positives
+    - testpackage # forces _test external test packages
+    - noinlineerr # forbids `if err := ...; err != nil`
+    - cyclop # cyclomatic complexity threshold; noisy on parsers
+    - funlen # function-length threshold; same objection as cyclop
+    - gomodguard # deprecated alias; gomodguard_v2 stays enabled via default:all
+    # False positives against deliberate patterns in this codebase:
+    - contextcheck # engine logs outcomes on a detached ctx by design (writeLog),
+    # so a shutdown mid-cycle still records — passing the cancelled request ctx
+    # would defeat that.
+    - bodyclose # providers close bodies inside the do()/decodeJSON helper pair,
+    # which the linter can't trace, so every call site false-positives.
+
+  settings:
+    depguard:
+      rules:
+        # The sdk is the public provider contract. It must not reach inward
+        # into application internals or concrete providers.
+        sdk:
+          list-mode: lax
+          files:
+            - "**/sdk/**"
+          deny:
+            - pkg: github.com/vilaca/devpit/internal
+              desc: "sdk is the public provider contract; it must not depend on internal packages"
+            - pkg: github.com/vilaca/devpit/provider
+              desc: "sdk must not depend on concrete providers"
+        # Providers are plugins: they consume the sdk only, never application
+        # internals, and never each other.
+        providers:
+          list-mode: lax
+          files:
+            - "**/provider/**"
+          deny:
+            - pkg: github.com/vilaca/devpit/internal
+              desc: "providers are plugins; use the sdk, not internal packages"
+            - pkg: github.com/vilaca/devpit/provider
+              desc: "providers must not import each other"
+
+  exclusions:
+    rules:
+      # Tests may use dot-imports, magic numbers, and looser error handling.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - dupl
+          - gosec
+          - goconst # repeated literals in tests are fine
+          - nilnil # test helpers may return (nil, nil)
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -2,8 +2,8 @@ package github
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"time"
 
@@ -24,14 +24,14 @@ var reconcileScopes = []searchScope{
 	{"author", "author"},
 }
 
+// Reconcile implements sdk.Provider: it does the full search-based sweep of the
+// user's involved pull requests and emits item.observed snapshots.
 func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
 	if state == nil {
 		state = sdk.PollState{}
 	}
 	out := sdk.PollState{}
-	for k, v := range state {
-		out[k] = v
-	}
+	maps.Copy(out, state)
 
 	updatedFilter := ""
 	if ua := state[cursorRecUpdatedAfter]; ua != "" {
@@ -54,11 +54,6 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 		q := fmt.Sprintf("is:pr is:open %s:%s%s", sc.qualifier, p.handle, updatedFilter)
 		res, r, err := p.search(ctx, q)
 		if err != nil {
-			var re *rateError
-			if errors.As(err, &re) {
-				out[cursorFastRetryAfter] = re.retryAfter
-				return sdk.PollResult{Events: events, State: out}, err
-			}
 			return sdk.PollResult{}, err
 		}
 		if r != nil {
@@ -105,7 +100,7 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 
 func (p *Provider) search(ctx context.Context, q string) (*ghSearchResult, *int, error) {
 	u := p.apiBase + "/search/issues?q=" + url.QueryEscape(q)
-	resp, err := p.do(ctx, "GET", u, nil)
+	resp, err := p.do(ctx, u, nil)
 	if err != nil {
 		return nil, nil, err
 	}

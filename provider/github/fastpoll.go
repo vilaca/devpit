@@ -2,8 +2,8 @@ package github
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 
 	"github.com/vilaca/devpit/sdk"
@@ -12,17 +12,16 @@ import (
 const (
 	cursorFastLastModified = "gh.fast.last_modified"
 	cursorFastETag         = "gh.fast.etag"
-	cursorFastRetryAfter   = "gh.fast.retry_after"
 )
 
+// FastPoll implements sdk.Provider: it polls the notifications feed with a
+// conditional request and emits fast signals for the current user.
 func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
 	if state == nil {
 		state = sdk.PollState{}
 	}
 	out := sdk.PollState{}
-	for k, v := range state {
-		out[k] = v
-	}
+	maps.Copy(out, state)
 
 	hdr := http.Header{}
 	if lm := state[cursorFastLastModified]; lm != "" {
@@ -32,13 +31,8 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		hdr.Set("If-None-Match", et)
 	}
 
-	resp, err := p.do(ctx, "GET", p.apiBase+"/notifications", hdr)
+	resp, err := p.do(ctx, p.apiBase+"/notifications", hdr)
 	if err != nil {
-		var re *rateError
-		if errors.As(err, &re) {
-			out[cursorFastRetryAfter] = re.retryAfter
-			return sdk.PollResult{State: out}, err
-		}
 		return sdk.PollResult{}, err
 	}
 
@@ -71,11 +65,6 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		}
 		pr, err := p.fetchPull(ctx, owner, repo, number)
 		if err != nil {
-			var re *rateError
-			if errors.As(err, &re) {
-				out[cursorFastRetryAfter] = re.retryAfter
-				return sdk.PollResult{Events: events, State: out}, err
-			}
 			return sdk.PollResult{}, err
 		}
 		obs := p.observedFromPull(*pr)
@@ -93,7 +82,7 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 
 func (p *Provider) fetchPull(ctx context.Context, owner, repo string, number int) (*ghPull, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/pulls/%d", p.apiBase, owner, repo, number)
-	resp, err := p.do(ctx, "GET", url, nil)
+	resp, err := p.do(ctx, url, nil)
 	if err != nil {
 		return nil, err
 	}

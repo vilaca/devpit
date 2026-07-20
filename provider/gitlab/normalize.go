@@ -13,6 +13,9 @@ import (
 
 const objectType = "merge_request"
 
+// eventItemObserved is the event_type for a periodic item snapshot (taxonomy §1).
+const eventItemObserved = "item.observed"
+
 // mergeGate maps detailed_merge_status to the normalized gate class.
 // Transient/draft statuses map to "unknown"; the fold carries the last known
 // gate forward so transient reads don't flap buckets (taxonomy §2).
@@ -37,7 +40,7 @@ func nativeID(mr glMergeRequest) string {
 }
 
 func repoFromRef(full string) string {
-	for i := 0; i < len(full); i++ {
+	for i := range len(full) {
 		if full[i] == '!' {
 			return full[:i]
 		}
@@ -102,7 +105,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 	return sdk.Event{
 		ObjectType: objectType,
 		NativeID:   nativeID(mr),
-		EventType:  "item.observed",
+		EventType:  eventItemObserved,
 		OccurredAt: parseTime(mr.UpdatedAt),
 		Actor:      mr.Author.Username,
 		DedupeKey:  observedDedupeKey(payload),
@@ -111,7 +114,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 }
 
 func observedDedupeKey(p sdk.ItemObservedPayload) string {
-	b, _ := json.Marshal(p)
+	b, _ := json.Marshal(p) //nolint:errchkjson // payload is JSON-safe (scalar fields only); Marshal cannot fail here
 	sum := sha256.Sum256(b)
 	return "item.observed:" + hex.EncodeToString(sum[:])
 }

@@ -2,27 +2,24 @@ package gitlab
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"time"
 
 	"github.com/vilaca/devpit/sdk"
 )
 
-const (
-	cursorFastUpdatedAfter = "gl.fast.updated_after"
-	cursorFastRetryAfter   = "gl.fast.retry_after"
-)
+const cursorFastUpdatedAfter = "gl.fast.updated_after"
 
+// FastPoll implements sdk.Provider: it polls the pending todos feed and emits
+// fast signals for the current user.
 func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
 	if state == nil {
 		state = sdk.PollState{}
 	}
 	out := sdk.PollState{}
-	for k, v := range state {
-		out[k] = v
-	}
+	maps.Copy(out, state)
 
 	// Watermark is set to now at the end of the cycle; the cursor advance is
 	// unconditional (no 304 on GitLab).
@@ -32,13 +29,8 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 	if ua := state[cursorFastUpdatedAfter]; ua != "" {
 		u += "&updated_after=" + url.QueryEscape(ua)
 	}
-	resp, err := p.do(ctx, "GET", u)
+	resp, err := p.do(ctx, u)
 	if err != nil {
-		var re *rateError
-		if errors.As(err, &re) {
-			out[cursorFastRetryAfter] = re.retryAfter
-			return sdk.PollResult{State: out}, err
-		}
 		return sdk.PollResult{}, err
 	}
 	rate := rateRemaining(resp.Header)
@@ -53,13 +45,8 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		if t.TargetType != "MergeRequest" {
 			continue
 		}
-		mr, err := p.fetchMR(ctx, t.ProjectID, t.Target.IID)
+		mr, err := p.fetchMR(ctx, t.Project.ID, t.Target.IID)
 		if err != nil {
-			var re *rateError
-			if errors.As(err, &re) {
-				out[cursorFastRetryAfter] = re.retryAfter
-				return sdk.PollResult{Events: events, State: out}, err
-			}
 			return sdk.PollResult{}, err
 		}
 		obs := p.observedFromMR(*mr)
@@ -80,7 +67,7 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 
 func (p *Provider) fetchMR(ctx context.Context, projectID, iid int) (*glMergeRequest, error) {
 	u := fmt.Sprintf("%s/projects/%d/merge_requests/%d", p.apiBase, projectID, iid)
-	resp, err := p.do(ctx, "GET", u)
+	resp, err := p.do(ctx, u)
 	if err != nil {
 		return nil, err
 	}

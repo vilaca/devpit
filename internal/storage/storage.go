@@ -5,97 +5,131 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/vilaca/devpit/sdk"
 
+	// Register the modernc pure-Go sqlite driver for database/sql.
 	_ "modernc.org/sqlite"
 )
 
 // timeFormat is RFC 3339 UTC, matching the storage schema (§4).
 const timeFormat = time.RFC3339
 
-// DB wraps the database connection.
+// readMaxConns caps concurrent API reads (§14, Q9). A single-user app never
+// needs many; the point is only that reads run on their own pool so a long
+// reconcile write never stalls GET /attention.
+const readMaxConns = 4
+
+// DB owns two connection pools over the same SQLite database, both in WAL
+// (§4, §14, Q9): a single-writer pool (MaxOpenConns 1) the engine uses for all
+// mutations, and a read-only pool the API uses for GET queries. Splitting them
+// means a long reconcile write never blocks a read and vice versa (ADR-0007).
+// Write methods route to write; read methods route to read.
 type DB struct {
-	sql *sql.DB
+	write *sql.DB
+	read  *sql.DB
+	lock  *fileLock
 }
 
-// Open opens (or creates) the SQLite database at path, enables WAL mode,
-// and runs any pending migrations.
+// memCounter uniquely names each in-memory database so concurrent Open(":memory:")
+// calls (e.g. parallel tests) get isolated databases while the write and read
+// pools of a single Open still share one shared-cache instance.
+var memCounter atomic.Uint64
+
+// Open opens (or creates) the SQLite database at path in WAL mode, runs any
+// pending migrations, and returns a handle exposing a single-writer pool and a
+// read-only pool (§14, Q9).
 func Open(path string) (*DB, error) {
-	sqlDB, err := sql.Open("sqlite", path)
+	// Single-instance guard: refuse to open a file another devpit already owns.
+	// Two engines writing one database would clobber each other every cycle.
+	lock, err := acquireLock(path)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
-
-	// Single writer (§14); serialising through one connection also guarantees
-	// PRAGMAs below apply to every query.
-	sqlDB.SetMaxOpenConns(1)
-
-	if _, err := sqlDB.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`); err != nil {
-		_ = sqlDB.Close()
-		return nil, fmt.Errorf("enable WAL: %w", err)
-	}
-
-	db := &DB{sql: sqlDB}
-	if err := db.migrate(context.Background()); err != nil {
-		_ = sqlDB.Close()
 		return nil, err
 	}
+
+	writeDSN, readDSN := dsns(path)
+
+	write, err := sql.Open("sqlite", writeDSN)
+	if err != nil {
+		_ = lock.release()
+		return nil, fmt.Errorf("open sqlite (write): %w", err)
+	}
+	// Single writer (§14): SQLite permits one writer at a time, so serialising
+	// through one connection avoids SQLITE_BUSY on the write path entirely.
+	write.SetMaxOpenConns(1)
+
+	db := &DB{write: write, lock: lock}
+	if err := db.migrate(context.Background()); err != nil {
+		_ = write.Close()
+		_ = lock.release()
+		return nil, err
+	}
+
+	read, err := sql.Open("sqlite", readDSN)
+	if err != nil {
+		_ = write.Close()
+		_ = lock.release()
+		return nil, fmt.Errorf("open sqlite (read): %w", err)
+	}
+	read.SetMaxOpenConns(readMaxConns)
+	db.read = read
 	return db, nil
 }
 
-// Close closes the underlying database.
-func (db *DB) Close() error {
-	return db.sql.Close()
+// dsns builds the write and read DSNs for path. Both carry a busy_timeout so a
+// momentary lock waits rather than failing; the read DSN adds query_only as a
+// guard against accidental writes on the reader pool. WAL is a persisted
+// database property, so only the writer sets journal_mode. An in-memory path is
+// rewritten to a uniquely-named shared-cache DSN so the two pools observe the
+// same data (two plain ":memory:" opens would be distinct databases).
+func dsns(path string) (write, read string) {
+	if path == ":memory:" || path == "" {
+		name := fmt.Sprintf("devpit_mem_%d", memCounter.Add(1))
+		base := "file:" + name + "?mode=memory&cache=shared"
+		return base + "&_pragma=busy_timeout(5000)",
+			base + "&_pragma=busy_timeout(5000)&_pragma=query_only(true)"
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return path + sep + "_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)",
+		path + sep + "_pragma=busy_timeout(5000)&_pragma=query_only(true)"
 }
 
-func (db *DB) migrate(ctx context.Context) error {
-	if _, err := db.sql.ExecContext(ctx,
-		`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);`); err != nil {
-		return fmt.Errorf("create schema_version: %w", err)
-	}
-
-	var current int
-	err := db.sql.QueryRowContext(ctx, `SELECT version FROM schema_version LIMIT 1`).Scan(&current)
-	if err == sql.ErrNoRows {
-		if _, err := db.sql.ExecContext(ctx, `INSERT INTO schema_version (version) VALUES (0)`); err != nil {
-			return fmt.Errorf("seed schema_version: %w", err)
-		}
-		current = 0
-	} else if err != nil {
-		return fmt.Errorf("read schema_version: %w", err)
-	}
-
-	for i := current; i < len(migrations); i++ {
-		tx, err := db.sql.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("migration %d begin: %w", i+1, err)
-		}
-		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migration %d: %w", i+1, err)
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ?`, i+1); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migration %d bump version: %w", i+1, err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("migration %d commit: %w", i+1, err)
+// Close closes both pools. It returns the first error encountered but always
+// attempts to close both.
+func (db *DB) Close() error {
+	var firstErr error
+	if db.read != nil {
+		if err := db.read.Close(); err != nil {
+			firstErr = err
 		}
 	}
-	return nil
+	if db.write != nil {
+		if err := db.write.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := db.lock.release(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
 }
 
 // WriteEvents inserts events for a connection, deduplicating on
-// (connection_id, dedupe_key) via INSERT OR IGNORE. Stamps observed_at = now.
+// (connection_id, object_type, native_id, event_type, dedupe_key) via
+// INSERT OR IGNORE. Stamps observed_at = now.
 // Returns the number of newly inserted rows (for sync_log.items_changed).
 func (db *DB) WriteEvents(ctx context.Context, connectionID string, events []sdk.Event) (int, error) {
 	if len(events) == 0 {
 		return 0, nil
 	}
 
-	tx, err := db.sql.BeginTx(ctx, nil)
+	tx, err := db.write.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("write events begin: %w", err)
 	}
@@ -160,7 +194,7 @@ func marshalPayload(payload any) (string, error) {
 // LoadCursors loads all cursor key/value pairs for a connection.
 // Returns an empty (non-nil) map if none exist.
 func (db *DB) LoadCursors(ctx context.Context, connectionID string) (sdk.PollState, error) {
-	rows, err := db.sql.QueryContext(ctx,
+	rows, err := db.read.QueryContext(ctx,
 		`SELECT key, value FROM sync_cursors WHERE connection_id = ?`, connectionID)
 	if err != nil {
 		return nil, fmt.Errorf("load cursors: %w", err)
@@ -187,7 +221,7 @@ func (db *DB) SaveCursors(ctx context.Context, connectionID string, state sdk.Po
 		return nil
 	}
 
-	tx, err := db.sql.BeginTx(ctx, nil)
+	tx, err := db.write.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("save cursors begin: %w", err)
 	}
@@ -236,7 +270,7 @@ func (db *DB) WriteSyncLog(ctx context.Context, entry SyncLogEntry) error {
 		nextRetry = entry.NextRetry.UTC().Format(timeFormat)
 	}
 
-	_, err := db.sql.ExecContext(ctx, `
+	_, err := db.write.ExecContext(ctx, `
 		INSERT INTO sync_log
 			(ts, connection_id, operation, outcome, http_status,
 			 items_changed, rate_remaining, retries, next_retry, error)
@@ -264,7 +298,7 @@ func (db *DB) ReadSyncLog(ctx context.Context, connectionID string, limit int) (
 	query += ` ORDER BY id DESC LIMIT ?`
 	args = append(args, limit)
 
-	rows, err := db.sql.QueryContext(ctx, query, args...)
+	rows, err := db.read.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read sync_log: %w", err)
 	}
@@ -340,7 +374,7 @@ func (db *DB) ReadEvents(ctx context.Context, connectionID string, since time.Ti
 	}
 	query += ` ORDER BY id ASC`
 
-	rows, err := db.sql.QueryContext(ctx, query, args...)
+	rows, err := db.read.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read events: %w", err)
 	}
@@ -382,14 +416,14 @@ func (db *DB) ReadEvents(ctx context.Context, connectionID string, since time.Ti
 // SetHandleNext sets or clears the "handle next" flag for an item.
 func (db *DB) SetHandleNext(ctx context.Context, itemID string, flagged bool) error {
 	if !flagged {
-		if _, err := db.sql.ExecContext(ctx,
+		if _, err := db.write.ExecContext(ctx,
 			`DELETE FROM handle_next WHERE item_id = ?`, itemID); err != nil {
 			return fmt.Errorf("clear handle_next: %w", err)
 		}
 		return nil
 	}
 	// Keep the original flagged_at on re-flag so pin ordering is stable.
-	if _, err := db.sql.ExecContext(ctx,
+	if _, err := db.write.ExecContext(ctx,
 		`INSERT OR IGNORE INTO handle_next (item_id, flagged_at) VALUES (?, ?)`,
 		itemID, time.Now().UTC().Format(timeFormat)); err != nil {
 		return fmt.Errorf("set handle_next: %w", err)
@@ -399,7 +433,7 @@ func (db *DB) SetHandleNext(ctx context.Context, itemID string, flagged bool) er
 
 // ListHandleNext returns all flagged item IDs, ordered by flagged_at ascending.
 func (db *DB) ListHandleNext(ctx context.Context) ([]string, error) {
-	rows, err := db.sql.QueryContext(ctx,
+	rows, err := db.read.QueryContext(ctx,
 		`SELECT item_id FROM handle_next ORDER BY flagged_at ASC, item_id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list handle_next: %w", err)
@@ -418,6 +452,46 @@ func (db *DB) ListHandleNext(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("list handle_next: %w", err)
 	}
 	return ids, nil
+}
+
+// migrate brings the database schema up to the latest version by applying any
+// pending entries in migrations, one transaction each, and bumping
+// schema_version. It is idempotent: already-applied migrations are skipped.
+func (db *DB) migrate(ctx context.Context) error {
+	if _, err := db.write.ExecContext(ctx,
+		`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);`); err != nil {
+		return fmt.Errorf("create schema_version: %w", err)
+	}
+
+	var current int
+	err := db.write.QueryRowContext(ctx, `SELECT version FROM schema_version LIMIT 1`).Scan(&current)
+	if err == sql.ErrNoRows {
+		if _, err := db.write.ExecContext(ctx, `INSERT INTO schema_version (version) VALUES (0)`); err != nil {
+			return fmt.Errorf("seed schema_version: %w", err)
+		}
+		current = 0
+	} else if err != nil {
+		return fmt.Errorf("read schema_version: %w", err)
+	}
+
+	for i := current; i < len(migrations); i++ {
+		tx, err := db.write.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("migration %d begin: %w", i+1, err)
+		}
+		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ?`, i+1); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("migration %d bump version: %w", i+1, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("migration %d commit: %w", i+1, err)
+		}
+	}
+	return nil
 }
 
 func parseTime(s string) (time.Time, error) {

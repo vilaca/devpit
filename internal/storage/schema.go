@@ -14,7 +14,7 @@ var migrations = []string{
 		dedupe_key    TEXT NOT NULL,
 		payload       TEXT NOT NULL,
 		observed_at   TEXT NOT NULL,
-		UNIQUE (connection_id, dedupe_key)
+		UNIQUE (connection_id, object_type, native_id, event_type, dedupe_key)
 	);
 	CREATE INDEX events_by_item ON events
 		(connection_id, object_type, native_id, id);

@@ -18,14 +18,10 @@ func openTest(t *testing.T) *DB {
 	return db
 }
 
-func ptrInt(v int) *int              { return &v }
-func ptrStr(v string) *string        { return &v }
-func ptrTime(v time.Time) *time.Time { return &v }
-
 func TestWALMode(t *testing.T) {
 	db := openTest(t)
 	var mode string
-	if err := db.sql.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil {
+	if err := db.write.QueryRowContext(context.Background(), `PRAGMA journal_mode`).Scan(&mode); err != nil {
 		t.Fatalf("query journal_mode: %v", err)
 	}
 	// :memory: databases report "memory"; a WAL request on file DBs reports "wal".
@@ -37,7 +33,7 @@ func TestWALMode(t *testing.T) {
 	}
 	defer func() { _ = fdb.Close() }()
 	var fmode string
-	if err := fdb.sql.QueryRow(`PRAGMA journal_mode`).Scan(&fmode); err != nil {
+	if err := fdb.write.QueryRowContext(context.Background(), `PRAGMA journal_mode`).Scan(&fmode); err != nil {
 		t.Fatalf("query file journal_mode: %v", err)
 	}
 	if fmode != "wal" {
@@ -61,12 +57,36 @@ func TestMigrationIdempotent(t *testing.T) {
 	defer func() { _ = db2.Close() }()
 
 	var version int
-	if err := db2.sql.QueryRow(`SELECT version FROM schema_version`).Scan(&version); err != nil {
+	if err := db2.write.QueryRowContext(t.Context(), `SELECT version FROM schema_version`).Scan(&version); err != nil {
 		t.Fatalf("read version: %v", err)
 	}
 	if version != len(migrations) {
 		t.Errorf("version = %d, want %d", version, len(migrations))
 	}
+}
+
+func TestOpenRejectsSecondInstance(t *testing.T) {
+	path := t.TempDir() + "/devpit.db"
+	db1, err := Open(path)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	defer func() { _ = db1.Close() }()
+
+	// A second Open on the same path, while the first is still open, must fail:
+	// two devpit instances on one database is not a supported mode.
+	if db2, err := Open(path); err == nil {
+		_ = db2.Close()
+		t.Fatal("second Open succeeded; want single-instance guard to reject it")
+	}
+
+	// After the first closes, the lock is released and reopening works.
+	_ = db1.Close()
+	db3, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen after close: %v", err)
+	}
+	_ = db3.Close()
 }
 
 func TestWriteEventsDedup(t *testing.T) {
@@ -119,6 +139,52 @@ func TestWriteEventsDedup(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("other-conn insert count = %d, want 1", n)
+	}
+}
+
+func TestWriteEventsUniqueAcrossEventType(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+
+	// Same connection + dedupe_key, but different object_type/native_id/event_type
+	// must be distinct rows under the 5-column UNIQUE (§11 step 5). The old
+	// (connection_id, dedupe_key) constraint collided item.removed's constant key.
+	base := sdk.Event{ObjectType: "merge_request", NativeID: "acme/api#1", DedupeKey: "removed"}
+	rm := base
+	rm.EventType = "item.removed"
+	obs := base
+	obs.EventType = "item.observed"
+	obs.Payload = sdk.ItemObservedPayload{State: "open"}
+	other := base
+	other.EventType = "item.removed"
+	other.NativeID = "acme/api#2"
+
+	n, err := db.WriteEvents(ctx, "c", []sdk.Event{rm, obs, other})
+	if err != nil {
+		t.Fatalf("WriteEvents: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("insert count = %d, want 3 (5-column UNIQUE must not collide)", n)
+	}
+
+	// The exact same row is still deduped.
+	n, err = db.WriteEvents(ctx, "c", []sdk.Event{rm})
+	if err != nil {
+		t.Fatalf("re-WriteEvents: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("dup insert count = %d, want 0", n)
+	}
+}
+
+func TestReadPoolIsQueryOnly(t *testing.T) {
+	db := openTest(t)
+	// The read pool is opened query_only; an attempted write must fail there,
+	// guarding against reads and writes being routed to the wrong pool (§14, Q9).
+	_, err := db.read.ExecContext(context.Background(),
+		`INSERT INTO handle_next (item_id, flagged_at) VALUES ('x', 'y')`)
+	if err == nil {
+		t.Fatal("write on read pool succeeded, want query_only failure")
 	}
 }
 
@@ -239,8 +305,8 @@ func TestSyncLogOrdering(t *testing.T) {
 	entries := []SyncLogEntry{
 		{Ts: base, ConnectionID: "c1", Operation: "fast_poll", Outcome: "ok", ItemsChanged: 3},
 		{Ts: base.Add(time.Minute), ConnectionID: "c1", Operation: "reconcile", Outcome: "error",
-			HTTPStatus: ptrInt(500), Retries: 2, NextRetry: ptrTime(base.Add(2 * time.Minute)),
-			Error: ptrStr("boom"), RateRemaining: ptrInt(42)},
+			HTTPStatus: new(500), Retries: 2, NextRetry: new(base.Add(2 * time.Minute)),
+			Error: new("boom"), RateRemaining: new(42)},
 		{Ts: base.Add(2 * time.Minute), ConnectionID: "c2", Operation: "fast_poll", Outcome: "ok"},
 	}
 	for _, e := range entries {

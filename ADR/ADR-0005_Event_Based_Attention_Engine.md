@@ -2,34 +2,45 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Scope
+
+Event log and read-time fold **Implemented (v0.1)** (`internal/attention`,
+`internal/storage`). Snapshot/compaction of the log is **Deferred**. See
+`docs/Roadmap.md`.
 
 ## Context
 
-This ADR records a foundational architectural decision for DevPit.
+The UI must show what requires action, not raw provider notifications, and it
+must do so without webhooks (the token-only promise,
+`ADR/ADR-0001_Local_First_Web_Application.md`).
 
 ## Decision
 
-Normalize provider activity into events and derive actionable attention
-states from the accumulated event stream.
+Normalize provider activity into events and derive actionable attention states
+by folding the accumulated event stream at read time.
 
-Because DevPit is polling-first (no webhooks), events are *synthesized* by
-diffing each polled snapshot against stored state, then appended to a
-persisted event log. Attention state is the fold over that log.
+Because DevPit is polling-first, events are **synthesized by diffing** each
+polled snapshot against stored state, then appended to a persisted event log.
+Attention state is the fold over that log — there is no separate materialized
+current-state table.
 
 ## Rationale
 
-The UI focuses on what requires action instead of exposing
-provider-specific notifications. Synthesizing events from polled snapshots
-keeps the "a token is enough" setup promise — no webhooks, callbacks, or
-provider-side configuration are required — while still delivering the
-event-derived state, history, and "what's new" signals of an event model.
+Synthesizing events from polled snapshots keeps the "a token is enough" setup
+promise while still delivering the event-derived state, history, and
+"what's new" signals of an event model. Folding at read time is fast at
+single-user scale and keeps the write path a simple append.
 
 ## Consequences
 
-- A persisted event log is maintained (with a retention window to bound
-  growth); see docs/Design_Decisions.md §2.
+- A persisted event log is maintained, bounded by user-initiated retention;
+  automatic compaction is deferred until a real instance proves it necessary.
 - Event fidelity is bounded by poll cadence: activity between two polls is
-  observed as a single diff, not as separate intermediate events.
-- Provides a consistent foundation for future implementation and
-  contributor discussions.
+  observed as a single diff, not as separate intermediate events. Bucket
+  membership derives from the latest facts, so missed intermediate signals
+  never produce wrong buckets.
+- The fold is direct code (`internal/attention`); its bucket semantics are
+  specified in `docs/Attention_Engine.md` and the event model and storage in
+  `docs/Event_Taxonomy_and_Storage.md`.

@@ -79,8 +79,8 @@ func (p *Provider) fetchMR(ctx context.Context, projectID, iid int) (*glMergeReq
 }
 
 // signalFromTodo maps a todo's action_name to a signal event, keyed on the
-// native todo id (taxonomy §5: no duplicate pending todo exists, so the id is
-// a stable dedupe key).
+// native todo id (no duplicate pending todo exists, so the id is a stable
+// dedupe key — docs/Event_Taxonomy_and_Storage.md).
 func signalFromTodo(t glTodo, nid string) *sdk.Event {
 	base := func(eventType string, payload any) *sdk.Event {
 		return &sdk.Event{

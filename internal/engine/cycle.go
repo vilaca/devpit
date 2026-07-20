@@ -12,7 +12,7 @@ import (
 )
 
 // operation identifies which poll tier a cycle is running. Its String is the
-// value written to sync_log.operation (Event_Taxonomy_and_Storage.md §16).
+// value written to sync_log.operation (docs/Event_Taxonomy_and_Storage.md).
 type operation int
 
 const (
@@ -31,8 +31,8 @@ func (o operation) String() string {
 	}
 }
 
-// sync_log outcomes (§9). Free TEXT column, so extending the set needs no
-// migration.
+// sync_log outcomes (docs/Synchronization_Engine.md). Free TEXT column, so
+// extending the set needs no migration.
 const (
 	outcomeOK          = "ok"
 	outcomeAuth        = "auth"
@@ -44,7 +44,7 @@ const (
 	outcomeUnexpected  = "unexpected"
 )
 
-// cycle runs one poll cycle for op (§7). The governing rule: PollResult is
+// cycle runs one poll cycle for op. The governing rule: PollResult is
 // consumed only on success — on any error the engine persists nothing and
 // leaves cursors untouched, so the next cycle re-covers the whole batch from
 // the unchanged cursor (INSERT OR IGNORE makes the re-fetch idempotent).
@@ -55,7 +55,7 @@ func (c *conn) cycle(ctx context.Context, op operation) {
 	if !c.bo.ready() {
 		return // still backing off
 	}
-	if !c.resolved { // transient identity failure earlier (Q2); retry at the top
+	if !c.resolved { // transient identity failure earlier; retry at the top
 		if err := c.resolveIdentity(ctx); err != nil {
 			if ctx.Err() != nil {
 				return
@@ -83,7 +83,7 @@ func (c *conn) cycle(ctx context.Context, op operation) {
 	}
 	if err != nil {
 		if ctx.Err() != nil {
-			return // shutdown, not a failure (Q6)
+			return // shutdown, not a failure
 		}
 		c.fail(op, err)
 		return
@@ -124,7 +124,7 @@ func (c *conn) cycle(ctx context.Context, op operation) {
 }
 
 // fail classifies a provider error into a sync-log outcome, applies backoff,
-// and notifies. It relies on the classified SDK errors (§11).
+// and notifies. It relies on the classified SDK errors (docs/Provider_SDK.md).
 func (c *conn) fail(op operation, err error) {
 	switch {
 	case errors.Is(err, sdk.ErrUnauthorized):
@@ -147,7 +147,7 @@ func (c *conn) fail(op operation, err error) {
 		if errors.As(err, &rle) {
 			hint = &rle.RetryAfter
 		}
-		d := c.bo.rateLimit(hint) // floor = max(exponential, hint) — Q3
+		d := c.bo.rateLimit(hint) // floor = max(exponential, hint)
 		next := time.Now().Add(d)
 		c.writeLog(storage.SyncLogEntry{
 			Ts:           time.Now(),
@@ -178,7 +178,7 @@ func (c *conn) fail(op operation, err error) {
 
 // classify maps a non-rate, non-auth provider error to a sync_log outcome and,
 // where the SDK carries it, the HTTP status. It reads the status via the typed
-// StatusError rather than parsing message strings (§11).
+// StatusError rather than parsing message strings.
 func classify(err error) (outcome string, status *int) {
 	var se *sdk.StatusError
 	if errors.As(err, &se) {
@@ -201,8 +201,8 @@ func classify(err error) (outcome string, status *int) {
 	}
 }
 
-// causeText renders the plain-language cause shown in the sync activity view
-// (§9). auth and rate_limited carry their own copy in fail; this covers the
+// causeText renders the plain-language cause shown in the sync activity view.
+// auth and rate_limited carry their own copy in fail; this covers the
 // classify outcomes.
 func (c *conn) causeText(outcome string, status *int) string {
 	switch outcome {

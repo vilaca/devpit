@@ -15,16 +15,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// timeFormat is RFC 3339 UTC, matching the storage schema (§4).
+// timeFormat is RFC 3339 UTC, matching the storage schema.
 const timeFormat = time.RFC3339
 
-// readMaxConns caps concurrent API reads (§14, Q9). A single-user app never
+// readMaxConns caps concurrent API reads (ADR-0007). A single-user app never
 // needs many; the point is only that reads run on their own pool so a long
 // reconcile write never stalls GET /attention.
 const readMaxConns = 4
 
 // DB owns two connection pools over the same SQLite database, both in WAL
-// (§4, §14, Q9): a single-writer pool (MaxOpenConns 1) the engine uses for all
+// (ADR-0007): a single-writer pool (MaxOpenConns 1) the engine uses for all
 // mutations, and a read-only pool the API uses for GET queries. Splitting them
 // means a long reconcile write never blocks a read and vice versa (ADR-0007).
 // Write methods route to write; read methods route to read.
@@ -41,7 +41,7 @@ var memCounter atomic.Uint64
 
 // Open opens (or creates) the SQLite database at path in WAL mode, runs any
 // pending migrations, and returns a handle exposing a single-writer pool and a
-// read-only pool (§14, Q9).
+// read-only pool (ADR-0007).
 func Open(path string) (*DB, error) {
 	// Single-instance guard: refuse to open a file another devpit already owns.
 	// Two engines writing one database would clobber each other every cycle.
@@ -57,7 +57,7 @@ func Open(path string) (*DB, error) {
 		_ = lock.release()
 		return nil, fmt.Errorf("open sqlite (write): %w", err)
 	}
-	// Single writer (§14): SQLite permits one writer at a time, so serialising
+	// Single writer (ADR-0007): SQLite permits one writer at a time, so serialising
 	// through one connection avoids SQLITE_BUSY on the write path entirely.
 	write.SetMaxOpenConns(1)
 

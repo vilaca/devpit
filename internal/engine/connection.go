@@ -8,7 +8,7 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
-// conn is the per-connection two-tier scheduler (§6). One goroutine owns it;
+// conn is the per-connection two-tier scheduler. One goroutine owns it;
 // all its mutable state (backoff, resolved) is goroutine-local, so it needs no
 // lock. A single select over both tickers serialises FastPoll and Reconcile for
 // the same provider instance, satisfying the SDK's "no concurrency within a
@@ -29,8 +29,8 @@ type conn struct {
 	identityPermanent bool // dead until config fix + restart (bad token / no handle)
 }
 
-// resolveIdentity resolves and classifies the connection's identity (§5, Q2).
-// The provider owns the manual-handle fallback and returns
+// resolveIdentity resolves and classifies the connection's identity. The
+// provider owns the manual-handle fallback and returns
 // ErrManualIdentityRequired only when both /user and cfg.Handle fail. Bad token
 // (ErrUnauthorized) and no-handle (ErrManualIdentityRequired) are permanent;
 // anything else (network/server/rate) is transient and retried in-loop.
@@ -46,7 +46,7 @@ func (c *conn) resolveIdentity(ctx context.Context) error {
 	return nil
 }
 
-// run drives the connection until ctx is cancelled (§6). It seeds with one
+// run drives the connection until ctx is cancelled. It seeds with one
 // reconcile so the first render isn't empty while waiting ~15 min for the slow
 // tier, then loops on both tickers. Go tickers drop ticks when the receiver is
 // busy, so a cycle that overruns its interval simply skips the missed tick —
@@ -75,7 +75,7 @@ func (c *conn) run(ctx context.Context) {
 }
 
 // shutdown closes the provider under a bounded, fresh context so cleanup runs
-// even though the root context is already cancelled (§10).
+// even though the root context is already cancelled.
 func (c *conn) shutdown() {
 	closeCtx, cancel := context.WithTimeout(context.Background(), c.closeTimeout)
 	defer cancel()

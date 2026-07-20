@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Scope
+
+Single-binary build **Implemented (v0.1)**; the Docker image is **Planned** —
+no Dockerfile exists yet. See `docs/Roadmap.md`.
 
 ## Context
 

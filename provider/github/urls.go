@@ -8,11 +8,11 @@ import (
 // parsePullURL extracts owner, repo, number from a REST PR URL such as
 // "https://api.github.com/repos/acme/api/pulls/42".
 func parsePullURL(u string) (owner, repo string, number int, ok bool) {
-	i := strings.Index(u, "/repos/")
-	if i < 0 {
+	_, after, ok := strings.Cut(u, "/repos/")
+	if !ok {
 		return "", "", 0, false
 	}
-	parts := strings.Split(strings.Trim(u[i+len("/repos/"):], "/"), "/")
+	parts := strings.Split(strings.Trim(after, "/"), "/")
 	if len(parts) < 4 || parts[2] != "pulls" {
 		return "", "", 0, false
 	}

@@ -107,8 +107,8 @@ latest `item.observed` gives the facts; `state == open`, no
 - **Tag counts**: same-type signals per item → "Mentioned ×3";
   individual signals appear in the detail view.
 - **What's new since last visit**: events with `id >` the stored
-  `last_seen_event_id` (see `app_state`); the client advances the mark
-  on visit.
+  `last_seen_event_id`; the client advances the mark on visit. The
+  backing `app_state` KV is deferred until this feature is built (§4).
 - `failing_checks` renders the failure notification marker (§4), never
   a bucket.
 
@@ -141,7 +141,7 @@ scale this is fast without further indexes (§2), and compaction remains
 a later optimization.
 
 ```sql
-CREATE TABLE flags (                   -- "Handle next" (§5, §11), local-only
+CREATE TABLE handle_next (             -- "Handle next" (§5, §11), local-only; lean name, not 'flags'
   connection_id TEXT NOT NULL,
   object_type   TEXT NOT NULL,
   native_id     TEXT NOT NULL,
@@ -157,7 +157,8 @@ CREATE TABLE sync_log (                -- §16; cycle rows + per-call detail
   ts             TEXT    NOT NULL,
   operation      TEXT    NOT NULL,     -- cycle rows: 'fast_poll' | 'reconcile';
                                        -- call rows: endpoint label
-  outcome        TEXT    NOT NULL,     -- 'ok' | 'auth' | 'rate_limited' | 'network' | 'parse'
+  outcome        TEXT    NOT NULL,     -- 'ok' | 'auth' | 'rate_limited' | 'network'
+                                       --   | 'server' | 'parse' | 'storage' | 'unexpected' (§9, Q6)
   http_status    INTEGER,
   items_changed  INTEGER,
   rate_remaining INTEGER,
@@ -174,11 +175,16 @@ CREATE TABLE sync_cursors (            -- operational poll state, not events
   PRIMARY KEY (connection_id, cursor)
 );
 
-CREATE TABLE app_state (               -- tiny KV: 'schema_version', 'last_seen_event_id'
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+CREATE TABLE schema_version (          -- migration bookkeeping only
+  version INTEGER NOT NULL
 );
 ```
+
+Lean-name reconciliation (§11 Q7): the pin table is `handle_next` (not
+`flags`), and migration state lives in a dedicated `schema_version` table
+rather than a generic KV. The `app_state` KV and its `last_seen_event_id`
+key are deferred: they arrive only when "what's new since last visit"
+(§1) is built — an API concern, not a sync-engine one.
 
 Successful cycles write one row (`parent_id NULL`, no children). The
 §12 rolling failure count is `COUNT(*)` over cycle rows with

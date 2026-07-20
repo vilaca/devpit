@@ -7,9 +7,9 @@ over the single attention list.
 - `GET /attention` — the single ranked list; states as tags.
   `?state=` is optional sugar, the UI filters client-side.
 - `GET /events` — SSE stream (see docs/SSE_Events.md).
-- `GET /connections` — list provider connections (§1b).
-- `POST /connections` — add a connection (base URL + token).
-- `DELETE /connections/{id}` — remove a connection.
+- `GET /connections` — list provider connections (§1b), read-only.
+  Connections are config-file only and static at runtime (§11 Q1); there
+  are no create/delete endpoints.
 - `GET /sync-log` — user-facing sync/poll log (§16);
   `?connection=` filter for banner deep-links.
 - `PUT /items/{id}/flag` — set the local "Handle next" flag (§5).
@@ -22,7 +22,6 @@ No manual sync trigger endpoint: polling is automatic (§9).
 - All responses are `application/json`.
 - Timestamps are RFC 3339 UTC strings.
 - `PUT` and `DELETE` on flags return `204 No Content`.
-- `DELETE /connections/{id}` returns `204 No Content`.
 - Errors use a uniform shape (see §Errors below).
 - Item `id` is an opaque, stable, URL-safe string derived server-side
   from `(connection_id, object_type, native_id)`. Clients treat it as
@@ -107,24 +106,6 @@ Field notes:
   `failure_window_minutes` from `sync_log` (§12). The glanceable teaser.
 - Token is never returned.
 
-## `POST /connections`
-
-Request:
-
-```json
-{
-  "type": "github",
-  "base_url": "https://github.com",
-  "token": "ghp_...",
-  "label": "Personal"
-}
-```
-
-Response `201 Created` — returns the new connection object (same shape
-as one element of `GET /connections`), so the client can display it
-immediately without a follow-up GET. `identity` will be `null` until the
-first `ResolveIdentity` call completes.
-
 ## `GET /sync-log`
 
 `?connection={id}` filters to one connection (used by the §12 banner
@@ -178,7 +159,8 @@ deep-link). No pagination — the table is user-bounded (§2/§6 cleanup).
 
 - `operation` — cycle rows: `fast_poll` | `reconcile`;
   call-detail rows: endpoint label (e.g. `"GET /todos"`).
-- `outcome` — `ok` | `auth` | `rate_limited` | `network` | `parse`.
+- `outcome` — `ok` | `auth` | `rate_limited` | `network` | `server` |
+  `parse` | `storage` | `unexpected` (§9, Q6).
 - `calls` — `null` on success; array of per-call detail objects on
   failure/retry (§16 progressive disclosure, level 4). Always present
   in the response; the client decides whether to render it expanded.
@@ -194,8 +176,8 @@ deep-link). No pagination — the table is user-bounded (§2/§6 cleanup).
 }
 ```
 
-Error codes: `not_found`, `bad_request`, `conflict` (duplicate
-connection), `internal`. HTTP status maps 1:1 (404, 400, 409, 500).
+Error codes: `not_found`, `bad_request`, `internal`. HTTP status maps
+1:1 (404, 400, 500).
 
 ## Decisions
 

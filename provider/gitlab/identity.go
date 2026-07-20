@@ -6,8 +6,10 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
+// ResolveIdentity implements sdk.Provider: it fetches the authenticated user
+// and returns their canonical handle.
 func (p *Provider) ResolveIdentity(ctx context.Context) (sdk.Identity, error) {
-	resp, err := p.do(ctx, "GET", p.apiBase+"/user")
+	resp, err := p.do(ctx, p.apiBase+"/user")
 	if err != nil {
 		return sdk.Identity{}, err
 	}
@@ -16,6 +18,10 @@ func (p *Provider) ResolveIdentity(ctx context.Context) (sdk.Identity, error) {
 		return sdk.Identity{}, err
 	}
 	if u.Username == "" {
+		if p.cfg.Handle != "" {
+			p.handle = p.cfg.Handle
+			return sdk.Identity{Handle: p.cfg.Handle}, nil
+		}
 		return sdk.Identity{}, sdk.ErrManualIdentityRequired
 	}
 	p.handle = u.Username

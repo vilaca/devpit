@@ -29,3 +29,16 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
+
+  arch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+      # Enforce the layering rules in .go-arch-lint.yml (sdk is a leaf,
+      # providers depend only on sdk, cmd is the composition root).
+      - run: go install github.com/fe3dback/go-arch-lint@latest
+      - run: go-arch-lint check

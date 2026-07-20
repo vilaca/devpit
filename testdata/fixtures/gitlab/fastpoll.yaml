@@ -22,7 +22,7 @@ interactions:
           "action_name": "review_requested",
           "target_type": "MergeRequest",
           "target": {"iid": 7, "web_url": "https://gitlab.com/acme/api/-/merge_requests/7"},
-          "project_id": 12,
+          "project": {"id": 12},
           "author": {"username": "jdoe"},
           "updated_at": "2026-07-08T09:14:02Z"
         },
@@ -31,7 +31,7 @@ interactions:
           "action_name": "mentioned",
           "target_type": "Issue",
           "target": {"iid": 3, "web_url": "https://gitlab.com/acme/api/-/issues/3"},
-          "project_id": 12,
+          "project": {"id": 12},
           "author": {"username": "jdoe"},
           "updated_at": "2026-07-08T09:00:00Z"
         }

@@ -23,23 +23,23 @@ Two event streams share one log:
 
 **Fact stream** — encodes object state for the fold:
 
-| Type | Meaning |
-|---|---|
+| Type            | Meaning                                                                                                                                                                                                    |
+|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `item.observed` | Full normalized fact set (§2). Appended only when the fact set differs from the item's previous snapshot — the poll diff *is* the change detector. The fold reads the **latest** snapshot per item; earlier snapshots are history. |
-| `item.removed` | The reconciliation sweep no longer sees the item and no closing state was observed (lost access, repo deleted). Fold drops the item. |
+| `item.removed`  | The reconciliation sweep no longer sees the item and no closing state was observed (lost access, repo deleted). Fold drops the item.                                                                        |
 
 **Signal stream** — discrete "aimed at you" occurrences, stored raw and
 never collapsed (§3). They feed the Mentioned bucket, the "×N" tag
 counts (§6), the item's ranking timestamp, and "what's new since last
 visit":
 
-| Type | Payload highlights | Synthesized from |
-|---|---|---|
-| `signal.mentioned` | direct vs team/group mention | GitHub `mentions:@me` search / notification `mention`; GitLab todos `mentioned`, `directly_addressed` |
-| `signal.review_requested` | direct vs team request | entering the review-requested result set; GitLab todo `review_requested` |
-| `signal.review_submitted` | `verdict: approved \| changes_requested \| commented`, reviewer | `reviewDecision` / reviewer-state transitions; GitLab todo `review_submitted` |
-| `signal.assigned` | assigner if known | assigned result set / todos `assigned` |
-| `signal.ci_failed` | check/pipeline name if known | red checks on authored PRs (incl. non-gating, per §4); GitLab todo `build_failed` |
+| Type                       | Payload highlights                                                | Synthesized from                                                                                          |
+|----------------------------|-------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| `signal.mentioned`         | direct vs team/group mention                                      | GitHub `mentions:@me` search / notification `mention`; GitLab todos `mentioned`, `directly_addressed`    |
+| `signal.review_requested`  | direct vs team request                                            | entering the review-requested result set; GitLab todo `review_requested`                                  |
+| `signal.review_submitted`  | `verdict: approved \| changes_requested \| commented`, reviewer   | `reviewDecision` / reviewer-state transitions; GitLab todo `review_submitted`                             |
+| `signal.assigned`          | assigner if known                                                 | assigned result set / todos `assigned`                                                                    |
+| `signal.ci_failed`         | check/pipeline name if known                                      | red checks on authored PRs (incl. non-gating, per §4); GitLab todo `build_failed`                        |
 
 Seven types total. Merged/closed are not signals — they arrive as an
 `item.observed` state change and the fold drops the item (§11: items
@@ -91,14 +91,14 @@ Computed at read time — no materialized state (§2). For each item:
 latest `item.observed` gives the facts; `state == open`, no
 `item.removed`, else the item is dropped.
 
-| Bucket (§4) | Condition on latest facts |
-|---|---|
-| Needs Review | `my_roles` has `reviewer` ∧ `my_review_state == requested` |
-| Changes Requested | `my_roles` has `author` ∧ `review_decision == changes_requested` |
-| Blocked | `my_roles` has `author` ∧ ¬`draft` ∧ `gate == blocked` |
-| Ready to Merge | `my_roles` has `author` ∧ ¬`draft` ∧ `gate == ready` |
-| Mentioned | ≥ 1 `signal.mentioned` event (item open) |
-| Waiting on Author | `my_roles` has `reviewer` ∧ `my_review_state ∈ {reviewed, approved, changes_requested}` |
+| Bucket (§4)        | Condition on latest facts                                                              |
+|--------------------|----------------------------------------------------------------------------------------|
+| Needs Review       | `my_roles` has `reviewer` ∧ `my_review_state == requested`                             |
+| Changes Requested  | `my_roles` has `author` ∧ `review_decision == changes_requested`                       |
+| Blocked            | `my_roles` has `author` ∧ ¬`draft` ∧ `gate == blocked`                                |
+| Ready to Merge     | `my_roles` has `author` ∧ ¬`draft` ∧ `gate == ready`                                  |
+| Mentioned          | ≥ 1 `signal.mentioned` event (item open)                                               |
+| Waiting on Author  | `my_roles` has `reviewer` ∧ `my_review_state ∈ {reviewed, approved, changes_requested}` |
 
 - **Ranking timestamp** (§6): newest `coalesce(occurred_at,
   observed_at)` across the item's signal events, else the latest

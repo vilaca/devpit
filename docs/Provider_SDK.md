@@ -172,7 +172,8 @@ The engine owns:
 - Writing events via `INSERT OR IGNORE` (dedupe on the `UNIQUE` constraint).
 - Persisting `PollResult.State` to `sync_cursors`.
 - Writing one `sync_log` cycle row per `FastPoll` / `Reconcile` call.
-- Honoring `Retry-After` on `ErrRateLimited`; exponential backoff on transient errors.
+- Honoring `Retry-After` on `ErrRateLimited`; exponential backoff on
+  transient errors.
 - Calling `FastPoll` only when `Capabilities().FastSignal` is true (otherwise
   the fast tier runs `Reconcile` at the fast cadence).
 

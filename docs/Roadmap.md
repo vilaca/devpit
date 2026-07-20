@@ -32,9 +32,9 @@ The complete single-user product for two providers.
 - Frontend: Svelte SPA over REST + SSE (ADR-0008, ADR-0010).
 - Secrets: plaintext config with 0600 + least-privilege scopes (ADR-0019).
 
-**Built so far:** the sync engine, both providers, storage, config, and the
-attention fold. **Not yet built:** the REST API, SSE stream, and frontend (see
-`docs/High_Level_Architecture.md` for the component status).
+**Built so far:** the sync engine, both providers, storage, config, the
+attention fold, and the REST API + SSE stream. **Not yet built:** the frontend
+(see `docs/High_Level_Architecture.md` for the component status).
 
 ## v0.2 — More forges + sync hardening
 

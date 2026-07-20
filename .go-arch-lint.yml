@@ -4,6 +4,13 @@ workdir: .
 # External/stdlib imports are unrestricted; we only govern our own layering.
 allow:
   depOnAnyVendor: true
+  # Enforce layering at the import level only. The deep scan (method calls /
+  # dependency injection) cannot distinguish intentional dependency inversion
+  # from a real violation: the engine defines the Notifier interface, internal/api
+  # implements it *without importing engine*, and cmd (the composition root, which
+  # may depend on everything) injects api.Server via engine.WithNotifier. deepScan
+  # misattributes that wiring as an api -> engine dependency, so it is disabled.
+  deepScan: false
 
 components:
   sdk: { in: sdk }

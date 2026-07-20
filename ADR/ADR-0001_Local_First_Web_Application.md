@@ -7,8 +7,7 @@ Accepted
 ## Scope
 
 Single-user localhost core **Implemented (v0.1)**. Team visibility (own-token
-observation) is **Planned**; federation is **Uncommitted**. See
-`docs/Roadmap.md`.
+observation) is **Planned**; federation is **Uncommitted**.
 
 ## Context
 
@@ -35,5 +34,3 @@ from the v0.1 surface.
 - Team visibility is delivered later as **own-token observation** of watched
   users/teams in a separate scope (Planned); it sees provider-visible facts
   only, never a teammate's private notifications.
-- Federation (push-based aggregation of private signals) remains an
-  uncommitted future idea, built only if users ask (`docs/Roadmap.md`).

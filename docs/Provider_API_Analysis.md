@@ -43,11 +43,11 @@ resolved login, but store it for provenance and team-view use.
 
 ### Token guidance
 
-| Token | Gets | Loses |
-|---|---|---|
-| Fine-grained PAT (recommended default) | Search, GraphQL (since 2023-04), PR details, true read-only least privilege. Permissions: Metadata: read, Pull requests: read; add Commit statuses: read + Checks: read for CI, Issues: read for issue mentions. | Notifications API |
-| Classic PAT, `notifications` scope only | Notifications feed | Private-repo PR details |
-| Classic PAT, `repo` (+`notifications`) | Everything | Read-only guarantee — `repo` grants write to private repos (§15 mitigation broken) |
+| Token                                   | Gets                                                                                                                                                                                                        | Loses                                                                              |
+|-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------|
+| Fine-grained PAT (recommended default)  | Search, GraphQL (since 2023-04), PR details, true read-only least privilege. Permissions: Metadata: read, Pull requests: read; add Commit statuses: read + Checks: read for CI, Issues: read for issue mentions. | Notifications API                                                                  |
+| Classic PAT, `notifications` scope only | Notifications feed                                                                                                                                                                                          | Private-repo PR details                                                            |
+| Classic PAT, `repo` (+`notifications`)  | Everything                                                                                                                                                                                                  | Read-only guarantee — `repo` grants write to private repos (§15 mitigation broken) |
 
 Setup UI should present fine-grained as the default path and explain the
 trade-off if the user wants the notifications fast-signal on private
@@ -73,14 +73,14 @@ One GraphQL request per cycle, aliasing multiple `search()` calls
 `number, title, url, updatedAt, isDraft, mergeStateStatus,
 reviewDecision, repository { nameWithOwner }`.
 
-| Bucket | Search query | Post-filter |
-|---|---|---|
-| Needs Review | `is:open is:pr review-requested:@me archived:false` | — (`user-review-requested:@me` additionally distinguishes direct from team requests) |
-| Changes Requested | `is:open is:pr author:@me archived:false` | `reviewDecision == CHANGES_REQUESTED` |
-| Blocked | same authored query | merge-gate mapping below, non-draft |
-| Ready to Merge | same authored query | merge-gate mapping below, non-draft |
-| Mentioned | `is:open mentions:@me archived:false` | includes issues by design |
-| Waiting on Author | `is:open is:pr reviewed-by:@me -review-requested:@me -author:@me archived:false` | — |
+| Bucket             | Search query                                                                     | Post-filter                                                                                   |
+|--------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| Needs Review       | `is:open is:pr review-requested:@me archived:false`                              | — (`user-review-requested:@me` additionally distinguishes direct from team requests)          |
+| Changes Requested  | `is:open is:pr author:@me archived:false`                                        | `reviewDecision == CHANGES_REQUESTED`                                                         |
+| Blocked            | same authored query                                                              | merge-gate mapping below, non-draft                                                           |
+| Ready to Merge     | same authored query                                                              | merge-gate mapping below, non-draft                                                           |
+| Mentioned          | `is:open mentions:@me archived:false`                                            | includes issues by design                                                                     |
+| Waiting on Author  | `is:open is:pr reviewed-by:@me -review-requested:@me -author:@me archived:false` | —                                                                                             |
 
 Assigned work (discovery per ADR-0004): `is:open assignee:@me`.
 
@@ -90,16 +90,16 @@ semantics — multiple `repo:`/`org:`/`user:` qualifiers AND together
 
 ### Merge-gate mapping (`mergeStateStatus`)
 
-| Value | Meaning | DevPit state |
-|---|---|---|
-| `CLEAN` | Mergeable, checks passing | Ready to Merge |
-| `HAS_HOOKS` | Mergeable, passing + pre-receive hooks | Ready to Merge |
-| `UNSTABLE` | Mergeable with non-passing status | failure notification, **not** Blocked (§4) |
-| `BLOCKED` | Merge blocked (protection rules) | Blocked |
-| `DIRTY` | Merge commit can't be created (conflict) | Blocked |
-| `BEHIND` | Head out of date (strict checks) | Blocked |
-| `UNKNOWN` | Being computed | transient — keep previous state, re-poll |
-| `DRAFT` | deprecated | use `isDraft` instead (§4: drafts never Blocked/RTM) |
+| Value       | Meaning                               | DevPit state                                         |
+|-------------|---------------------------------------|------------------------------------------------------|
+| `CLEAN`     | Mergeable, checks passing             | Ready to Merge                                       |
+| `HAS_HOOKS` | Mergeable, passing + pre-receive hooks | Ready to Merge                                      |
+| `UNSTABLE`  | Mergeable with non-passing status     | failure notification, **not** Blocked (§4)           |
+| `BLOCKED`   | Merge blocked (protection rules)      | Blocked                                              |
+| `DIRTY`     | Merge commit can't be created (conflict) | Blocked                                           |
+| `BEHIND`    | Head out of date (strict checks)      | Blocked                                              |
+| `UNKNOWN`   | Being computed                        | transient — keep previous state, re-poll             |
+| `DRAFT`     | deprecated                            | use `isDraft` instead (§4: drafts never Blocked/RTM) |
 
 Caveat **[verify]**: `mergeStateStatus` is actor-agnostic — it reports
 `BLOCKED` even for users whose bypass rights would let them merge
@@ -160,13 +160,13 @@ Two cheap calls per cycle:
 Global list endpoint, `state=opened`, response includes
 `detailed_merge_status`, `draft`, `updated_at`:
 
-| Bucket | Call | Post-filter |
-|---|---|---|
-| Needs Review | `GET /merge_requests?scope=reviews_for_me&state=opened` | my reviewer state ∈ {unreviewed, review_started} via reviewers endpoint (below) |
-| Changes Requested | `GET /merge_requests?scope=created_by_me&state=opened` | `detailed_merge_status == requested_changes` (Premium) **or** any reviewer state `requested_changes` via reviewers endpoint (Free) |
-| Blocked / Ready to Merge | same authored query | merge-gate mapping below, non-draft |
-| Mentioned | `GET /todos?state=pending&action=mentioned` + `directly_addressed` | — |
-| Waiting on Author | `scope=reviews_for_me` result | my reviewer state ∈ {reviewed, requested_changes} |
+| Bucket                    | Call                                                     | Post-filter                                                                                                                      |
+|---------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| Needs Review              | `GET /merge_requests?scope=reviews_for_me&state=opened`  | my reviewer state ∈ {unreviewed, review_started} via reviewers endpoint (below)                                                  |
+| Changes Requested         | `GET /merge_requests?scope=created_by_me&state=opened`   | `detailed_merge_status == requested_changes` (Premium) **or** any reviewer state `requested_changes` via reviewers endpoint (Free) |
+| Blocked / Ready to Merge  | same authored query                                      | merge-gate mapping below, non-draft                                                                                              |
+| Mentioned                 | `GET /todos?state=pending&action=mentioned` + `directly_addressed` | —                                                                                                                      |
+| Waiting on Author         | `scope=reviews_for_me` result                            | my reviewer state ∈ {reviewed, requested_changes}                                                                                |
 
 Assigned: `scope=assigned_to_me&state=opened`.
 
@@ -182,11 +182,11 @@ optimization, not v0.1.)
 
 ### Merge-gate mapping (`detailed_merge_status`)
 
-| Class | Values | DevPit state |
-|---|---|---|
-| Ready | `mergeable` | Ready to Merge |
-| Transient | `unchecked`, `checking`, `preparing`, `approvals_syncing`, `ci_still_running` | keep previous state; re-poll (see staleness note) |
-| Draft | `draft_status` | per §4: never Blocked/RTM |
+| Class        | Values                                                                                                                                                                                                                                     | DevPit state                                        |
+|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
+| Ready        | `mergeable`                                                                                                                                                                                                                                | Ready to Merge                                      |
+| Transient    | `unchecked`, `checking`, `preparing`, `approvals_syncing`, `ci_still_running`                                                                                                                                                              | keep previous state; re-poll (see staleness note)   |
+| Draft        | `draft_status`                                                                                                                                                                                                                             | per §4: never Blocked/RTM                           |
 | Gate-blocked | `conflict`, `need_rebase`, `not_approved`, `requested_changes`, `ci_must_pass`, `discussions_not_resolved`, `merge_request_blocked`, `status_checks_must_pass`, `commits_status`, `not_open`, plus tier-specific (`jira_association_missing`, `security_policy_*`, `locked_paths`, `locked_lfs_files`, `title_regex`, `merge_time`) | Blocked |
 
 Staleness note: list endpoints "might not proactively update"
@@ -216,11 +216,11 @@ minimum supported GitLab version]**.
 
 ## Poll cycle sketch (both providers, per §9 tiers)
 
-| Tier | GitHub | GitLab | Default cadence |
-|---|---|---|---|
-| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark lists | 60s (obey `X-Poll-Interval` on GitHub) |
-| Detail fetch | included in GraphQL responses | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
-| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after` | 15 min |
+| Tier                 | GitHub                                                                         | GitLab                                                                        | Default cadence                        |
+|----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------|
+| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark lists                      | 60s (obey `X-Poll-Interval` on GitHub) |
+| Detail fetch         | included in GraphQL responses                                                  | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate    | on change only                         |
+| Reconciliation sweep | full bucket query set, no watermark                                            | full `scope=` list set, no `updated_after`                                    | 15 min                                 |
 
 Cadences are proposed defaults (fixed in v0.1 per §9); the reconciliation
 sweep also self-heals anything the fast tier missed (deleted todos,
@@ -228,13 +228,13 @@ watermark gaps, GitHub search lag).
 
 ## Capability declarations (§10)
 
-| Capability | GitHub | GitLab |
-|---|---|---|
-| Notifications fast-signal | classic PAT only | always (todos) |
-| Merge gate (Blocked / Ready to Merge) | always (GraphQL) | ≥ 15.6 |
-| Changes Requested | always (`reviewDecision`) | ≥ 16.11; merge-gate variant Premium+ |
-| Conditional requests (free 304s) | notifications + REST | none |
-| Read-only least-privilege token | fine-grained PAT (minus notifications) | `read_api` (full) |
+| Capability                            | GitHub                                 | GitLab                                |
+|---------------------------------------|----------------------------------------|---------------------------------------|
+| Notifications fast-signal             | classic PAT only                       | always (todos)                        |
+| Merge gate (Blocked / Ready to Merge) | always (GraphQL)                       | ≥ 15.6                                |
+| Changes Requested                     | always (`reviewDecision`)              | ≥ 16.11; merge-gate variant Premium+  |
+| Conditional requests (free 304s)      | notifications + REST                   | none                                  |
+| Read-only least-privilege token       | fine-grained PAT (minus notifications) | `read_api` (full)                     |
 
 ## Verify at implementation
 

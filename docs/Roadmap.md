@@ -56,4 +56,4 @@ The complete single-user product for two providers.
 
 - Stable Provider SDK for third-party providers.
 - Broaden beyond code forges: Jira, Slack, CI/CD, Sentry, PagerDuty
-  (per WHY_DEVPIT.md).
+  (per docs/Why.md).

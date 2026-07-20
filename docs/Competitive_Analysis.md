@@ -8,4 +8,5 @@ repository management. DevPit differentiates by:
 - Unified attention engine instead of raw notifications.
 - Self-hosted and privacy-first.
 - Plugin architecture for future integrations (Jira, Slack, CI/CD, Sentry).
-- Scales through user-centric synchronization rather than mirroring hundreds of repositories.
+- Scales through user-centric synchronization rather than mirroring hundreds
+  of repositories.

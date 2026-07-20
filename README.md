@@ -2,60 +2,55 @@
 
 **What requires my attention right now?**
 
-DevPit is a self-hosted attention center for software engineers. It aggregates
-actionable work from GitHub, GitLab, and other code forges into a single
-ranked list — so you spend less time triaging notifications and more time
-shipping.
+DevPit is a self-hosted attention center for software engineers. Instead of
+triaging notifications across GitHub, GitLab, and other forges, you get one
+ranked list of actionable work — scoped to you, not to repositories.
+
+The shift: repositories become context. You are the center of the workflow.
 
 ## Status
 
-**Design phase.** No code yet. See [`docs/`](docs/) for architecture decisions
-and [`WHY_DEVPIT.md`](WHY_DEVPIT.md) for motivation.
+Early development — not yet usable. Core storage and provider SDK done;
+engine and UI in progress.
 
 ## How it works
 
-- Polls your configured providers using your own tokens (no webhooks, no
-  server-side setup).
-- Synthesizes events by diffing each snapshot against stored state.
-- Folds the event log into attention states: **Needs Review**, **Blocked**,
-  **Ready to Merge**, **Changes Requested**, **Mentioned**, **Waiting on Author**.
-- Presents a single ranked list in a local web UI, updated via SSE.
+- **Polling-first, no webhooks.** Uses your own token; no server-side setup,
+  no callback URLs required.
+- **Event log + fold-on-read.** Each poll diff appends events to a durable
+  SQLite log. Attention states and item facts are computed at read time
+  (pure event sourcing — no separate materialized state table).
+- **Attention states as tags.** Each work item carries one or more state
+  tags; items are ranked by state precedence then recency.
+- **SSE live updates.** The local web UI subscribes to a Server-Sent Events
+  stream and re-fetches on `attention.changed` — no page refresh needed.
+- **Single binary, single SQLite file.** Runs on your machine; WAL mode
+  ensures reads never block while the sync writer appends.
 
-Single binary, single SQLite file, runs on your machine.
+## Attention states
 
-## Architecture
+Six states in v0.1, shown as tags on each item:
 
-| Path | Purpose |
-|------|---------|
-| `cmd/devpit/` | Main entry point |
-| `sdk/` | Provider interface and shared types |
-| `internal/engine/` | Sync / polling engine |
-| `internal/attention/` | Attention fold logic |
-| `internal/storage/` | SQLite layer |
-| `internal/api/` | REST handlers + SSE |
-| `internal/config/` | Config file parsing |
-| `provider/github/` | GitHub provider |
-| `provider/gitlab/` | GitLab provider |
-| `frontend/` | Svelte SPA (embedded via `go:embed`) |
+| State | Meaning |
+|---|---|
+| **Ready to Merge** | Your PR; provider merge gate reports mergeable |
+| **Needs Review** | A review was requested from you |
+| **Changes Requested** | Your PR; a reviewer asked for changes |
+| **Blocked** | Your PR; merge gate reports not mergeable |
+| **Mentioned** | You were mentioned |
+| **Waiting on Author** | You reviewed; ball is back with the author |
 
-Key documents:
-
-- [`docs/Design_Decisions.md`](docs/Design_Decisions.md) — authoritative decision log
-- [`docs/Provider_SDK.md`](docs/Provider_SDK.md) — provider interface
-- [`docs/REST_API.md`](docs/REST_API.md) — API shapes
-- [`docs/Event_Taxonomy_and_Storage.md`](docs/Event_Taxonomy_and_Storage.md) — event schema
-- [`docs/Provider_API_Analysis.md`](docs/Provider_API_Analysis.md) — GitHub/GitLab API facts
+Precedence (highest first): Ready to Merge → Needs Review → Changes
+Requested → Blocked → Mentioned → Waiting on Author.
 
 ## Configuration
 
 A single YAML file with a list of named connections (type, base URL, token).
 See [`docs/Configuration.md`](docs/Configuration.md).
 
-## Provider tests
+## Contributing
 
-Provider tests use recorded HTTP fixtures (`testdata/fixtures/`) — no live
-tokens required in CI. To record new fixtures locally, set the provider token
-via environment variable and run with `-record` flag (see provider test files).
+See [`docs/Contributing.md`](docs/Contributing.md).
 
 ## License
 

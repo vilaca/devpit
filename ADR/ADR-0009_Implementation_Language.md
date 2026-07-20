@@ -2,7 +2,11 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Scope
+
+Implemented (v0.1). See `docs/Roadmap.md`.
 
 ## Context
 

@@ -2,26 +2,41 @@
 
 ## Status
 
-Proposed
+Accepted
+
+## Scope
+
+Implemented (v0.1) for two object types — `merge_request` (covers GitHub PRs)
+and `issue`. Broader entity coverage is **Planned/future**. See
+`docs/Roadmap.md`.
 
 ## Context
 
-This ADR records a foundational architectural decision for DevPit.
+Provider objects differ in shape and vocabulary. The application must reason
+over them uniformly without provider-specific logic leaking into the core.
 
 ## Decision
 
-Use provider-neutral entities such as WorkItem, Review, Mention,
-Pipeline, Notification, Release, Repository and User.
-
-Storage is events-first: WorkItem is a *derived* grouping folded from
-the event log at read time, not a stored primary entity (see
-docs/Design_Decisions.md §2–§3).
+Use a provider-neutral, **events-first** model. A WorkItem is a *derived*
+grouping folded from the event log at read time — not a stored primary
+entity — keyed by `(connection-id, object-type, native-id)`
+(`ADR/ADR-0015_Multi_Account_Connections.md`). v0.1 realizes two object types,
+`merge_request` and `issue`, as periodic snapshot facts (`item.observed`) plus
+discrete signal events.
 
 ## Rationale
 
-This avoids provider-specific logic leaking into the application.
+Events-first storage gives history and "what's new" for free
+(`ADR/ADR-0005_Event_Based_Attention_Engine.md`) and avoids a materialized
+state table that would need its own reconciliation. A provider-neutral fact set
+keeps provider quirks in the plugins.
 
 ## Consequences
 
-Provides a consistent foundation for future implementation and
-contributor discussions.
+- There is no materialized current-state table in v0.1; object facts and
+  attention states are folded from events on read.
+- The event schema, the normalized fact set, and the event taxonomy are direct
+  code (`internal/storage/schema.go`, `sdk/provider.go`) plus the spec
+  `docs/Event_Taxonomy_and_Storage.md`. Additional provider-neutral entities
+  (reviews, pipelines, releases) are introduced only as the taxonomy grows —
+  they are not pre-modeled.

@@ -13,7 +13,8 @@ import (
 
 const objectType = "merge_request"
 
-// eventItemObserved is the event_type for a periodic item snapshot (taxonomy §1).
+// eventItemObserved is the event_type for a periodic item snapshot
+// (docs/Event_Taxonomy_and_Storage.md).
 const eventItemObserved = "item.observed"
 
 // mergeGate maps GitHub's mergeable_state to the normalized gate class.
@@ -27,7 +28,7 @@ func mergeGate(mergeableState string) string {
 	case "blocked", "dirty", "behind":
 		return "blocked"
 	case "unstable":
-		// non-gating check failure: mergeable, not Blocked (§4).
+		// non-gating check failure: mergeable, not Blocked (docs/Attention_Engine.md).
 		return "ready"
 	default: // "unknown", "draft", ""
 		return "unknown"
@@ -132,7 +133,8 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 	}
 }
 
-// observedDedupeKey is a hash of the canonical fact set (taxonomy §5): the
+// observedDedupeKey is a hash of the canonical fact set (see the dedupe-key
+// rules in docs/Event_Taxonomy_and_Storage.md): the
 // same facts hash identically so re-polls dedupe, a changed fact makes a new
 // snapshot.
 func observedDedupeKey(p sdk.ItemObservedPayload) string {

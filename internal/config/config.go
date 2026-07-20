@@ -13,21 +13,22 @@ import (
 
 // Config is the loaded, validated application configuration.
 //
-// Connections are static (Q1): resolved once at startup, immutable at runtime.
-// Poll intervals and the staleness threshold are engine constants (§9), not
-// config, and deliberately absent here.
+// Connections are static (ADR-0015): resolved once at startup, immutable at
+// runtime. Poll intervals and the staleness threshold are engine constants
+// (ADR-0004), not config, and deliberately absent here.
 type Config struct {
 	// DBPath is the SQLite database path passed to storage.Open.
 	DBPath string
-	// Connections is the resolved, validated connection list (Load's headline
-	// output, per §11 step 7).
+	// Connections is the resolved, validated connection list — Load's
+	// headline output.
 	Connections []sdk.ConnectionConfig
 	// Warnings are non-fatal advisories surfaced at load time (e.g. an
-	// over-permissive config file, §15). The caller decides how to present them.
+	// over-permissive config file — ADR-0019). The caller decides how to
+	// present them.
 	Warnings []string
 }
 
-// fileConfig mirrors the on-disk YAML shape (§11 step 7). Field names are the
+// fileConfig mirrors the on-disk YAML shape. Field names are the
 // snake_case keys users write; Load translates to the sdk types.
 type fileConfig struct {
 	DBPath      string           `yaml:"db_path"`
@@ -44,7 +45,7 @@ type connectionYAML struct {
 }
 
 // DefaultPath returns $XDG_CONFIG_HOME/devpit/config.yaml, falling back to
-// ~/.config/devpit/config.yaml when XDG_CONFIG_HOME is unset (§11 step 7).
+// ~/.config/devpit/config.yaml when XDG_CONFIG_HOME is unset.
 func DefaultPath() string {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
@@ -73,7 +74,7 @@ func Load(path string) (Config, error) {
 	var warnings []string
 	if info, statErr := f.Stat(); statErr == nil {
 		// The file holds plaintext tokens; warn (do not fail) if it is readable
-		// beyond the owner (§15).
+		// beyond the owner (ADR-0019).
 		if info.Mode().Perm()&0o077 != 0 {
 			warnings = append(warnings, fmt.Sprintf(
 				"config %q is readable by group/others (mode %04o); chmod 600 it — it contains plaintext tokens",

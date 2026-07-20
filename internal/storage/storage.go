@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -303,7 +304,48 @@ func (db *DB) ReadSyncLog(ctx context.Context, connectionID string, limit int) (
 		return nil, fmt.Errorf("read sync_log: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanSyncLogRows(rows)
+}
 
+// ReadSyncLogSince returns all cycle rows for connectionID with ts >= since,
+// newest first. Used by internal/api to compute per-connection health.
+func (db *DB) ReadSyncLogSince(ctx context.Context, connectionID string, since time.Time) ([]SyncLogEntry, error) {
+	rows, err := db.read.QueryContext(ctx, `
+		SELECT id, ts, connection_id, operation, outcome, http_status,
+			items_changed, rate_remaining, retries, next_retry, error
+		FROM sync_log WHERE connection_id = ? AND ts >= ?
+		ORDER BY id DESC`,
+		connectionID, since.UTC().Format(timeFormat))
+	if err != nil {
+		return nil, fmt.Errorf("read sync_log since: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanSyncLogRows(rows)
+}
+
+// LastSyncedAt returns the timestamp of the most recent successful poll cycle
+// for connectionID. Returns a zero Time when no successful cycle exists yet.
+func (db *DB) LastSyncedAt(ctx context.Context, connectionID string) (time.Time, error) {
+	var ts string
+	err := db.read.QueryRowContext(ctx,
+		`SELECT ts FROM sync_log WHERE connection_id = ? AND outcome = 'ok'
+		ORDER BY id DESC LIMIT 1`,
+		connectionID).Scan(&ts)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("last synced at: %w", err)
+	}
+	t, err := parseTime(ts)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse last synced at: %w", err)
+	}
+	return t, nil
+}
+
+// scanSyncLogRows scans all rows from a sync_log SELECT into SyncLogEntry values.
+func scanSyncLogRows(rows *sql.Rows) ([]SyncLogEntry, error) {
 	var entries []SyncLogEntry
 	for rows.Next() {
 		var (
@@ -318,9 +360,11 @@ func (db *DB) ReadSyncLog(ctx context.Context, connectionID string, limit int) (
 			&httpS, &e.ItemsChanged, &rateR, &e.Retries, &nextRetry, &errStr); err != nil {
 			return nil, fmt.Errorf("scan sync_log: %w", err)
 		}
-		if e.Ts, err = parseTime(ts); err != nil {
+		t, err := parseTime(ts)
+		if err != nil {
 			return nil, fmt.Errorf("parse sync_log ts: %w", err)
 		}
+		e.Ts = t
 		if httpS.Valid {
 			v := int(httpS.Int64)
 			e.HTTPStatus = &v
@@ -330,21 +374,18 @@ func (db *DB) ReadSyncLog(ctx context.Context, connectionID string, limit int) (
 			e.RateRemaining = &v
 		}
 		if nextRetry.Valid {
-			t, err := parseTime(nextRetry.String)
+			nt, err := parseTime(nextRetry.String)
 			if err != nil {
 				return nil, fmt.Errorf("parse sync_log next_retry: %w", err)
 			}
-			e.NextRetry = &t
+			e.NextRetry = &nt
 		}
 		if errStr.Valid {
 			e.Error = &errStr.String
 		}
 		entries = append(entries, e)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read sync_log: %w", err)
-	}
-	return entries, nil
+	return entries, rows.Err()
 }
 
 // StoredEvent is one row from the events table with its DB metadata.

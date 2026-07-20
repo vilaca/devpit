@@ -33,13 +33,13 @@ func Open(path string) (*DB, error) {
 	sqlDB.SetMaxOpenConns(1)
 
 	if _, err := sqlDB.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("enable WAL: %w", err)
 	}
 
 	db := &DB{sql: sqlDB}
 	if err := db.migrate(context.Background()); err != nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 		return nil, err
 	}
 	return db, nil
@@ -73,11 +73,11 @@ func (db *DB) migrate(ctx context.Context) error {
 			return fmt.Errorf("migration %d begin: %w", i+1, err)
 		}
 		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("migration %d: %w", i+1, err)
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ?`, i+1); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("migration %d bump version: %w", i+1, err)
 		}
 		if err := tx.Commit(); err != nil {
@@ -99,7 +99,7 @@ func (db *DB) WriteEvents(ctx context.Context, connectionID string, events []sdk
 	if err != nil {
 		return 0, fmt.Errorf("write events begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT OR IGNORE INTO events
@@ -109,7 +109,7 @@ func (db *DB) WriteEvents(ctx context.Context, connectionID string, events []sdk
 	if err != nil {
 		return 0, fmt.Errorf("write events prepare: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	observedAt := time.Now().UTC().Format(timeFormat)
 
@@ -165,7 +165,7 @@ func (db *DB) LoadCursors(ctx context.Context, connectionID string) (sdk.PollSta
 	if err != nil {
 		return nil, fmt.Errorf("load cursors: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	state := sdk.PollState{}
 	for rows.Next() {
@@ -191,7 +191,7 @@ func (db *DB) SaveCursors(ctx context.Context, connectionID string, state sdk.Po
 	if err != nil {
 		return fmt.Errorf("save cursors begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO sync_cursors (connection_id, key, value)
@@ -200,7 +200,7 @@ func (db *DB) SaveCursors(ctx context.Context, connectionID string, state sdk.Po
 	if err != nil {
 		return fmt.Errorf("save cursors prepare: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for k, v := range state {
 		if _, err := stmt.ExecContext(ctx, connectionID, k, v); err != nil {
@@ -268,7 +268,7 @@ func (db *DB) ReadSyncLog(ctx context.Context, connectionID string, limit int) (
 	if err != nil {
 		return nil, fmt.Errorf("read sync_log: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entries []SyncLogEntry
 	for rows.Next() {
@@ -344,7 +344,7 @@ func (db *DB) ReadEvents(ctx context.Context, connectionID string, since time.Ti
 	if err != nil {
 		return nil, fmt.Errorf("read events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var events []StoredEvent
 	for rows.Next() {
@@ -404,7 +404,7 @@ func (db *DB) ListHandleNext(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list handle_next: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var ids []string
 	for rows.Next() {

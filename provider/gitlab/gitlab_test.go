@@ -20,7 +20,7 @@ func newTestProvider(t *testing.T, cassette, handle string) *Provider {
 		t.Fatalf("recorder: %v", err)
 	}
 	rec.SetReplayableInteractions(true)
-	t.Cleanup(func() { rec.Stop() })
+	t.Cleanup(func() { _ = rec.Stop() })
 
 	p, err := New(sdk.ConnectionConfig{
 		ID:      "conn1",

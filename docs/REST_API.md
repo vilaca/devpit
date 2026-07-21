@@ -41,7 +41,7 @@ unmatched path so a browser refresh on any client route works.
 ## `GET /attention`
 
 The full ranked list. Pinned items (`flagged: true`) come first in flag order;
-auto-ranked items follow, sorted by age band (fresh < stale < abandoned) then
+auto-ranked items follow, sorted by age band (fresh < stale < old) then
 state precedence then newest-signal-first (`docs/Attention_Engine.md`).
 
 Each item carries:
@@ -52,8 +52,8 @@ Each item carries:
 - `flagged` — true when in the "Handle next" zone.
 - `flagged_at` — RFC 3339 timestamp when the item was pinned; present only when
   `flagged: true`.
-- `stale` — true when idle more than 7 days (and not abandoned).
-- `abandoned` — true when idle more than 30 days; mutually exclusive with stale.
+- `stale` — true when idle more than 7 days (and not old).
+- `old` — true when idle more than 30 days; mutually exclusive with stale.
 - `updated_at` — the item's ranking timestamp (newest signal or provider time).
 - `signal_counts` — present only when a signal type has count > 1 (drives "×N"
   tags).

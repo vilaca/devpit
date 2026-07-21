@@ -47,9 +47,9 @@ it.
   the no-decay caveat on Mentioned). A tag with nothing beyond its label to
   say still shows its duration.
 - **Age tiers band the list** (2026-07-10). `stale` (idle 7–30 days) and
-  `abandoned` (idle >30 days) are mutually exclusive tiers, and they are the
+  `old` (idle >30 days) are mutually exclusive tiers, and they are the
   *single deliberate exception* to "markers never move items": the list sorts
-  by age band (fresh, then stale, then abandoned last) before state
+  by age band (fresh, then stale, then old last) before state
   precedence, keeping fresh actionable work on top. Within a band the ranking
   above applies unchanged. The pinned zone is exempt — a pin is a deliberate
   user act — but pinned items still show their age tags and pin age, so rot
@@ -65,7 +65,7 @@ context switching.
 
 - The precedence order, the state set, and the age thresholds are direct
   code — they live in `internal/attention/states.go` and
-  `internal/attention/fold.go` (stale: 7 days, abandoned: 30 days), not in
+  `internal/attention/fold.go` (stale: 7 days, old: 30 days), not in
   prose. The fold and bucket semantics are specified in `docs/Attention_Engine.md`;
   the wire shape in `docs/REST_API.md`.
 - Buckets a provider cannot feed simply produce no items

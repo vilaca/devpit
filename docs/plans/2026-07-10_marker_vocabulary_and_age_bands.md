@@ -33,13 +33,13 @@ fields, not a re-derivation.
 Age tiers (fold-side, from the item's ranking timestamp `updated_at`):
 
 - `stale` = idle more than 7 days and at most 30 days.
-- `abandoned` (new) = idle more than 30 days.
+- `old` (new) = idle more than 30 days.
 - Mutually exclusive: never both true.
 - Thresholds follow the existing pattern: exported defaults, overridable via
   arguments, non-positive disables that tier.
 
 Age **bands** (the one ranking change): the auto-ranked list sorts by band
-first — fresh (0), stale (1), abandoned (2) — then the existing key (state
+first — fresh (0), stale (1), old (2) — then the existing key (state
 precedence, newest-first, item ID). The pinned zone is exempt: pins stay on
 top in flag order regardless of age.
 
@@ -90,28 +90,28 @@ assert the new fields for the relevant statuses.
 
 `internal/attention/fold.go`:
 
-- Add `DefaultAbandonedThreshold = 30 * 24 * time.Hour` next to
+- Add `DefaultOldThreshold = 30 * 24 * time.Hour` next to
   `DefaultStaleThreshold` (line 29).
 - `WorkItem` gains:
   - `MergeConflict bool` and `NeedsRebase bool` (copied from facts, like
     `FailingChecks` at line 179),
   - `GateDetail string` (`json:"gate_detail,omitempty"`, copied verbatim from
     `facts.GateDetail` — powers the blocked-tag tooltip),
-  - `Abandoned bool`,
+  - `Old bool`,
   - `FlaggedAt *time.Time` (`json:"flagged_at,omitempty"`, set only on pinned
     items — see step 5).
 - `Fold` and `List` take a second threshold argument
-  (`staleThreshold, abandonedThreshold time.Duration`). Tier logic in
+  (`staleThreshold, oldThreshold time.Duration`). Tier logic in
   `foldItem` (replacing line 176):
 
 ```go
 idle := now.Sub(updatedAt)
-abandoned := abandonedThreshold > 0 && idle > abandonedThreshold
-stale := !abandoned && staleThreshold > 0 && idle > staleThreshold
+old := oldThreshold > 0 && idle > oldThreshold
+stale := !old && staleThreshold > 0 && idle > staleThreshold
 ```
 
-  (If the abandoned tier is disabled, items older than 30 days are simply
-  `stale` — the `!abandoned` guard handles this automatically.)
+  (If the old tier is disabled, items older than 30 days are simply
+  `stale` — the `!old` guard handles this automatically.)
 
 ## Step 3b — Fold: onset timestamps (`since` map)
 
@@ -139,7 +139,7 @@ keyed by the wire names of states and markers (`"needs_review"`,
 ## Step 4 — Fold: age bands in sorting
 
 `sortItems` (`internal/attention/fold.go:231`): compare age band before state
-precedence. Band: 0 fresh, 1 stale, 2 abandoned (derive from the two flags).
+precedence. Band: 0 fresh, 1 stale, 2 old (derive from the two flags).
 Keep the rest of the comparator unchanged. `pin()` is untouched — banding
 applies only to the auto-ranked remainder.
 
@@ -153,11 +153,11 @@ through `attention.List` → `pin()` so pinned WorkItems carry `FlaggedAt`.
 ## Step 6 — API
 
 `internal/api/attention.go` (DTO ~line 34, mapping ~line 83): add
-`merge_conflict`, `needs_rebase`, `abandoned`, `gate_detail` (omitempty),
+`merge_conflict`, `needs_rebase`, `old`, `gate_detail` (omitempty),
 `flagged_at` (omitempty), `since` (omitempty map, step 3b). Update call sites of `attention.List`
 (`attention.go:40`) and `api.New` (`server.go`, `api_test.go:33`,
 `cmd/devpit/main.go:78`) for the second threshold argument — pass
-`attention.DefaultAbandonedThreshold`.
+`attention.DefaultOldThreshold`.
 
 ## Step 7 — Frontend
 
@@ -168,7 +168,7 @@ Files: `frontend/src/lib/types.ts` (add the new WorkItem fields),
 - **Three visual tiers of tags**: state chips (primary, as today) >
   diagnostic badges (`merge_conflict` → "conflict", `needs_rebase` →
   "rebase", `failing_checks` → "failing checks", alert styling) > age tags
-  (`stale`, `abandoned`, muted styling).
+  (`stale`, `old`, muted styling).
 - **Hover text — one uniform rule** (rewrite `titleFor` and the marker
   titles in `StateTags.svelte`): every state chip and diagnostic badge gets
   `title` = `for {relativeTime(since[tag])}` (the `since` map from the API;
@@ -180,7 +180,7 @@ Files: `frontend/src/lib/types.ts` (add the new WorkItem fields),
   - `ready_to_merge` when `failing_checks` is also set: `for {N} · a
     non-required check is red`.
   - `mentioned`: `for {N} · clears when the item closes`.
-  - `stale` / `abandoned`: keep the existing dynamic form — `No activity for
+  - `stale` / `old`: keep the existing dynamic form — `No activity for
     {relativeTime(updated_at)} (threshold: 7 days)` / `(threshold: 30 days)`
     — these two carry their duration in the text already and get no `since`
     entry lookup.
@@ -217,10 +217,10 @@ Files: `frontend/src/lib/types.ts` (add the new WorkItem fields),
 - Marker mapping per provider status (table-driven, both providers).
 - `dirty` PR: `blocked` state + `merge_conflict` true + `failing_checks`
   false (the narrowing).
-- Tier exclusivity: 10-day item → stale only; 40-day item → abandoned only;
+- Tier exclusivity: 10-day item → stale only; 40-day item → old only;
   disabled thresholds.
 - Banding: a 10-day-old `needs_review` sorts **below** a fresh
-  `waiting_on_author`; abandoned sorts last; within a band the old order
+  `waiting_on_author`; old sorts last; within a band the old order
   holds; pinned items ignore bands.
 - Pin age surfaces `flagged_at`; API DTO carries all new fields.
 - Onset (`since`): state true across 3 snapshots → onset = oldest of the run;

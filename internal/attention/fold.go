@@ -28,10 +28,10 @@ const (
 // badge.
 const DefaultStaleThreshold = 7 * 24 * time.Hour
 
-// DefaultAbandonedThreshold is the age past which an item earns the "abandoned"
+// DefaultOldThreshold is the age past which an item earns the "old"
 // badge (idle > 30 days). Mutually exclusive with stale. A non-positive value
 // disables the tier; items older than 30 days are then simply stale.
-const DefaultAbandonedThreshold = 30 * 24 * time.Hour
+const DefaultOldThreshold = 30 * 24 * time.Hour
 
 // WorkItem is one folded provider object: an open item that matches at least
 // one attention state. Field names mirror docs/REST_API.md GET /attention; the
@@ -52,7 +52,7 @@ type WorkItem struct {
 	States        []State              `json:"states"`  // precedence order; States[0] ranks the item
 	Flagged       bool                 `json:"flagged"` // pinned in the "Handle next" zone
 	Stale         bool                 `json:"stale"`
-	Abandoned     bool                 `json:"abandoned"`
+	Old           bool                 `json:"old"`
 	UpdatedAt     time.Time            `json:"updated_at"`
 	SignalCounts  map[string]int       `json:"signal_counts,omitempty"` // only types with count > 1
 	FailingChecks bool                 `json:"failing_checks"`
@@ -76,7 +76,7 @@ type itemKey struct {
 // per-connection label/type from config, which lives outside the event log.
 func List(
 	ctx context.Context, db *storage.DB, connectionIDs []string,
-	now time.Time, staleThreshold, abandonedThreshold time.Duration,
+	now time.Time, staleThreshold, oldThreshold time.Duration,
 ) ([]WorkItem, error) {
 	var events []storage.StoredEvent
 	for _, id := range connectionIDs {
@@ -92,18 +92,18 @@ func List(
 		return nil, fmt.Errorf("list handle_next: %w", err)
 	}
 
-	return pin(Fold(events, now, staleThreshold, abandonedThreshold), pinned), nil
+	return pin(Fold(events, now, staleThreshold, oldThreshold), pinned), nil
 }
 
 // Fold folds an event log into the ranked WorkItem list. Events may span
 // multiple connections; they are grouped by identity triple. now,
-// staleThreshold, and abandonedThreshold drive the age tiers. The result is
-// sorted by age band (fresh, stale, abandoned) then state precedence
+// staleThreshold, and oldThreshold drive the age tiers. The result is
+// sorted by age band (fresh, stale, old) then state precedence
 // (highest first) then newest-first, with the item ID as a stable final
 // tiebreak. Items that are removed, not open, or match no state are dropped.
 func Fold(
 	events []storage.StoredEvent, now time.Time,
-	staleThreshold, abandonedThreshold time.Duration,
+	staleThreshold, oldThreshold time.Duration,
 ) []WorkItem {
 	groups := make(map[itemKey][]storage.StoredEvent)
 	order := make([]itemKey, 0)
@@ -117,7 +117,7 @@ func Fold(
 
 	items := make([]WorkItem, 0, len(order))
 	for _, k := range order {
-		if item, ok := foldItem(k, groups[k], now, staleThreshold, abandonedThreshold); ok {
+		if item, ok := foldItem(k, groups[k], now, staleThreshold, oldThreshold); ok {
 			items = append(items, item)
 		}
 	}
@@ -131,7 +131,7 @@ func Fold(
 // open, malformed facts, or no matching state).
 func foldItem(
 	k itemKey, events []storage.StoredEvent, now time.Time,
-	staleThreshold, abandonedThreshold time.Duration,
+	staleThreshold, oldThreshold time.Duration,
 ) (WorkItem, bool) {
 	var (
 		latestObserved *storage.StoredEvent
@@ -184,8 +184,8 @@ func foldItem(
 	updatedAt := rankingTime(signals, facts, latestObserved.ObservedAt)
 
 	idle := now.Sub(updatedAt)
-	abandoned := abandonedThreshold > 0 && idle > abandonedThreshold
-	stale := !abandoned && staleThreshold > 0 && idle > staleThreshold
+	old := oldThreshold > 0 && idle > oldThreshold
+	stale := !old && staleThreshold > 0 && idle > staleThreshold
 
 	// Sort observed events newest-first for onset computation.
 	sort.Slice(allObserved, func(i, j int) bool { return allObserved[i].ID > allObserved[j].ID })
@@ -202,7 +202,7 @@ func foldItem(
 		Draft:         facts.Draft,
 		States:        states,
 		Stale:         stale,
-		Abandoned:     abandoned,
+		Old:           old,
 		UpdatedAt:     updatedAt,
 		SignalCounts:  signalCounts(signals),
 		FailingChecks: facts.FailingChecks,
@@ -376,9 +376,9 @@ func signalCounts(signals []storage.StoredEvent) map[string]int {
 	return repeated
 }
 
-// ageBand returns 0 for fresh, 1 for stale, 2 for abandoned.
+// ageBand returns 0 for fresh, 1 for stale, 2 for old.
 func ageBand(it WorkItem) int {
-	if it.Abandoned {
+	if it.Old {
 		return 2
 	}
 	if it.Stale {
@@ -387,7 +387,7 @@ func ageBand(it WorkItem) int {
 	return 0
 }
 
-// sortItems orders items by age band (fresh < stale < abandoned) first, then
+// sortItems orders items by age band (fresh < stale < old) first, then
 // state precedence (highest-precedence state), then newest-first, then item ID
 // for a stable total order. Pinned items are not sorted here — pin() handles them.
 func sortItems(items []WorkItem) {

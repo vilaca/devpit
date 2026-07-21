@@ -29,7 +29,7 @@ type attentionItem struct {
 	States          []attention.State    `json:"states"`
 	Flagged         bool                 `json:"flagged"`
 	Stale           bool                 `json:"stale"`
-	Abandoned       bool                 `json:"abandoned"`
+	Old             bool                 `json:"old"`
 	UpdatedAt       time.Time            `json:"updated_at"`
 	SignalCounts    map[string]int       `json:"signal_counts,omitempty"`
 	FailingChecks   bool                 `json:"failing_checks"`
@@ -43,7 +43,7 @@ type attentionItem struct {
 // handleAttention serves GET /attention. The optional ?state= query parameter
 // filters the list to items whose States slice contains the given state value.
 func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
-	items, err := attention.List(r.Context(), s.db, s.connectionIDs(), time.Now(), s.staleThres, s.abandonedThres)
+	items, err := attention.List(r.Context(), s.db, s.connectionIDs(), time.Now(), s.staleThres, s.oldThres)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to load attention list")
 		return
@@ -84,7 +84,7 @@ func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
 		States:          it.States,
 		Flagged:         it.Flagged,
 		Stale:           it.Stale,
-		Abandoned:       it.Abandoned,
+		Old:             it.Old,
 		UpdatedAt:       it.UpdatedAt,
 		SignalCounts:    it.SignalCounts,
 		FailingChecks:   it.FailingChecks,

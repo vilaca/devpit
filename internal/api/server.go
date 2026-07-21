@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/vilaca/devpit/internal/storage"
+	"github.com/vilaca/devpit/internal/web"
 )
 
 // failureWindowMinutes is the rolling window used to compute connection health.
@@ -57,6 +58,11 @@ func New(db *storage.DB, connections []ConnectionMeta, staleThreshold time.Durat
 	s.mux.HandleFunc("GET /sync-log", s.handleSyncLog)
 	s.mux.HandleFunc("PUT /items/{id}/flag", s.handleFlagSet)
 	s.mux.HandleFunc("DELETE /items/{id}/flag", s.handleFlagClear)
+	// Catch-all: serve the embedded SPA (ADR-0010). The API patterns above are
+	// more specific, so ServeMux routes them first; everything else — "/",
+	// assets, and client routes — falls through to the static handler, which
+	// serves index.html for unknown paths so a browser refresh works.
+	s.mux.Handle("GET /", web.Handler())
 	return s
 }
 

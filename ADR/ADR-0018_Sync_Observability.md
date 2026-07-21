@@ -8,9 +8,9 @@ Accepted
 
 Sync-log persistence and per-cycle rows **Implemented (v0.1)**
 (`internal/storage`, `internal/engine`). Per-call detail rows **Deferred**. The
-user-facing health indicators and sync-log view are **Planned** — the frontend
-is not built (the REST API backing them is built, `internal/api`). See
-`docs/Roadmap.md`.
+user-facing health indicators and sync-log view are **Implemented (v0.1)** —
+connection health dots, the failure banner, and the sync-log drawer are built
+in `frontend/`. See `docs/Roadmap.md`.
 
 ## Context
 

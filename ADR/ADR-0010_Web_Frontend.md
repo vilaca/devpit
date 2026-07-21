@@ -6,8 +6,11 @@ Accepted
 
 ## Scope
 
-**Planned** — `frontend/` is a placeholder; no SPA is built yet. See
-`docs/Roadmap.md`.
+**Implemented (v0.1)** — the SPA is fully built: Vite + Svelte 5 build
+tooling, the REST/SSE data layer, `go:embed` serving from the binary, and the
+full presentation UI (pinned zone, state tags, bucket filters, sync-log view,
+failure banner, health dots, keyboard shortcuts, URL state) are all in
+`frontend/` and `internal/web`. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -30,7 +33,16 @@ mobile clients. Embedding via `go:embed` keeps the single-binary deployment
 
 ## Consequences
 
-- Accepted cost: a JS build step lives in the repo.
-- Frontend and its SSE/REST integration are **Planned**, not built (the last
-  remaining v0.1 piece); the API surface it consumes is built (`internal/api`)
-  and specified in `docs/REST_API.md`.
+- Accepted cost: a JS build step lives in the repo (`frontend/`, Vite). It
+  outputs into `internal/web/dist`, which `go:embed` bundles into the binary; a
+  committed placeholder `index.html` keeps `go build` working before the SPA is
+  built.
+- The binary serves the SPA and the API from one origin: `internal/api` mounts
+  the embedded static handler (`internal/web`) as a catch-all behind the more
+  specific API routes, with history-API fallback so a browser refresh on any
+  route serves `index.html`.
+- In dev, Vite's server proxies the API paths through to a running backend
+  (`vite.config.ts`), so the browser still sees a single origin.
+- Live updates come from an open SSE stream that invalidates a store slice,
+  which re-fetches over REST; a cold load runs the same fetch path, so a live
+  update and a refresh converge on identical state (the fold is on read).

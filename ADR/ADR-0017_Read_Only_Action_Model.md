@@ -7,8 +7,9 @@ Accepted
 ## Scope
 
 Storage and fold support **Implemented (v0.1)** (the `handle_next` table and
-the fold's pinned zone); the click-through UI is **Planned** — the frontend is
-not built. See `docs/Roadmap.md`.
+the fold's pinned zone); the click-through UI is **Implemented (v0.1)** —
+deep-link-out and the "Handle next" flag toggle are built in `frontend/`. See
+`docs/Roadmap.md`.
 
 ## Context
 

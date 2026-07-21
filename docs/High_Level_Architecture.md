@@ -12,8 +12,8 @@ the spec (the *design detail*), or the code (the *truth*).
 | **Storage** | SQLite (WAL), split read/write pools, single-instance lock; the event log | `internal/storage` | `docs/Event_Taxonomy_and_Storage.md` | ADR-0007 | **Built** |
 | **Attention Engine** | Folds the event log into the ranked, tagged attention list at read time | `internal/attention` | `docs/Attention_Engine.md` | ADR-0005, ADR-0016 | **Built** |
 | **Config** | Loads the static, named connection list; 0600 warning | `internal/config` | — | ADR-0015, ADR-0019 | **Built** |
-| **REST API + SSE** | Serves the attention list, connections, sync log; pushes coarse change events | `internal/api` | `docs/REST_API.md` | ADR-0008 | **Built** |
-| **Web UI** | Svelte SPA; live dashboard; keyboard-first | `frontend/` | — | ADR-0010 | **Planned** |
+| **REST API + SSE** | Serves the attention list, connections, sync log; pushes coarse change events; serves the embedded SPA | `internal/api`, `internal/web` | `docs/REST_API.md` | ADR-0008, ADR-0010 | **Built** |
+| **Web UI** | Svelte SPA; live dashboard over REST + SSE; embedded via `go:embed` | `frontend/`, `internal/web` | — | ADR-0010 | **Built (v0.1)** |
 
 ## How it hangs together
 

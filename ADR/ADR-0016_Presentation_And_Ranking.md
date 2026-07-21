@@ -7,8 +7,8 @@ Accepted
 ## Scope
 
 Fold and ranking **Implemented (v0.1)** (`internal/attention`); the user-facing
-presentation (pinned zone, tags, filters) is **Planned** — the frontend is not
-built. See `docs/Roadmap.md`.
+presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the
+full UI is built in `frontend/`. See `docs/Roadmap.md`.
 
 ## Context
 

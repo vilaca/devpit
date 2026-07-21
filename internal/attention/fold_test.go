@@ -59,7 +59,7 @@ func openFacts() sdk.ItemObservedPayload {
 }
 
 func fold(events []storage.StoredEvent) []WorkItem {
-	return Fold(events, baseTime, DefaultStaleThreshold, DefaultAbandonedThreshold)
+	return Fold(events, baseTime, DefaultStaleThreshold, DefaultOldThreshold)
 }
 
 func TestFoldStateConditions(t *testing.T) {
@@ -486,7 +486,7 @@ func TestListReadsFoldsAndPins(t *testing.T) {
 		t.Fatalf("SetHandleNext: %v", err)
 	}
 
-	items, err := List(ctx, db, []string{"c"}, time.Now(), DefaultStaleThreshold, DefaultAbandonedThreshold)
+	items, err := List(ctx, db, []string{"c"}, time.Now(), DefaultStaleThreshold, DefaultOldThreshold)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -568,12 +568,12 @@ func TestAgeTierExclusivity(t *testing.T) {
 
 	fresh := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
 	stale10 := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
-	aband40 := sig(6, "acme/api#abandoned", signalMentioned, baseTime.Add(-40*24*time.Hour))
+	aband40 := sig(6, "acme/api#old", signalMentioned, baseTime.Add(-40*24*time.Hour))
 
 	events := []storage.StoredEvent{
 		obs(1, "c", "acme/api#fresh", f), fresh,
 		obs(3, "c", "acme/api#stale", f), stale10,
-		obs(5, "c", "acme/api#abandoned", f), aband40,
+		obs(5, "c", "acme/api#old", f), aband40,
 	}
 	items := fold(events)
 	byID := map[string]WorkItem{}
@@ -582,18 +582,18 @@ func TestAgeTierExclusivity(t *testing.T) {
 	}
 
 	freshItem := byID["acme/api#fresh"]
-	if freshItem.Stale || freshItem.Abandoned {
-		t.Errorf("fresh item: stale=%v abandoned=%v, want both false", freshItem.Stale, freshItem.Abandoned)
+	if freshItem.Stale || freshItem.Old {
+		t.Errorf("fresh item: stale=%v old=%v, want both false", freshItem.Stale, freshItem.Old)
 	}
 
 	staleItem := byID["acme/api#stale"]
-	if !staleItem.Stale || staleItem.Abandoned {
-		t.Errorf("10-day item: stale=%v abandoned=%v, want stale=true abandoned=false", staleItem.Stale, staleItem.Abandoned)
+	if !staleItem.Stale || staleItem.Old {
+		t.Errorf("10-day item: stale=%v old=%v, want stale=true old=false", staleItem.Stale, staleItem.Old)
 	}
 
-	abandItem := byID["acme/api#abandoned"]
-	if abandItem.Stale || !abandItem.Abandoned {
-		t.Errorf("40-day item: stale=%v abandoned=%v, want stale=false abandoned=true", abandItem.Stale, abandItem.Abandoned)
+	oldItem := byID["acme/api#old"]
+	if oldItem.Stale || !oldItem.Old {
+		t.Errorf("40-day item: stale=%v old=%v, want stale=false old=true", oldItem.Stale, oldItem.Old)
 	}
 }
 
@@ -602,20 +602,20 @@ func TestAgeTierDisabledThresholds(t *testing.T) {
 	f.MyRoles = []string{"reviewer"}
 	f.MyReviewState = "requested"
 
-	// Item 40 days old with abandoned threshold disabled: should be stale, not abandoned.
+	// Item 40 days old with old threshold disabled: should be stale, not old.
 	stale40 := sig(2, "acme/api#1", signalMentioned, baseTime.Add(-40*24*time.Hour))
 	events := []storage.StoredEvent{obs(1, "c", "acme/api#1", f), stale40}
 
-	items := Fold(events, baseTime, DefaultStaleThreshold, 0 /* abandoned disabled */)
+	items := Fold(events, baseTime, DefaultStaleThreshold, 0 /* old disabled */)
 	if len(items) != 1 {
 		t.Fatalf("want 1 item, got %d", len(items))
 	}
 	it := items[0]
 	if !it.Stale {
-		t.Error("40-day item should be stale when abandoned threshold is disabled")
+		t.Error("40-day item should be stale when old threshold is disabled")
 	}
-	if it.Abandoned {
-		t.Error("abandoned should be false when threshold is 0")
+	if it.Old {
+		t.Error("old should be false when threshold is 0")
 	}
 }
 
@@ -647,19 +647,19 @@ func TestAgeBandSorting(t *testing.T) {
 	}
 }
 
-func TestAgeBandAbandonedLast(t *testing.T) {
+func TestAgeBandOldLast(t *testing.T) {
 	f := openFacts()
 	f.MyRoles = []string{"reviewer"}
 	f.MyReviewState = "requested" // needs_review for all
 
 	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
 	staleSig := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
-	abandSig := sig(6, "acme/api#abandoned", signalMentioned, baseTime.Add(-40*24*time.Hour))
+	oldSig := sig(6, "acme/api#old", signalMentioned, baseTime.Add(-40*24*time.Hour))
 
 	events := []storage.StoredEvent{
 		obs(1, "c", "acme/api#fresh", f), freshSig,
 		obs(3, "c", "acme/api#stale", f), staleSig,
-		obs(5, "c", "acme/api#abandoned", f), abandSig,
+		obs(5, "c", "acme/api#old", f), oldSig,
 	}
 	items := fold(events)
 	if len(items) != 3 {
@@ -667,7 +667,7 @@ func TestAgeBandAbandonedLast(t *testing.T) {
 	}
 	if items[0].NativeID != "acme/api#fresh" ||
 		items[1].NativeID != "acme/api#stale" ||
-		items[2].NativeID != "acme/api#abandoned" {
+		items[2].NativeID != "acme/api#old" {
 		t.Errorf("band order wrong: %q %q %q",
 			items[0].NativeID, items[1].NativeID, items[2].NativeID)
 	}
@@ -696,27 +696,27 @@ func TestAgeBandWithinBandOrderPreserved(t *testing.T) {
 }
 
 func TestPinnedItemsIgnoreAgeBand(t *testing.T) {
-	// A pinned abandoned item should stay pinned at the top (bands don't reorder pins).
+	// A pinned old item should stay pinned at the top (bands don't reorder pins).
 	f := openFacts()
 	f.MyRoles = []string{"reviewer"}
 	f.MyReviewState = "requested"
 
 	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
-	abandSig := sig(4, "acme/api#abandoned", signalMentioned, baseTime.Add(-40*24*time.Hour))
+	oldSig2 := sig(4, "acme/api#old", signalMentioned, baseTime.Add(-40*24*time.Hour))
 
 	ranked := Fold([]storage.StoredEvent{
 		obs(1, "c", "acme/api#fresh", f), freshSig,
-		obs(3, "c", "acme/api#abandoned", f), abandSig,
-	}, baseTime, DefaultStaleThreshold, DefaultAbandonedThreshold)
+		obs(3, "c", "acme/api#old", f), oldSig2,
+	}, baseTime, DefaultStaleThreshold, DefaultOldThreshold)
 
-	abandID := itemID(itemKey{"c", "merge_request", "acme/api#abandoned"})
-	pinned := pin(ranked, []storage.PinnedItem{{ID: abandID}})
+	oldID := itemID(itemKey{"c", "merge_request", "acme/api#old"})
+	pinned := pin(ranked, []storage.PinnedItem{{ID: oldID}})
 
 	if len(pinned) != 2 {
 		t.Fatalf("want 2 items, got %d", len(pinned))
 	}
-	if pinned[0].ID != abandID || !pinned[0].Flagged {
-		t.Errorf("abandoned pinned item should be first; got %q flagged=%v", pinned[0].ID, pinned[0].Flagged)
+	if pinned[0].ID != oldID || !pinned[0].Flagged {
+		t.Errorf("old pinned item should be first; got %q flagged=%v", pinned[0].ID, pinned[0].Flagged)
 	}
 }
 

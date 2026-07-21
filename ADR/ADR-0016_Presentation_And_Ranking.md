@@ -9,7 +9,7 @@ Accepted
 Fold and ranking **Implemented (v0.1)** (`internal/attention`); the user-facing
 presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the
 full UI is built in `frontend/`. The marker vocabulary and age bands
-(decision 2026-07-10, below) are **Planned**. See `docs/Roadmap.md`.
+(decision 2026-07-10, below) are **Implemented (v0.1.1)**. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -63,10 +63,10 @@ context switching.
 
 ## Consequences
 
-- The precedence order, the state set, and the staleness threshold are direct
+- The precedence order, the state set, and the age thresholds are direct
   code — they live in `internal/attention/states.go` and
-  `internal/attention/fold.go` (threshold: 7 days), not in prose. The fold and
-  bucket semantics are specified in `docs/Attention_Engine.md`; the wire shape
-  in `docs/REST_API.md`.
+  `internal/attention/fold.go` (stale: 7 days, abandoned: 30 days), not in
+  prose. The fold and bucket semantics are specified in `docs/Attention_Engine.md`;
+  the wire shape in `docs/REST_API.md`.
 - Buckets a provider cannot feed simply produce no items
   (`ADR/ADR-0003_Provider_Plugin_Model.md`).

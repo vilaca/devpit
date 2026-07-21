@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AttentionItem } from "../lib/types";
+  import { relativeTime } from "../lib/format";
   import WorkItemRow from "./WorkItemRow.svelte";
 
   const {
@@ -20,12 +21,17 @@
     <h2>Handle next</h2>
     <div role="list">
       {#each items as item (item.id)}
-        <WorkItemRow
-          {item}
-          focused={focusedId === item.id}
-          {onToggleFlag}
-          {onFocus}
-        />
+        <div class="pinned-item">
+          <WorkItemRow
+            {item}
+            focused={focusedId === item.id}
+            {onToggleFlag}
+            {onFocus}
+          />
+          {#if item.flagged_at}
+            <div class="pin-age">pinned {relativeTime(item.flagged_at)}</div>
+          {/if}
+        </div>
       {/each}
     </div>
   </section>
@@ -43,5 +49,16 @@
     color: var(--marker-stale);
     margin: 0 0 8px;
     padding: 0 2px;
+  }
+  .pinned-item {
+    position: relative;
+  }
+  .pin-age {
+    position: absolute;
+    bottom: 6px;
+    right: 10px;
+    font-size: 10px;
+    color: var(--text-faint);
+    pointer-events: none;
   }
 </style>

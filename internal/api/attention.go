@@ -15,29 +15,35 @@ type attentionResponse struct {
 
 // attentionItem is one entry in the GET /attention response.
 type attentionItem struct {
-	ID              string            `json:"id"`
-	ConnectionID    string            `json:"connection_id"`
-	ConnectionLabel string            `json:"connection_label"`
-	ConnectionType  string            `json:"connection_type"`
-	ObjectType      string            `json:"object_type"`
-	NativeID        string            `json:"native_id"`
-	Title           string            `json:"title"`
-	URL             string            `json:"url"`
-	Repo            string            `json:"repo"`
-	Author          string            `json:"author"`
-	Draft           bool              `json:"draft"`
-	States          []attention.State `json:"states"`
-	Flagged         bool              `json:"flagged"`
-	Stale           bool              `json:"stale"`
-	UpdatedAt       time.Time         `json:"updated_at"`
-	SignalCounts    map[string]int    `json:"signal_counts,omitempty"`
-	FailingChecks   bool              `json:"failing_checks"`
+	ID              string               `json:"id"`
+	ConnectionID    string               `json:"connection_id"`
+	ConnectionLabel string               `json:"connection_label"`
+	ConnectionType  string               `json:"connection_type"`
+	ObjectType      string               `json:"object_type"`
+	NativeID        string               `json:"native_id"`
+	Title           string               `json:"title"`
+	URL             string               `json:"url"`
+	Repo            string               `json:"repo"`
+	Author          string               `json:"author"`
+	Draft           bool                 `json:"draft"`
+	States          []attention.State    `json:"states"`
+	Flagged         bool                 `json:"flagged"`
+	Stale           bool                 `json:"stale"`
+	Abandoned       bool                 `json:"abandoned"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+	SignalCounts    map[string]int       `json:"signal_counts,omitempty"`
+	FailingChecks   bool                 `json:"failing_checks"`
+	MergeConflict   bool                 `json:"merge_conflict"`
+	NeedsRebase     bool                 `json:"needs_rebase"`
+	GateDetail      string               `json:"gate_detail,omitempty"`
+	FlaggedAt       *time.Time           `json:"flagged_at,omitempty"`
+	Since           map[string]time.Time `json:"since,omitempty"`
 }
 
 // handleAttention serves GET /attention. The optional ?state= query parameter
 // filters the list to items whose States slice contains the given state value.
 func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
-	items, err := attention.List(r.Context(), s.db, s.connectionIDs(), time.Now(), s.staleThres)
+	items, err := attention.List(r.Context(), s.db, s.connectionIDs(), time.Now(), s.staleThres, s.abandonedThres)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to load attention list")
 		return
@@ -78,8 +84,14 @@ func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
 		States:          it.States,
 		Flagged:         it.Flagged,
 		Stale:           it.Stale,
+		Abandoned:       it.Abandoned,
 		UpdatedAt:       it.UpdatedAt,
 		SignalCounts:    it.SignalCounts,
 		FailingChecks:   it.FailingChecks,
+		MergeConflict:   it.MergeConflict,
+		NeedsRebase:     it.NeedsRebase,
+		GateDetail:      it.GateDetail,
+		FlaggedAt:       it.FlaggedAt,
+		Since:           it.Since,
 	}
 }

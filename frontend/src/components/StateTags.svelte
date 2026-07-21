@@ -13,38 +13,82 @@
     return stateLabel(s);
   }
 
-  // Hover text for states/markers where the reason is derivable from the item.
-  function titleFor(s: State): string | undefined {
+  // Hover text for a state chip. Rule: "for {onset}" plus tag-specific extras.
+  // Never restates the tag label. Omit tooltip when nothing to add.
+  function titleForState(s: State): string | undefined {
+    const onset = item.since?.[s];
+    const dur = onset ? `for ${relativeTime(onset)}` : undefined;
+
     if (s === "blocked") {
-      return item.failing_checks
-        ? "Merge gate is not satisfied — failing checks or merge conflict"
-        : "Merge gate is not satisfied (required reviews, branch protection, or other conditions)";
+      const detail = item.gate_detail ? ` · provider says: ${item.gate_detail}` : "";
+      return dur ? `${dur}${detail}` : detail || undefined;
     }
-    return undefined;
+    if (s === "ready_to_merge" && item.failing_checks) {
+      return dur ? `${dur} · a non-required check is red` : "a non-required check is red";
+    }
+    if (s === "mentioned") {
+      return dur ? `${dur} · clears when the item closes` : "clears when the item closes";
+    }
+    return dur;
   }
 
+  // Hover text for a diagnostic marker badge.
+  function titleForMarker(key: string): string | undefined {
+    const onset = item.since?.[key];
+    return onset ? `for ${relativeTime(onset)}` : undefined;
+  }
+
+  // When ready_to_merge + failing_checks co-occur, render them as one combined phrase.
+  const readyButRed = $derived(
+    item.states.includes("ready_to_merge") && item.failing_checks,
+  );
+
   const staleTitle = $derived(
-    `Stale — no activity for ${relativeTime(item.updated_at)} (threshold: 7 days)`,
+    `No activity for ${relativeTime(item.updated_at)} (threshold: 7 days)`,
+  );
+  const abandonedTitle = $derived(
+    `No activity for ${relativeTime(item.updated_at)} (threshold: 30 days)`,
   );
 </script>
 
 <span class="tags">
   {#if item.draft}
-    <span class="tag marker-draft">Draft</span>
+    <span class="tag marker-draft" title={titleForMarker("draft")}>Draft</span>
   {/if}
+
   {#each item.states as s (s)}
-    <span
-      class="tag"
-      style:color={stateCSSVar(s)}
-      style:border-color={stateCSSVar(s)}
-      title={titleFor(s)}
-    >{labelFor(s)}</span>
+    {#if s === "ready_to_merge" && readyButRed}
+      <!-- Combined "ready · optional checks red" phrase — shown once -->
+      <span
+        class="tag ready-but-red"
+        style:color={stateCSSVar(s)}
+        style:border-color={stateCSSVar(s)}
+        title={titleForState(s)}
+      >Ready to Merge · optional checks red</span>
+    {:else if s !== "ready_to_merge" || !readyButRed}
+      <span
+        class="tag"
+        style:color={stateCSSVar(s)}
+        style:border-color={stateCSSVar(s)}
+        title={titleForState(s)}
+      >{labelFor(s)}</span>
+    {/if}
   {/each}
-  {#if item.failing_checks}
-    <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016) -->
-    <span class="tag marker-checks" title="Failing status checks or merge conflict (GitHub: unstable/dirty mergeable_state)">Checks failing</span>
+
+  {#if item.merge_conflict}
+    <span class="tag marker-conflict" title={titleForMarker("merge_conflict")}>Conflict</span>
   {/if}
-  {#if item.stale}
+  {#if item.needs_rebase}
+    <span class="tag marker-conflict" title={titleForMarker("needs_rebase")}>Rebase</span>
+  {/if}
+  {#if item.failing_checks && !readyButRed}
+    <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016) -->
+    <span class="tag marker-conflict" title={titleForMarker("failing_checks")}>Failing Checks</span>
+  {/if}
+
+  {#if item.abandoned}
+    <span class="tag marker-abandoned" title={abandonedTitle}>Abandoned</span>
+  {:else if item.stale}
     <span class="tag marker-stale" title={staleTitle}>Stale</span>
   {/if}
 </span>
@@ -69,12 +113,19 @@
     color: var(--marker-draft);
     border-color: var(--marker-draft);
   }
-  .marker-checks {
-    color: var(--marker-failing-checks);
-    border-color: var(--marker-failing-checks);
+  .marker-conflict {
+    color: var(--marker-conflict);
+    border-color: var(--marker-conflict);
   }
   .marker-stale {
     color: var(--marker-stale);
     border-color: var(--marker-stale);
+  }
+  .marker-abandoned {
+    color: var(--marker-abandoned);
+    border-color: var(--marker-abandoned);
+  }
+  .ready-but-red {
+    opacity: 0.85;
   }
 </style>

@@ -38,9 +38,15 @@ export interface AttentionItem {
   states: State[];
   flagged: boolean;
   stale: boolean;
+  abandoned: boolean;
   updated_at: string; // RFC 3339 UTC
   signal_counts?: Record<string, number>; // present only for counts > 1
   failing_checks: boolean;
+  merge_conflict: boolean;
+  needs_rebase: boolean;
+  gate_detail?: string;
+  flagged_at?: string; // RFC 3339 UTC; present only when pinned
+  since?: Record<string, string>; // tag key → RFC 3339 onset time; active tags only
 }
 
 export interface AttentionResponse {

@@ -59,7 +59,7 @@ func openFacts() sdk.ItemObservedPayload {
 }
 
 func fold(events []storage.StoredEvent) []WorkItem {
-	return Fold(events, baseTime, DefaultStaleThreshold)
+	return Fold(events, baseTime, DefaultStaleThreshold, DefaultAbandonedThreshold)
 }
 
 func TestFoldStateConditions(t *testing.T) {
@@ -422,7 +422,8 @@ func TestPinLiftsFlaggedInFlagOrder(t *testing.T) {
 		{ID: "b", States: []State{StateBlocked}},
 		{ID: "c", States: []State{StateMentioned}},
 	}
-	got := pin(items, []string{"c", "a"}) // flag order: c before a
+	pinned := []storage.PinnedItem{{ID: "c"}, {ID: "a"}} // flag order: c before a
+	got := pin(items, pinned)
 
 	if len(got) != 3 {
 		t.Fatalf("want 3 items, got %d", len(got))
@@ -448,7 +449,7 @@ func TestPinNoFlagsIsIdentity(t *testing.T) {
 
 func TestPinIgnoresFlagWithNoLiveItem(t *testing.T) {
 	items := []WorkItem{{ID: "a", States: []State{StateNeedsReview}}}
-	got := pin(items, []string{"gone", "a"})
+	got := pin(items, []storage.PinnedItem{{ID: "gone"}, {ID: "a"}})
 	if len(got) != 1 || got[0].ID != "a" || !got[0].Flagged {
 		t.Errorf("stale flag should be ignored, got %+v", got)
 	}
@@ -485,7 +486,7 @@ func TestListReadsFoldsAndPins(t *testing.T) {
 		t.Fatalf("SetHandleNext: %v", err)
 	}
 
-	items, err := List(ctx, db, []string{"c"}, time.Now(), DefaultStaleThreshold)
+	items, err := List(ctx, db, []string{"c"}, time.Now(), DefaultStaleThreshold, DefaultAbandonedThreshold)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -497,6 +498,373 @@ func TestListReadsFoldsAndPins(t *testing.T) {
 	}
 	if items[1].NativeID != "acme/api#nr" || items[1].Flagged {
 		t.Errorf("auto-ranked needs_review should follow unflagged; got %q flagged=%v", items[1].NativeID, items[1].Flagged)
+	}
+}
+
+// --- Marker field tests ---
+
+func TestFoldMarkersFromFacts(t *testing.T) {
+	cases := []struct {
+		name         string
+		mutate       func(*sdk.ItemObservedPayload)
+		wantFailing  bool
+		wantConflict bool
+		wantRebase   bool
+		wantDetail   string
+	}{
+		{
+			name:        "failing checks",
+			mutate:      func(f *sdk.ItemObservedPayload) { f.FailingChecks = true; f.GateDetail = "unstable" },
+			wantFailing: true, wantDetail: "unstable",
+		},
+		{
+			name:         "merge conflict",
+			mutate:       func(f *sdk.ItemObservedPayload) { f.MergeConflict = true; f.Gate = "blocked"; f.GateDetail = "dirty" },
+			wantConflict: true, wantDetail: "dirty",
+		},
+		{
+			name:       "needs rebase",
+			mutate:     func(f *sdk.ItemObservedPayload) { f.NeedsRebase = true; f.Gate = "blocked"; f.GateDetail = "behind" },
+			wantRebase: true, wantDetail: "behind",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := openFacts()
+			f.MyRoles = []string{"author"}
+			f.Gate = "ready" // ensure item has a state
+			c.mutate(&f)
+			items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+			if len(items) != 1 {
+				t.Fatalf("want 1 item, got %d", len(items))
+			}
+			it := items[0]
+			if it.FailingChecks != c.wantFailing {
+				t.Errorf("failing_checks = %v, want %v", it.FailingChecks, c.wantFailing)
+			}
+			if it.MergeConflict != c.wantConflict {
+				t.Errorf("merge_conflict = %v, want %v", it.MergeConflict, c.wantConflict)
+			}
+			if it.NeedsRebase != c.wantRebase {
+				t.Errorf("needs_rebase = %v, want %v", it.NeedsRebase, c.wantRebase)
+			}
+			if it.GateDetail != c.wantDetail {
+				t.Errorf("gate_detail = %q, want %q", it.GateDetail, c.wantDetail)
+			}
+		})
+	}
+}
+
+// --- Age tier tests ---
+
+func TestAgeTierExclusivity(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested"
+
+	fresh := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
+	stale10 := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
+	aband40 := sig(6, "acme/api#abandoned", signalMentioned, baseTime.Add(-40*24*time.Hour))
+
+	events := []storage.StoredEvent{
+		obs(1, "c", "acme/api#fresh", f), fresh,
+		obs(3, "c", "acme/api#stale", f), stale10,
+		obs(5, "c", "acme/api#abandoned", f), aband40,
+	}
+	items := fold(events)
+	byID := map[string]WorkItem{}
+	for _, it := range items {
+		byID[it.NativeID] = it
+	}
+
+	freshItem := byID["acme/api#fresh"]
+	if freshItem.Stale || freshItem.Abandoned {
+		t.Errorf("fresh item: stale=%v abandoned=%v, want both false", freshItem.Stale, freshItem.Abandoned)
+	}
+
+	staleItem := byID["acme/api#stale"]
+	if !staleItem.Stale || staleItem.Abandoned {
+		t.Errorf("10-day item: stale=%v abandoned=%v, want stale=true abandoned=false", staleItem.Stale, staleItem.Abandoned)
+	}
+
+	abandItem := byID["acme/api#abandoned"]
+	if abandItem.Stale || !abandItem.Abandoned {
+		t.Errorf("40-day item: stale=%v abandoned=%v, want stale=false abandoned=true", abandItem.Stale, abandItem.Abandoned)
+	}
+}
+
+func TestAgeTierDisabledThresholds(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested"
+
+	// Item 40 days old with abandoned threshold disabled: should be stale, not abandoned.
+	stale40 := sig(2, "acme/api#1", signalMentioned, baseTime.Add(-40*24*time.Hour))
+	events := []storage.StoredEvent{obs(1, "c", "acme/api#1", f), stale40}
+
+	items := Fold(events, baseTime, DefaultStaleThreshold, 0 /* abandoned disabled */)
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	it := items[0]
+	if !it.Stale {
+		t.Error("40-day item should be stale when abandoned threshold is disabled")
+	}
+	if it.Abandoned {
+		t.Error("abandoned should be false when threshold is 0")
+	}
+}
+
+// --- Age band sorting tests ---
+
+func TestAgeBandSorting(t *testing.T) {
+	// stale needs_review sorts below fresh waiting_on_author (lower-ranked state).
+	freshFacts := openFacts()
+	freshFacts.MyRoles = []string{"reviewer"}
+	freshFacts.MyReviewState = "approved" // waiting_on_author
+
+	staleFacts := openFacts()
+	staleFacts.MyRoles = []string{"reviewer"}
+	staleFacts.MyReviewState = "requested" // needs_review
+
+	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
+	staleSig := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
+
+	events := []storage.StoredEvent{
+		obs(1, "c", "acme/api#stale", staleFacts), staleSig,
+		obs(3, "c", "acme/api#fresh", freshFacts), freshSig,
+	}
+	items := fold(events)
+	if len(items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(items))
+	}
+	if items[0].NativeID != "acme/api#fresh" {
+		t.Errorf("fresh waiting_on_author should rank above stale needs_review; got %q first", items[0].NativeID)
+	}
+}
+
+func TestAgeBandAbandonedLast(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested" // needs_review for all
+
+	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
+	staleSig := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
+	abandSig := sig(6, "acme/api#abandoned", signalMentioned, baseTime.Add(-40*24*time.Hour))
+
+	events := []storage.StoredEvent{
+		obs(1, "c", "acme/api#fresh", f), freshSig,
+		obs(3, "c", "acme/api#stale", f), staleSig,
+		obs(5, "c", "acme/api#abandoned", f), abandSig,
+	}
+	items := fold(events)
+	if len(items) != 3 {
+		t.Fatalf("want 3 items, got %d", len(items))
+	}
+	if items[0].NativeID != "acme/api#fresh" || items[1].NativeID != "acme/api#stale" || items[2].NativeID != "acme/api#abandoned" {
+		t.Errorf("band order wrong: %q %q %q", items[0].NativeID, items[1].NativeID, items[2].NativeID)
+	}
+}
+
+func TestAgeBandWithinBandOrderPreserved(t *testing.T) {
+	// Two needs_review items, both fresh; newer should sort first (existing order).
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested"
+
+	newerSig := sig(2, "acme/api#newer", signalMentioned, baseTime.Add(-1*time.Hour))
+	olderSig := sig(4, "acme/api#older", signalMentioned, baseTime.Add(-3*time.Hour))
+
+	events := []storage.StoredEvent{
+		obs(1, "c", "acme/api#older", f), olderSig,
+		obs(3, "c", "acme/api#newer", f), newerSig,
+	}
+	items := fold(events)
+	if len(items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(items))
+	}
+	if items[0].NativeID != "acme/api#newer" {
+		t.Errorf("within band: newer item should rank first; got %q", items[0].NativeID)
+	}
+}
+
+func TestPinnedItemsIgnoreAgeBand(t *testing.T) {
+	// A pinned abandoned item should stay pinned at the top (bands don't reorder pins).
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested"
+
+	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
+	abandSig := sig(4, "acme/api#abandoned", signalMentioned, baseTime.Add(-40*24*time.Hour))
+
+	ranked := Fold([]storage.StoredEvent{
+		obs(1, "c", "acme/api#fresh", f), freshSig,
+		obs(3, "c", "acme/api#abandoned", f), abandSig,
+	}, baseTime, DefaultStaleThreshold, DefaultAbandonedThreshold)
+
+	abandID := itemID(itemKey{"c", "merge_request", "acme/api#abandoned"})
+	pinned := pin(ranked, []storage.PinnedItem{{ID: abandID}})
+
+	if len(pinned) != 2 {
+		t.Fatalf("want 2 items, got %d", len(pinned))
+	}
+	if pinned[0].ID != abandID || !pinned[0].Flagged {
+		t.Errorf("abandoned pinned item should be first; got %q flagged=%v", pinned[0].ID, pinned[0].Flagged)
+	}
+}
+
+// --- Pin age (FlaggedAt) tests ---
+
+func TestPinFlaggedAtSurfaces(t *testing.T) {
+	flagTime := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	items := []WorkItem{{ID: "a", States: []State{StateNeedsReview}}}
+	pinned := []storage.PinnedItem{{ID: "a", FlaggedAt: flagTime}}
+	got := pin(items, pinned)
+	if len(got) != 1 {
+		t.Fatalf("want 1 item, got %d", len(got))
+	}
+	if got[0].FlaggedAt == nil || !got[0].FlaggedAt.Equal(flagTime) {
+		t.Errorf("FlaggedAt = %v, want %v", got[0].FlaggedAt, flagTime)
+	}
+}
+
+// --- Onset (Since) tests ---
+
+func TestOnsetContiguousRun(t *testing.T) {
+	// Three snapshots where needs_review is true throughout → onset = oldest.
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested"
+
+	t3 := baseTime.Add(-3 * time.Hour) // oldest
+	t2 := baseTime.Add(-2 * time.Hour)
+	t1 := baseTime.Add(-1 * time.Hour) // newest (used as ProviderUpdatedAt)
+	f1, f2, f3 := f, f, f
+	f1.ProviderUpdatedAt = t1.Format(time.RFC3339)
+	f2.ProviderUpdatedAt = t2.Format(time.RFC3339)
+	f3.ProviderUpdatedAt = t3.Format(time.RFC3339)
+
+	events := []storage.StoredEvent{
+		obs(3, "c", "acme/api#1", f1),
+		obs(2, "c", "acme/api#1", f2),
+		obs(1, "c", "acme/api#1", f3),
+	}
+	items := fold(events)
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	onset, ok := items[0].Since[string(StateNeedsReview)]
+	if !ok {
+		t.Fatal("needs_review should have onset in Since map")
+	}
+	if !onset.Equal(t3) {
+		t.Errorf("onset = %v, want %v (oldest in run)", onset, t3)
+	}
+}
+
+func TestOnsetBrokenRun(t *testing.T) {
+	// State false in middle snapshot → onset = latest run only.
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested"
+
+	fOff := openFacts() // state off in snapshot 2
+	fOff.MyRoles = []string{"reviewer"}
+	fOff.MyReviewState = "approved"
+
+	t3 := baseTime.Add(-3 * time.Hour)
+	t2 := baseTime.Add(-2 * time.Hour)
+	t1 := baseTime.Add(-1 * time.Hour)
+	f1, f2, f3 := f, fOff, f
+	f1.ProviderUpdatedAt = t1.Format(time.RFC3339)
+	f2.ProviderUpdatedAt = t2.Format(time.RFC3339)
+	f3.ProviderUpdatedAt = t3.Format(time.RFC3339)
+
+	events := []storage.StoredEvent{
+		obs(3, "c", "acme/api#1", f1), // newest: state on
+		obs(2, "c", "acme/api#1", f2), // middle: state off — breaks run
+		obs(1, "c", "acme/api#1", f3), // oldest: state on but excluded
+	}
+	items := fold(events)
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	onset, ok := items[0].Since[string(StateNeedsReview)]
+	if !ok {
+		t.Fatal("needs_review should have onset in Since map")
+	}
+	// Run is only snapshot 3 (newest), so onset = t1.
+	if !onset.Equal(t1) {
+		t.Errorf("onset = %v, want %v (only latest run)", onset, t1)
+	}
+}
+
+func TestOnsetMentioned(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	f.MyReviewState = "requested"
+
+	earlyMention := sig(2, "acme/api#1", signalMentioned, baseTime.Add(-5*time.Hour))
+	lateMention := sig(3, "acme/api#1", signalMentioned, baseTime.Add(-1*time.Hour))
+
+	events := []storage.StoredEvent{obs(1, "c", "acme/api#1", f), earlyMention, lateMention}
+	items := fold(events)
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	onset, ok := items[0].Since["mentioned"]
+	if !ok {
+		t.Fatal("mentioned should have onset in Since map")
+	}
+	// Onset = earliest mention signal.
+	if !onset.Equal(baseTime.Add(-5 * time.Hour)) {
+		t.Errorf("onset = %v, want earliest mention time", onset)
+	}
+}
+
+func TestOnsetMarker(t *testing.T) {
+	// failing_checks true across 2 snapshots → onset = oldest.
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	f.Gate = "ready"
+	f.FailingChecks = true
+
+	t2 := baseTime.Add(-2 * time.Hour)
+	t1 := baseTime.Add(-1 * time.Hour)
+	f1, f2 := f, f
+	f1.ProviderUpdatedAt = t1.Format(time.RFC3339)
+	f2.ProviderUpdatedAt = t2.Format(time.RFC3339)
+
+	events := []storage.StoredEvent{
+		obs(2, "c", "acme/api#1", f1),
+		obs(1, "c", "acme/api#1", f2),
+	}
+	items := fold(events)
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	onset, ok := items[0].Since["failing_checks"]
+	if !ok {
+		t.Fatal("failing_checks should have onset in Since map")
+	}
+	if !onset.Equal(t2) {
+		t.Errorf("onset = %v, want %v (oldest in run)", onset, t2)
+	}
+}
+
+func TestOnsetAbsentForInactiveTags(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	f.Gate = "ready"
+	// No markers set.
+	items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	for _, key := range []string{"failing_checks", "merge_conflict", "needs_rebase", "draft"} {
+		if _, ok := items[0].Since[key]; ok {
+			t.Errorf("inactive marker %q should not appear in Since", key)
+		}
 	}
 }
 

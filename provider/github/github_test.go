@@ -163,3 +163,67 @@ func TestRegistered(t *testing.T) {
 		t.Fatal("github not registered")
 	}
 }
+
+func makePR(mergeableState string) ghPull {
+	pr := ghPull{
+		Number:         1,
+		Title:          "T",
+		HTMLURL:        "https://github.com/acme/api/pull/1",
+		State:          "open",
+		User:           ghUser{Login: "octocat"},
+		MergeableState: mergeableState,
+		UpdatedAt:      "2026-07-10T00:00:00Z",
+	}
+	pr.Base.Repo.FullName = "acme/api"
+	return pr
+}
+
+func TestNormalizeMarkers(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+	cases := []struct {
+		mergeableState string
+		wantGate       string
+		wantFailing    bool
+		wantConflict   bool
+		wantRebase     bool
+	}{
+		{"unstable", "ready", true, false, false},
+		{"dirty", "blocked", false, true, false},
+		{"behind", "blocked", false, false, true},
+		{"clean", "ready", false, false, false},
+		{"blocked", "blocked", false, false, false},
+		{"", "unknown", false, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.mergeableState, func(t *testing.T) {
+			pl := p.observedFromPull(makePR(c.mergeableState)).Payload.(sdk.ItemObservedPayload)
+			if pl.Gate != c.wantGate {
+				t.Errorf("gate = %q, want %q", pl.Gate, c.wantGate)
+			}
+			if pl.FailingChecks != c.wantFailing {
+				t.Errorf("failing_checks = %v, want %v", pl.FailingChecks, c.wantFailing)
+			}
+			if pl.MergeConflict != c.wantConflict {
+				t.Errorf("merge_conflict = %v, want %v", pl.MergeConflict, c.wantConflict)
+			}
+			if pl.NeedsRebase != c.wantRebase {
+				t.Errorf("needs_rebase = %v, want %v", pl.NeedsRebase, c.wantRebase)
+			}
+		})
+	}
+}
+
+// TestDirtyPRIsBlockedWithConflict verifies dirty → blocked + merge_conflict, not failing_checks.
+func TestDirtyPRIsBlockedWithConflict(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+	pl := p.observedFromPull(makePR("dirty")).Payload.(sdk.ItemObservedPayload)
+	if pl.Gate != "blocked" {
+		t.Errorf("gate = %q, want blocked", pl.Gate)
+	}
+	if !pl.MergeConflict {
+		t.Error("merge_conflict should be true for dirty")
+	}
+	if pl.FailingChecks {
+		t.Error("failing_checks should be false for dirty (not unstable)")
+	}
+}

@@ -100,6 +100,9 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		MyRoles:           roles,
 		Gate:              mergeGate(mr.DetailedMergeStatus),
 		GateDetail:        mr.DetailedMergeStatus,
+		FailingChecks:     mr.DetailedMergeStatus == "ci_must_pass",
+		MergeConflict:     mr.DetailedMergeStatus == "conflict",
+		NeedsRebase:       mr.DetailedMergeStatus == "need_rebase",
 		ProviderUpdatedAt: mr.UpdatedAt,
 	}
 

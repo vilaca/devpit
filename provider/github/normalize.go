@@ -17,21 +17,37 @@ const objectType = "merge_request"
 // (docs/Event_Taxonomy_and_Storage.md).
 const eventItemObserved = "item.observed"
 
+// Normalized mergeable_state and gate values.
+const (
+	msClean     = "clean"
+	msHasHooks  = "has_hooks"
+	msBlocked   = "blocked"
+	msDirty     = "dirty"
+	msBehind    = "behind"
+	msUnstable  = "unstable"
+	gateReady   = "ready"
+	gateBlocked = "blocked"
+	gateUnknown = "unknown"
+	stateOpen   = "open"
+	stateMerged = "merged"
+	stateClosed = "closed"
+)
+
 // mergeGate maps GitHub's mergeable_state to the normalized gate class.
 // Transient values ("unknown", "") map to "unknown" and per the taxonomy
 // never overwrite a known gate downstream (the synthesizer carries forward);
 // the provider simply reports what it saw.
 func mergeGate(mergeableState string) string {
 	switch mergeableState {
-	case "clean", "has_hooks":
-		return "ready"
-	case "blocked", "dirty", "behind":
-		return "blocked"
-	case "unstable":
+	case msClean, msHasHooks:
+		return gateReady
+	case msBlocked, msDirty, msBehind:
+		return gateBlocked
+	case msUnstable:
 		// non-gating check failure: mergeable, not Blocked (docs/Attention_Engine.md).
-		return "ready"
+		return gateReady
 	default: // "unknown", "draft", ""
-		return "unknown"
+		return gateUnknown
 	}
 }
 
@@ -62,11 +78,11 @@ func hasHandle(users []ghUser, handle string) bool {
 // observedFromPull builds an item.observed event from a full PR detail.
 func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 	repo := pr.Base.Repo.FullName
-	state := "open"
+	state := stateOpen
 	if pr.Merged {
-		state = "merged"
-	} else if pr.State == "closed" {
-		state = "closed"
+		state = stateMerged
+	} else if pr.State == stateClosed {
+		state = stateClosed
 	}
 
 	roles := []string{}
@@ -91,9 +107,9 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 		MyRoles:           roles,
 		Gate:              gate,
 		GateDetail:        pr.MergeableState,
-		FailingChecks:     pr.MergeableState == "unstable",
-		MergeConflict:     pr.MergeableState == "dirty",
-		NeedsRebase:       pr.MergeableState == "behind",
+		FailingChecks:     pr.MergeableState == msUnstable,
+		MergeConflict:     pr.MergeableState == msDirty,
+		NeedsRebase:       pr.MergeableState == msBehind,
 		ProviderUpdatedAt: pr.UpdatedAt,
 	}
 
@@ -117,11 +133,11 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 		Title:             it.Title,
 		URL:               it.HTMLURL,
 		Repo:              repo,
-		State:             "open",
+		State:             stateOpen,
 		Draft:             it.Draft,
 		Author:            it.User.Login,
 		MyRoles:           roles,
-		Gate:              "unknown",
+		Gate:              gateUnknown,
 		ProviderUpdatedAt: it.UpdatedAt,
 	}
 	return sdk.Event{

@@ -24,6 +24,11 @@ so there are no create/delete endpoints.
   "Handle next" flag (`ADR/ADR-0017_Read_Only_Action_Model.md`); return
   `204 No Content`.
 
+Beyond these endpoints the same server also serves the embedded Svelte SPA
+(`ADR/ADR-0010_Web_Frontend.md`): a catch-all static handler (`internal/web`,
+`go:embed`) sits behind the API routes above and serves `index.html` for any
+unmatched path so a browser refresh on any client route works.
+
 ## Conventions
 
 - All responses are `application/json`; timestamps are RFC 3339 UTC strings.

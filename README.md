@@ -10,9 +10,9 @@ The shift: repositories become context. You are the center of the workflow.
 
 ## Status
 
-Early development — not yet usable. Storage, provider SDK, sync engine,
-attention fold, and the REST + SSE API are done; the web UI — the last v0.1
-piece — is not yet built.
+v0.1 complete. Storage, provider SDK (GitHub + GitLab), sync engine, attention
+fold, REST + SSE API, and the Svelte SPA are all built and embedded into a
+single binary.
 
 ## How it works
 
@@ -51,12 +51,20 @@ See [`docs/Configuration.md`](docs/Configuration.md).
 
 ## Running
 
-Build the binary once, then run it:
+Build the SPA once (it embeds into the binary via `go:embed`), then build and
+run the binary:
 
 ```sh
+npm --prefix frontend ci && npm --prefix frontend run build
 go build -o devpit ./cmd/devpit
 ./devpit --config ~/.config/devpit/config.yaml
 ```
+
+The dashboard and the API are served together at `http://localhost:7474`. The
+Go build works without the frontend step (a committed placeholder page is
+embedded), but you get the real UI only after `npm run build`. For UI
+development, `npm --prefix frontend run dev` runs Vite on `:5173` and proxies
+the API through to a running `devpit`.
 
 Prefer this over `go run ./cmd/devpit`. DevPit depends on `modernc.org/sqlite`,
 a pure-Go SQLite that is large and slow to compile; a cold build takes ~15–20 s

@@ -33,8 +33,11 @@ The complete single-user product for two providers.
 - Secrets: plaintext config with 0600 + least-privilege scopes (ADR-0019).
 
 **Built so far:** the sync engine, both providers, storage, config, the
-attention fold, and the REST API + SSE stream. **Not yet built:** the frontend
-(see `docs/High_Level_Architecture.md` for the component status).
+attention fold, the REST API + SSE stream, and the full Svelte SPA — build
+tooling, REST/SSE data layer, `go:embed` binary embedding, pinned zone, state
+tags, bucket filters, sync-log drawer, failure banner, health dots, keyboard
+navigation, and URL state (`frontend/`, `internal/web`). **v0.1 is complete.**
+See `docs/High_Level_Architecture.md` for the component status.
 
 ## v0.2 — More forges + sync hardening
 

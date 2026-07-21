@@ -1,0 +1,87 @@
+/* DevPit design tokens + base reset. Component-scoped styles live in each
+   .svelte file; only cross-cutting tokens and element defaults live here.
+   Palette follows the presentation rules in ADR-0016 / ADR-0018: state tags,
+   health dots, stale/failing markers each get a token so components never
+   hard-code colors. */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #ffffff;
+  --bg-subtle: #f6f7f9;
+  --bg-raised: #ffffff;
+  --border: #e2e5e9;
+  --border-strong: #cdd2d9;
+  --text: #1b1f24;
+  --text-muted: #5c6570;
+  --text-faint: #8a929c;
+  --accent: #2d6cdf;
+
+  /* Attention state tags (internal/attention/states.go precedence order). */
+  --state-needs-review: #b26a00;
+  --state-changes-requested: #c0392b;
+  --state-blocked: #8e44ad;
+  --state-ready-to-merge: #1a7f37;
+  --state-mentioned: #2d6cdf;
+  --state-waiting-on-author: #5c6570;
+
+  /* Health dots (ADR-0018). */
+  --health-ok: #1a7f37;
+  --health-degraded: #b26a00;
+  --health-failing: #c0392b;
+
+  /* Markers. */
+  --marker-stale: #b26a00;
+  --marker-failing-checks: #c0392b;
+  --marker-draft: #8a929c;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --gap: 12px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a;
+    --bg-subtle: #1b1f24;
+    --bg-raised: #1e2329;
+    --border: #2a2f36;
+    --border-strong: #3a414a;
+    --text: #e6e9ec;
+    --text-muted: #9aa3ad;
+    --text-faint: #6b747e;
+    --accent: #5b8def;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}

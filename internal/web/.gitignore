@@ -1,0 +1,6 @@
+# Built SPA output — Vite writes here (frontend/ -> ../internal/web/dist).
+# Ignore all build artifacts; keep only .gitkeep so `//go:embed all:dist` always
+# has a matching file on a fresh clone. The served shell before a build is
+# placeholder.html (committed), not anything in here.
+dist/*
+!dist/.gitkeep

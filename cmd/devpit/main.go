@@ -75,7 +75,8 @@ func run() error {
 	// The API Server doubles as the engine's Notifier: its SSE hub fans
 	// attention/sync events out to connected clients (structural satisfaction —
 	// internal/api must not import internal/engine).
-	srv := api.New(db, connectionMeta(cfg.Connections), attention.DefaultStaleThreshold, attention.DefaultAbandonedThreshold)
+	srv := api.New(db, connectionMeta(cfg.Connections),
+		attention.DefaultStaleThreshold, attention.DefaultAbandonedThreshold)
 	var _ engine.Notifier = srv
 
 	// Bind before serving so a port clash (e.g. another instance) is a fatal

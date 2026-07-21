@@ -40,26 +40,26 @@ type WorkItem struct {
 	// ID is a short, URL-safe, stable handle derived from the identity triple
 	// (connection_id, object_type, native_id) — see the "id" field notes in
 	// docs/REST_API.md.
-	ID            string            `json:"id"`
-	ConnectionID  string            `json:"connection_id"`
-	ObjectType    string            `json:"object_type"`
-	NativeID      string            `json:"native_id"`
-	Title         string            `json:"title"`
-	URL           string            `json:"url"`
-	Repo          string            `json:"repo"`
-	Author        string            `json:"author"`
-	Draft         bool              `json:"draft"`
-	States        []State           `json:"states"`  // precedence order; States[0] ranks the item
-	Flagged       bool              `json:"flagged"` // pinned in the "Handle next" zone
-	Stale         bool              `json:"stale"`
-	Abandoned     bool              `json:"abandoned"`
-	UpdatedAt     time.Time         `json:"updated_at"`
-	SignalCounts  map[string]int    `json:"signal_counts,omitempty"` // only types with count > 1
-	FailingChecks bool              `json:"failing_checks"`
-	MergeConflict bool              `json:"merge_conflict"`
-	NeedsRebase   bool              `json:"needs_rebase"`
-	GateDetail    string            `json:"gate_detail,omitempty"`
-	FlaggedAt     *time.Time        `json:"flagged_at,omitempty"`
+	ID            string               `json:"id"`
+	ConnectionID  string               `json:"connection_id"`
+	ObjectType    string               `json:"object_type"`
+	NativeID      string               `json:"native_id"`
+	Title         string               `json:"title"`
+	URL           string               `json:"url"`
+	Repo          string               `json:"repo"`
+	Author        string               `json:"author"`
+	Draft         bool                 `json:"draft"`
+	States        []State              `json:"states"`  // precedence order; States[0] ranks the item
+	Flagged       bool                 `json:"flagged"` // pinned in the "Handle next" zone
+	Stale         bool                 `json:"stale"`
+	Abandoned     bool                 `json:"abandoned"`
+	UpdatedAt     time.Time            `json:"updated_at"`
+	SignalCounts  map[string]int       `json:"signal_counts,omitempty"` // only types with count > 1
+	FailingChecks bool                 `json:"failing_checks"`
+	MergeConflict bool                 `json:"merge_conflict"`
+	NeedsRebase   bool                 `json:"needs_rebase"`
+	GateDetail    string               `json:"gate_detail,omitempty"`
+	FlaggedAt     *time.Time           `json:"flagged_at,omitempty"`
 	Since         map[string]time.Time `json:"since,omitempty"` // onset of each active tag
 }
 
@@ -101,7 +101,10 @@ func List(
 // sorted by age band (fresh, stale, abandoned) then state precedence
 // (highest first) then newest-first, with the item ID as a stable final
 // tiebreak. Items that are removed, not open, or match no state are dropped.
-func Fold(events []storage.StoredEvent, now time.Time, staleThreshold, abandonedThreshold time.Duration) []WorkItem {
+func Fold(
+	events []storage.StoredEvent, now time.Time,
+	staleThreshold, abandonedThreshold time.Duration,
+) []WorkItem {
 	groups := make(map[itemKey][]storage.StoredEvent)
 	order := make([]itemKey, 0)
 	for _, e := range events {
@@ -126,7 +129,10 @@ func Fold(events []storage.StoredEvent, now time.Time, staleThreshold, abandoned
 // foldItem folds one item's events into a WorkItem, or reports ok=false if the
 // item should not appear (no snapshot, removed after the last snapshot, not
 // open, malformed facts, or no matching state).
-func foldItem(k itemKey, events []storage.StoredEvent, now time.Time, staleThreshold, abandonedThreshold time.Duration) (WorkItem, bool) {
+func foldItem(
+	k itemKey, events []storage.StoredEvent, now time.Time,
+	staleThreshold, abandonedThreshold time.Duration,
+) (WorkItem, bool) {
 	var (
 		latestObserved *storage.StoredEvent
 		allObserved    []storage.StoredEvent

@@ -102,6 +102,12 @@ Noted, not committed to any release.
   provider observes the user's own reply/review after it. Requires a new
   own-activity signal from providers; preferred over time decay or a local
   dismiss, which are quieter but less honest.
+- Homebrew distribution: publish a tap (`homebrew-devpit`) so users can install
+  with `brew install vilaca/devpit/devpit`. Requires a release binary (GitHub
+  Releases via goreleaser or similar), a formula with the correct SHA256, and
+  a `brew test` block. Single-binary nature makes this straightforward once the
+  CI release pipeline is in place.
+
 - Night mode (dark theme), remembered so it is set once. Frontend-only:
   persist the choice in `localStorage` (single-user instance, no server
   round-trip needed); default to the OS `prefers-color-scheme` until the

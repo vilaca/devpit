@@ -71,19 +71,21 @@ its fields:
   flapping.
 - **Unknown/ungranted facts** (capability gaps) are omitted; the fold treats
   absent as "cannot say", never as false.
-- **Marker fields** (v0.1.1) — diagnostic booleans that explain why an item is
-  in a given state but never change the state itself:
-  - `failing_checks` — CI/checks red (GitHub: `mergeable_state == "unstable"`;
-    GitLab: `detailed_merge_status == "ci_must_pass"`). Previously this also
-    included `"dirty"` (narrowed in v0.1.1).
-  - `merge_conflict` — manual conflict resolution needed (GitHub: `"dirty"`;
-    GitLab: `"conflict"`).
-  - `needs_rebase` — mechanical rebase / update-branch needed (GitHub:
+- **Marker fields** — diagnostic booleans that explain why an item is in a given
+  state but never change the state itself:
+  - `draft` — item is in draft / WIP mode (pre-existing since v0.1; providers
+    set this from the native draft flag).
+  - `failing_checks` (v0.1.1) — CI/checks red (GitHub: `mergeable_state ==
+    "unstable"`; GitLab: `detailed_merge_status == "ci_must_pass"`). Previously
+    this also included `"dirty"` (narrowed in v0.1.1).
+  - `merge_conflict` (v0.1.1) — manual conflict resolution needed (GitHub:
+    `"dirty"`; GitLab: `"conflict"`).
+  - `needs_rebase` (v0.1.1) — mechanical rebase / update-branch needed (GitHub:
     `"behind"`; GitLab: `"need_rebase"`).
-  - `gate_detail` — raw provider vocabulary for the merge gate (opaque string;
-    powers the Blocked tooltip).
-  Old `item.observed` events lack these fields (unmarshal to `false`/`""`); the
-  fold reads the latest snapshot, so items pick them up on the next poll cycle.
+  - `gate_detail` (v0.1.1) — raw provider vocabulary for the merge gate (opaque
+    string; powers the Blocked tooltip).
+  Old `item.observed` events lack the v0.1.1 fields (unmarshal to `false`/`""`);
+  the fold reads the latest snapshot, so items pick them up on the next poll cycle.
 
 The fold rules that turn this fact set into buckets live in
 `docs/Attention_Engine.md`.

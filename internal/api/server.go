@@ -30,24 +30,27 @@ type ConnectionMeta struct {
 // Server is an [http.Handler] that serves the v0.1 REST API. Construct with
 // [New]. It is safe to call ServeHTTP concurrently from multiple goroutines.
 type Server struct {
-	db         *storage.DB
-	mux        *http.ServeMux
-	hub        *hub
-	conns      []ConnectionMeta
-	connByID   map[string]ConnectionMeta
-	staleThres time.Duration
+	db             *storage.DB
+	mux            *http.ServeMux
+	hub            *hub
+	conns          []ConnectionMeta
+	connByID       map[string]ConnectionMeta
+	staleThres     time.Duration
+	abandonedThres time.Duration
 }
 
-// New constructs a Server. staleThreshold is forwarded to the attention fold;
-// pass attention.DefaultStaleThreshold unless an override is needed.
-func New(db *storage.DB, connections []ConnectionMeta, staleThreshold time.Duration) *Server {
+// New constructs a Server. staleThreshold and abandonedThreshold are forwarded
+// to the attention fold; pass attention.DefaultStaleThreshold and
+// attention.DefaultAbandonedThreshold unless an override is needed.
+func New(db *storage.DB, connections []ConnectionMeta, staleThreshold, abandonedThreshold time.Duration) *Server {
 	s := &Server{
-		db:         db,
-		mux:        http.NewServeMux(),
-		hub:        newHub(),
-		conns:      connections,
-		connByID:   make(map[string]ConnectionMeta, len(connections)),
-		staleThres: staleThreshold,
+		db:             db,
+		mux:            http.NewServeMux(),
+		hub:            newHub(),
+		conns:          connections,
+		connByID:       make(map[string]ConnectionMeta, len(connections)),
+		staleThres:     staleThreshold,
+		abandonedThres: abandonedThreshold,
 	}
 	for _, c := range connections {
 		s.connByID[c.ID] = c

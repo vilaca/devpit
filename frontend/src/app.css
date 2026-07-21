@@ -32,7 +32,9 @@
 
   /* Markers. */
   --marker-stale: #b26a00;
+  --marker-abandoned: #7d3c00;
   --marker-failing-checks: #c0392b;
+  --marker-conflict: #c0392b;
   --marker-draft: #8a929c;
 
   --radius: 6px;

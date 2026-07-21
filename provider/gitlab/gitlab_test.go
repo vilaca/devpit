@@ -126,3 +126,52 @@ func TestRegistered(t *testing.T) {
 		t.Fatal("gitlab not registered")
 	}
 }
+
+func makeMR(detailedStatus string) glMergeRequest {
+	mr := glMergeRequest{
+		IID:                 7,
+		ProjectID:           1,
+		Title:               "T",
+		WebURL:              "https://gitlab.com/acme/api/-/merge_requests/7",
+		State:               "opened",
+		DetailedMergeStatus: detailedStatus,
+		UpdatedAt:           "2026-07-10T00:00:00Z",
+		Author:              glUser{Username: "octocat"},
+	}
+	mr.References.Full = "acme/api!7"
+	return mr
+}
+
+func TestNormalizeMarkers(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+	cases := []struct {
+		status       string
+		wantGate     string
+		wantFailing  bool
+		wantConflict bool
+		wantRebase   bool
+	}{
+		{"ci_must_pass", "blocked", true, false, false},
+		{"conflict", "blocked", false, true, false},
+		{"need_rebase", "blocked", false, false, true},
+		{"mergeable", "ready", false, false, false},
+		{"not_approved", "blocked", false, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.status, func(t *testing.T) {
+			pl := p.observedFromMR(makeMR(c.status)).Payload.(sdk.ItemObservedPayload)
+			if pl.Gate != c.wantGate {
+				t.Errorf("gate = %q, want %q", pl.Gate, c.wantGate)
+			}
+			if pl.FailingChecks != c.wantFailing {
+				t.Errorf("failing_checks = %v, want %v", pl.FailingChecks, c.wantFailing)
+			}
+			if pl.MergeConflict != c.wantConflict {
+				t.Errorf("merge_conflict = %v, want %v", pl.MergeConflict, c.wantConflict)
+			}
+			if pl.NeedsRebase != c.wantRebase {
+				t.Errorf("needs_rebase = %v, want %v", pl.NeedsRebase, c.wantRebase)
+			}
+		})
+	}
+}

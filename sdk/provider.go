@@ -156,6 +156,8 @@ type ItemObservedPayload struct {
 	Gate              string   `json:"gate"` // ready | blocked | unknown
 	GateDetail        string   `json:"gate_detail,omitempty"`
 	FailingChecks     bool     `json:"failing_checks"`
+	MergeConflict     bool     `json:"merge_conflict"`
+	NeedsRebase       bool     `json:"needs_rebase"`
 	ProviderUpdatedAt string   `json:"provider_updated_at"`
 }
 

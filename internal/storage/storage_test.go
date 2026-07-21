@@ -394,21 +394,27 @@ func TestHandleNextOrdering(t *testing.T) {
 		t.Fatalf("flag c: %v", err)
 	}
 
-	ids, err := db.ListHandleNext(ctx)
+	pinned, err := db.ListHandleNext(ctx)
 	if err != nil {
 		t.Fatalf("ListHandleNext: %v", err)
 	}
-	if len(ids) != 3 || ids[0] != "item-a" || ids[1] != "item-b" || ids[2] != "item-c" {
-		t.Fatalf("order = %v, want [a b c]", ids)
+	if len(pinned) != 3 || pinned[0].ID != "item-a" || pinned[1].ID != "item-b" || pinned[2].ID != "item-c" {
+		t.Fatalf("order = %v, want [a b c]", pinned)
+	}
+	// FlaggedAt should be set on each entry.
+	for _, p := range pinned {
+		if p.FlaggedAt.IsZero() {
+			t.Errorf("FlaggedAt zero for %s", p.ID)
+		}
 	}
 
 	// Clearing removes.
 	if err := db.SetHandleNext(ctx, "item-b", false); err != nil {
 		t.Fatalf("clear b: %v", err)
 	}
-	ids, _ = db.ListHandleNext(ctx)
-	if len(ids) != 2 || ids[0] != "item-a" || ids[1] != "item-c" {
-		t.Fatalf("after clear order = %v, want [a c]", ids)
+	pinned, _ = db.ListHandleNext(ctx)
+	if len(pinned) != 2 || pinned[0].ID != "item-a" || pinned[1].ID != "item-c" {
+		t.Fatalf("after clear order = %v, want [a c]", pinned)
 	}
 
 	// Clearing a non-flagged item is a no-op, not an error.

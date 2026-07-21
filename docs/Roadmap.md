@@ -39,7 +39,7 @@ tags, bucket filters, sync-log drawer, failure banner, health dots, keyboard
 navigation, and URL state (`frontend/`, `internal/web`). **v0.1 is complete.**
 See `docs/High_Level_Architecture.md` for the component status.
 
-## v0.1.1 — Marker vocabulary + age bands
+## v0.1.1 — Marker vocabulary + age bands ✓ Built
 
 Decided 2026-07-10 (ADR-0016); implementation plan in
 `docs/plans/2026-07-10_marker_vocabulary_and_age_bands.md`.
@@ -86,6 +86,18 @@ Decided 2026-07-10 (ADR-0016); implementation plan in
 
 Noted, not committed to any release.
 
+- Changelog / "what's new since last visit": surface a per-item activity
+  feed showing what changed since the user last opened DevPit —
+  new reviews, comments, CI results, state transitions. The storage
+  infrastructure is already designed for this: the `events` table's
+  autoincrement `id` gives insertion order, and `app_state` with a
+  `last_seen_event_id` watermark is explicitly deferred in
+  `docs/Event_Taxonomy_and_Storage.md` pending this feature. The API
+  shape needs a new endpoint (or a cursor param on the existing list)
+  that returns events since the watermark, grouped by item. The main
+  design question is presentation: inline diff indicators on list rows
+  vs. a dedicated "new" section vs. a per-item detail panel.
+
 - Activity-based decay for the Mentioned state: clear the mention once the
   provider observes the user's own reply/review after it. Requires a new
   own-activity signal from providers; preferred over time decay or a local
@@ -94,4 +106,47 @@ Noted, not committed to any release.
   persist the choice in `localStorage` (single-user instance, no server
   round-trip needed); default to the OS `prefers-color-scheme` until the
   user picks explicitly.
+- Issues as first-class attention items (GitHub issues / GitLab issues).
+  Issues already appear in the data model (`object_type = issue`) and in
+  the Mentioned bucket (`mentions:@me` search includes issues by design,
+  GitLab todos cover `mentioned` and `directly_addressed` for issues
+  too). The `signal.assigned` type exists in the taxonomy. So the
+  infrastructure is partially there; what is missing is issue-specific
+  attention states and their fold rules.
+
+  The "owner or write access" framing is a red herring. The right frame
+  is **actionability** — the same principle that governs the PR buckets.
+  Issues do not have a review lifecycle, but two actionable states are
+  clear regardless of repo access level:
+
+  - **Assigned** — an issue assigned to you. No ownership required; the
+    `assignee:@me` GitHub search and GitLab's `scope=assigned_to_me`
+    already exist in the provider analysis for PR-assigned discovery.
+    Token permissions already cover this (Issues: read on fine-grained
+    GitHub PATs; `read_api` on GitLab).
+  - **Needs Response** — an issue you opened (or are actively involved
+    in) where the most recent activity is a mention or reply directed at
+    you and you have not yet responded. This is the issue analogue of
+    Changes Requested: the ball is explicitly back in your court. It
+    requires detecting "your turn" from mention signals on authored
+    items, which the existing `signal.mentioned` + authored-item filter
+    can express, but the fold rule and the bucket definition are new.
+
+  What is **not** actionable (and therefore out of scope for the
+  personal attention model): issues you are merely subscribed to or
+  watching, all issues in a repo you maintain, or any issue with new
+  activity where you are not party to it. That territory belongs to a
+  repo-management or triage tool, not to DevPit's "what demands your
+  action today" framing.
+
+  Open questions before implementation:
+  - Whether Assigned and Needs Response are enough, or if there is a
+    third state worth naming (e.g., an issue you commented on where
+    someone specifically mentioned you back, distinct from one you merely
+    opened).
+  - Precedence of issue states relative to PR states in the ranked list
+    (Assigned issues are probably lower precedence than Needs Review /
+    Changes Requested, but higher than Waiting on Author).
+  - Whether issues and PRs should be visually distinguished in the list
+    (they currently share the same row shape).
 

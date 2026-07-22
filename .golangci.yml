@@ -50,7 +50,11 @@ linters:
             - pkg: github.com/vilaca/devpit/provider
               desc: "sdk must not depend on concrete providers"
         # Providers are plugins: they consume the sdk only, never application
-        # internals, and never each other.
+        # internals, and never any other provider/* package. The provider deny
+        # is a prefix match, so it blocks both cross-provider imports and any
+        # shared provider/* helper — providers duplicate shared-looking code
+        # rather than share it, so a change to one cannot regress another
+        # (ADR-0003).
         providers:
           list-mode: lax
           files:
@@ -59,7 +63,7 @@ linters:
             - pkg: github.com/vilaca/devpit/internal
               desc: "providers are plugins; use the sdk, not internal packages"
             - pkg: github.com/vilaca/devpit/provider
-              desc: "providers must not import each other"
+              desc: "providers must not import each other or any shared provider/* helper; duplicate instead (ADR-0003)"
 
   exclusions:
     rules:

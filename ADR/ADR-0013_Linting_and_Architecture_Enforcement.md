@@ -25,10 +25,20 @@ and `.github/workflows/ci.yml`):
    enabled — minus a curated set of exclusions (below). `depguard` is
    configured to pin the provider plugin boundary: `sdk` may not import
    `internal/*` or `provider/*`, and providers may import neither `internal/*`
-   nor each other.
+   nor any other `provider/*` package. The provider deny is a prefix match, so
+   it blocks both cross-provider imports and any shared `provider/*` helper —
+   providers duplicate shared-looking code rather than share it (ADR-0003).
 2. **go-arch-lint** enforces the full component dependency graph
    (`.go-arch-lint.yml`): the allowed edges between `sdk`, `cmd`, `config`,
-   `engine`, `storage`, `api`, `attention`, and the two providers.
+   `engine`, `storage`, `api`, `attention`, and the two providers. `deepScan`
+   is **on** — layering is checked at the method-call / dependency-injection
+   level, not just imports, so a violation routed through an interface or an
+   injected value is still caught. Its one false positive is the composition
+   root: `cmd` injects an `api.Server` into `engine.WithNotifier` (engine owns
+   the `Notifier` interface; `internal/api` implements it without importing
+   engine), which `deepScan` misreads as an `api -> engine` edge. `cmd/devpit/
+   main.go` is therefore listed in `excludeFiles`; since `cmd` may depend on
+   everything, excluding it forfeits no real enforcement.
 
 ### Disabled linters
 
@@ -74,4 +84,7 @@ adding to the exclusion list. The two pattern-based disables (`contextcheck`,
 `bodyclose`) should stay off as long as the detached-log-context and
 `do()`/`decodeJSON` patterns remain; revisit them only if those patterns change.
 New packages must be added to `.go-arch-lint.yml` with their allowed edges, or
-the arch check will flag them as unmapped.
+the arch check will flag them as unmapped. The `deepScan` exclusion is pinned to
+`cmd/devpit/main.go`: if the `engine.WithNotifier` wiring moves to another file,
+or a second composition-root file is added, `excludeFiles` must be updated in the
+same change or `deepScan` will resurface the `api -> engine` false positive.

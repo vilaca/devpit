@@ -45,8 +45,9 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
+/* OS dark preference applies when no explicit user choice is stored. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14171a;
     --bg-subtle: #1b1f24;
     --bg-raised: #1e2329;
@@ -56,7 +57,54 @@
     --text-muted: #9aa3ad;
     --text-faint: #6b747e;
     --accent: #5b8def;
+
+    --state-needs-review: #e8a438;
+    --state-changes-requested: #f47068;
+    --state-blocked: #c084fc;
+    --state-ready-to-merge: #3fb559;
+    --state-mentioned: #7eb3ff;
+    --state-waiting-on-author: #9aa3ad;
+
+    --health-ok: #3fb559;
+    --health-degraded: #e8a438;
+    --health-failing: #f47068;
+
+    --marker-stale: #e8a438;
+    --marker-old: #c47a1e;
+    --marker-failing-checks: #f47068;
+    --marker-conflict: #f47068;
+    --marker-draft: #9aa3ad;
   }
+}
+
+/* Explicit user choice overrides OS preference. */
+[data-theme="dark"] {
+  --bg: #14171a;
+  --bg-subtle: #1b1f24;
+  --bg-raised: #1e2329;
+  --border: #2a2f36;
+  --border-strong: #3a414a;
+  --text: #e6e9ec;
+  --text-muted: #9aa3ad;
+  --text-faint: #6b747e;
+  --accent: #5b8def;
+
+  --state-needs-review: #e8a438;
+  --state-changes-requested: #f47068;
+  --state-blocked: #c084fc;
+  --state-ready-to-merge: #3fb559;
+  --state-mentioned: #7eb3ff;
+  --state-waiting-on-author: #9aa3ad;
+
+  --health-ok: #3fb559;
+  --health-degraded: #e8a438;
+  --health-failing: #f47068;
+
+  --marker-stale: #e8a438;
+  --marker-old: #c47a1e;
+  --marker-failing-checks: #f47068;
+  --marker-conflict: #f47068;
+  --marker-draft: #9aa3ad;
 }
 
 * {

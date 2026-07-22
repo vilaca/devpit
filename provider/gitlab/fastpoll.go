@@ -65,12 +65,29 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		}
 		obs := p.observedFromMR(*mr)
 		events = append(events, obs)
+		// MR is no longer open: evict from the open-set cache so subsequent
+		// open-set refreshes don't emit stale item.observed events for it.
+		if pl, ok := obs.Payload.(sdk.ItemObservedPayload); ok && pl.State != stateOpen {
+			delete(p.openSnapshots, obs.NativeID)
+		}
 		if sig := signalFromTodo(t, obs.NativeID); sig != nil {
 			events = append(events, *sig)
 		}
 	}
 
 	events = p.graphqlJoin(ctx, events)
+
+	// Open-set refresh: for cached open items not covered by a todo this cycle,
+	// query the three volatile GraphQL booleans and merge onto the cached payload.
+	if len(p.openSnapshots) > 0 {
+		covered := make(map[string]bool, len(events))
+		for _, ev := range events {
+			if ev.EventType == eventItemObserved {
+				covered[ev.NativeID] = true
+			}
+		}
+		events = p.openSetRefresh(ctx, events, covered)
+	}
 
 	out[cursorFastUpdatedAfter] = now
 	return sdk.PollResult{

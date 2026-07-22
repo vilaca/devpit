@@ -27,6 +27,10 @@ type Provider struct {
 	graphqlEndpoint string
 	handle          string
 	http            *http.Client
+	// openSnapshots caches the last full item.observed payload for each open MR,
+	// keyed by native ID. Populated by Reconcile; read by FastPoll's open-set
+	// refresh. No lock needed — FastPoll and Reconcile are serialised per connection.
+	openSnapshots map[string]sdk.ItemObservedPayload
 }
 
 // New builds a GitLab provider. BaseURL is the instance host (e.g.
@@ -41,6 +45,7 @@ func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 		apiBase:         base + "/api/v4",
 		graphqlEndpoint: base + "/api/graphql",
 		http:            &http.Client{Timeout: 30 * time.Second},
+		openSnapshots:   map[string]sdk.ItemObservedPayload{},
 	}, nil
 }
 

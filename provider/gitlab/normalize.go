@@ -20,6 +20,7 @@ const eventItemObserved = "item.observed"
 // Normalized gate and detailed_merge_status values.
 const (
 	dmsMergeable      = "mergeable"
+	dmsCIMustPass     = "ci_must_pass"
 	dmsPolicyDenied   = "policies_denied"
 	dmsSecurityPolicy = "security_policy_violations"
 	gateReady         = "ready"
@@ -120,7 +121,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		MyRoles:               roles,
 		Gate:                  mergeGate(mr.DetailedMergeStatus),
 		GateDetail:            mr.DetailedMergeStatus,
-		FailingChecks:         mr.DetailedMergeStatus == "ci_must_pass", // GraphQL join refines via headPipeline.status
+		FailingChecks:         mr.DetailedMergeStatus == dmsCIMustPass, // GraphQL join refines via headPipeline.status
 		MergeConflict:         mr.HasConflicts,
 		NeedsRebase:           mr.DetailedMergeStatus == "need_rebase", // GraphQL join refines via shouldBeRebased
 		NeedsApproval:         mr.DetailedMergeStatus == "not_approved",

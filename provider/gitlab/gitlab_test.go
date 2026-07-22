@@ -202,15 +202,18 @@ func TestRegistered(t *testing.T) {
 }
 
 func makeMR(detailedStatus string) glMergeRequest {
+	t := true
 	mr := glMergeRequest{
-		IID:                 7,
-		ProjectID:           1,
-		Title:               "T",
-		WebURL:              "https://gitlab.com/acme/api/-/merge_requests/7",
-		State:               "opened",
-		DetailedMergeStatus: detailedStatus,
-		UpdatedAt:           "2026-07-10T00:00:00Z",
-		Author:              glUser{Username: "octocat"},
+		IID:                         7,
+		ProjectID:                   1,
+		Title:                       "T",
+		WebURL:                      "https://gitlab.com/acme/api/-/merge_requests/7",
+		State:                       "opened",
+		DetailedMergeStatus:         detailedStatus,
+		HasConflicts:                false,
+		BlockingDiscussionsResolved: &t,
+		UpdatedAt:                   "2026-07-10T00:00:00Z",
+		Author:                      glUser{Username: "octocat"},
 	}
 	mr.References.Full = "acme/api!7"
 	return mr
@@ -334,18 +337,25 @@ func TestRateRemaining(t *testing.T) {
 
 func TestNormalizeMarkers(t *testing.T) {
 	p := &Provider{handle: "octocat"}
+	// FailingChecks and NeedsRebase are now set by GraphQL join; observedFromMR always emits false.
+	// MergeConflict comes from has_conflicts REST field; the makeMR helper defaults it to false.
+	// UnresolvedDiscussions uses blocking_discussions_resolved (*bool); makeMR defaults to true (resolved).
 	cases := []struct {
-		status       string
-		wantGate     string
-		wantFailing  bool
-		wantConflict bool
-		wantRebase   bool
+		status           string
+		wantGate         string
+		wantFailing      bool
+		wantConflict     bool
+		wantRebase       bool
+		wantUnresolved   bool
+		wantPolicyDenied bool
 	}{
-		{"ci_must_pass", "blocked", true, false, false},
-		{"conflict", "blocked", false, true, false},
-		{"need_rebase", "blocked", false, false, true},
-		{"mergeable", "ready", false, false, false},
-		{"not_approved", "blocked", false, false, false},
+		{"ci_must_pass", "blocked", false, false, false, false, false},
+		{"conflict", "blocked", false, false, false, false, false},
+		{"need_rebase", "blocked", false, false, false, false, false},
+		{"mergeable", "ready", false, false, false, false, false},
+		{"not_approved", "blocked", false, false, false, false, false},
+		{"policies_denied", "blocked", false, false, false, false, true},
+		{"security_policy_violations", "blocked", false, false, false, false, true},
 	}
 	for _, c := range cases {
 		t.Run(c.status, func(t *testing.T) {
@@ -365,6 +375,85 @@ func TestNormalizeMarkers(t *testing.T) {
 			if pl.NeedsRebase != c.wantRebase {
 				t.Errorf("needs_rebase = %v, want %v", pl.NeedsRebase, c.wantRebase)
 			}
+			if pl.UnresolvedDiscussions != c.wantUnresolved {
+				t.Errorf("unresolved_discussions = %v, want %v", pl.UnresolvedDiscussions, c.wantUnresolved)
+			}
+			if pl.PolicyDenied != c.wantPolicyDenied {
+				t.Errorf("policy_denied = %v, want %v", pl.PolicyDenied, c.wantPolicyDenied)
+			}
 		})
 	}
+}
+
+func TestGraphQLJoinNeedsApproval(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_needs_approval", "octocat")
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType == "item.observed" && e.NativeID == "acme/api!7" {
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatal("payload type assertion failed")
+			}
+			if !pl.NeedsApproval {
+				t.Error("needs_approval should be true for not-approved non-draft MR")
+			}
+			return
+		}
+	}
+	t.Fatal("missing item.observed for acme/api!7")
+}
+
+func TestGraphQLJoinMultiReason(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_multi_reason", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType != "item.observed" || e.NativeID != "acme/api!7" {
+			continue
+		}
+		pl, ok := e.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Fatal("payload type assertion failed")
+		}
+		if !pl.MergeConflict {
+			t.Error("merge_conflict should be true (has_conflicts=true)")
+		}
+		if !pl.UnresolvedDiscussions {
+			t.Error("unresolved_discussions should be true (blocking_discussions_resolved=false)")
+		}
+		if !pl.NeedsApproval {
+			t.Error("needs_approval should be true (approved=false)")
+		}
+		if !pl.FailingChecks {
+			t.Error("failing_checks should be true (pipeline FAILED)")
+		}
+		return
+	}
+	t.Fatal("missing item.observed for acme/api!7")
+}
+
+func TestGraphQLJoinGitLabDegraded(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_degraded", "octocat")
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType == "item.observed" && e.NativeID == "acme/api!7" {
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatal("payload type assertion failed")
+			}
+			if pl.NeedsApproval {
+				t.Error("needs_approval should be false when GraphQL is degraded")
+			}
+			return
+		}
+	}
+	t.Fatal("missing item.observed for acme/api!7")
 }

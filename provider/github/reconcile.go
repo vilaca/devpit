@@ -91,6 +91,8 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 		events = append(events, p.observedFromSearch(a.item, a.repo, sortedRoles(a.roles)))
 	}
 
+	events = p.graphqlJoin(ctx, events)
+
 	out[cursorRecUpdatedAfter] = time.Now().UTC().Format(time.RFC3339)
 	return sdk.PollResult{
 		Events:        events,

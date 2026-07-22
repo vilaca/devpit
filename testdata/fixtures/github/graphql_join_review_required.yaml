@@ -17,27 +17,18 @@ interactions:
       - Wed, 08 Jul 2026 09:14:02 GMT
       Etag:
       - W/"deadbeef"
-      X-Ratelimit-Remaining:
-      - "4998"
     body: |
       [
         {
           "id": "1",
           "reason": "review_requested",
           "subject": {
-            "title": "Fix flaky sync test",
+            "title": "Add rate limiter",
             "url": "https://api.github.com/repos/acme/api/pulls/42",
             "type": "PullRequest"
           },
           "repository": {"full_name": "acme/api"},
           "updated_at": "2026-07-08T09:14:02Z"
-        },
-        {
-          "id": "2",
-          "reason": "subscribed",
-          "subject": {"title": "some issue", "url": "https://api.github.com/repos/acme/api/issues/7", "type": "Issue"},
-          "repository": {"full_name": "acme/api"},
-          "updated_at": "2026-07-08T09:00:00Z"
         }
       ]
 - id: 1
@@ -55,12 +46,12 @@ interactions:
     body: |
       {
         "number": 42,
-        "title": "Fix flaky sync test",
+        "title": "Add rate limiter",
         "html_url": "https://github.com/acme/api/pull/42",
         "state": "open",
         "draft": false,
         "merged": false,
-        "mergeable_state": "clean",
+        "mergeable_state": "blocked",
         "updated_at": "2026-07-08T09:14:02Z",
         "user": {"login": "jdoe"},
         "requested_reviewers": [{"login": "octocat"}],
@@ -80,4 +71,4 @@ interactions:
       Content-Type:
       - application/json
     body: |
-      {"data":{"a0":{"pullRequest":{"reviewDecision":null}}}}
+      {"data":{"a0":{"pullRequest":{"reviewDecision":"REVIEW_REQUIRED"}}}}

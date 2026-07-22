@@ -40,27 +40,30 @@ type WorkItem struct {
 	// ID is a short, URL-safe, stable handle derived from the identity triple
 	// (connection_id, object_type, native_id) — see the "id" field notes in
 	// docs/REST_API.md.
-	ID            string               `json:"id"`
-	ConnectionID  string               `json:"connection_id"`
-	ObjectType    string               `json:"object_type"`
-	NativeID      string               `json:"native_id"`
-	Title         string               `json:"title"`
-	URL           string               `json:"url"`
-	Repo          string               `json:"repo"`
-	Author        string               `json:"author"`
-	Draft         bool                 `json:"draft"`
-	States        []State              `json:"states"`  // precedence order; States[0] ranks the item
-	Flagged       bool                 `json:"flagged"` // pinned in the "Handle next" zone
-	Stale         bool                 `json:"stale"`
-	Old           bool                 `json:"old"`
-	UpdatedAt     time.Time            `json:"updated_at"`
-	SignalCounts  map[string]int       `json:"signal_counts,omitempty"` // only types with count > 1
-	FailingChecks bool                 `json:"failing_checks"`
-	MergeConflict bool                 `json:"merge_conflict"`
-	NeedsRebase   bool                 `json:"needs_rebase"`
-	GateDetail    string               `json:"gate_detail,omitempty"`
-	FlaggedAt     *time.Time           `json:"flagged_at,omitempty"`
-	Since         map[string]time.Time `json:"since,omitempty"` // onset of each active tag
+	ID                    string               `json:"id"`
+	ConnectionID          string               `json:"connection_id"`
+	ObjectType            string               `json:"object_type"`
+	NativeID              string               `json:"native_id"`
+	Title                 string               `json:"title"`
+	URL                   string               `json:"url"`
+	Repo                  string               `json:"repo"`
+	Author                string               `json:"author"`
+	Draft                 bool                 `json:"draft"`
+	States                []State              `json:"states"`  // precedence order; States[0] ranks the item
+	Flagged               bool                 `json:"flagged"` // pinned in the "Handle next" zone
+	Stale                 bool                 `json:"stale"`
+	Old                   bool                 `json:"old"`
+	UpdatedAt             time.Time            `json:"updated_at"`
+	SignalCounts          map[string]int       `json:"signal_counts,omitempty"` // only types with count > 1
+	FailingChecks         bool                 `json:"failing_checks"`
+	MergeConflict         bool                 `json:"merge_conflict"`
+	NeedsRebase           bool                 `json:"needs_rebase"`
+	NeedsApproval         bool                 `json:"needs_approval"`
+	UnresolvedDiscussions bool                 `json:"unresolved_discussions"`
+	PolicyDenied          bool                 `json:"policy_denied"`
+	GateDetail            string               `json:"gate_detail,omitempty"`
+	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
+	Since                 map[string]time.Time `json:"since,omitempty"` // onset of each active tag
 }
 
 // itemKey is the identity triple that groups events into one WorkItem.
@@ -191,25 +194,28 @@ func foldItem(
 	sort.Slice(allObserved, func(i, j int) bool { return allObserved[i].ID > allObserved[j].ID })
 
 	return WorkItem{
-		ID:            itemID(k),
-		ConnectionID:  k.connectionID,
-		ObjectType:    k.objectType,
-		NativeID:      k.nativeID,
-		Title:         facts.Title,
-		URL:           facts.URL,
-		Repo:          facts.Repo,
-		Author:        facts.Author,
-		Draft:         facts.Draft,
-		States:        states,
-		Stale:         stale,
-		Old:           old,
-		UpdatedAt:     updatedAt,
-		SignalCounts:  signalCounts(signals),
-		FailingChecks: facts.FailingChecks,
-		MergeConflict: facts.MergeConflict,
-		NeedsRebase:   facts.NeedsRebase,
-		GateDetail:    facts.GateDetail,
-		Since:         computeSince(allObserved, states, facts, hasMention, mentionSigs),
+		ID:                    itemID(k),
+		ConnectionID:          k.connectionID,
+		ObjectType:            k.objectType,
+		NativeID:              k.nativeID,
+		Title:                 facts.Title,
+		URL:                   facts.URL,
+		Repo:                  facts.Repo,
+		Author:                facts.Author,
+		Draft:                 facts.Draft,
+		States:                states,
+		Stale:                 stale,
+		Old:                   old,
+		UpdatedAt:             updatedAt,
+		SignalCounts:          signalCounts(signals),
+		FailingChecks:         facts.FailingChecks,
+		MergeConflict:         facts.MergeConflict,
+		NeedsRebase:           facts.NeedsRebase,
+		NeedsApproval:         facts.NeedsApproval,
+		UnresolvedDiscussions: facts.UnresolvedDiscussions,
+		PolicyDenied:          facts.PolicyDenied,
+		GateDetail:            facts.GateDetail,
+		Since:                 computeSince(allObserved, states, facts, hasMention, mentionSigs),
 	}, true
 }
 
@@ -278,6 +284,10 @@ func computeSince(
 		{"failing_checks", facts.FailingChecks, func(p sdk.ItemObservedPayload) bool { return p.FailingChecks }},
 		{"merge_conflict", facts.MergeConflict, func(p sdk.ItemObservedPayload) bool { return p.MergeConflict }},
 		{"needs_rebase", facts.NeedsRebase, func(p sdk.ItemObservedPayload) bool { return p.NeedsRebase }},
+		{"needs_approval", facts.NeedsApproval, func(p sdk.ItemObservedPayload) bool { return p.NeedsApproval }},
+		{"unresolved_discussions", facts.UnresolvedDiscussions,
+			func(p sdk.ItemObservedPayload) bool { return p.UnresolvedDiscussions }},
+		{"policy_denied", facts.PolicyDenied, func(p sdk.ItemObservedPayload) bool { return p.PolicyDenied }},
 	} {
 		if !mc.active {
 			continue

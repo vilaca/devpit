@@ -72,6 +72,8 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		events = append(events, p.signalsFromNotification(n, obs.NativeID)...)
 	}
 
+	events = p.graphqlJoin(ctx, events)
+
 	return sdk.PollResult{
 		Events:        events,
 		State:         out,

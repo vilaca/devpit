@@ -60,11 +60,14 @@ Each item carries:
 - **Markers** (diagnostic booleans, never affect state):
   - `draft` — item is in draft/WIP mode (pre-existing; also listed under item
     identity above).
-  - `failing_checks` — CI/checks red (GitHub: `unstable`; GitLab: `ci_must_pass`).
+  - `failing_checks` — CI/checks red (GitHub: `unstable`; GitLab: `headPipeline.status` red via GraphQL).
   - `merge_conflict` — manual conflict resolution needed (GitHub: `dirty`;
-    GitLab: `conflict`).
+    GitLab: `has_conflicts` REST field).
   - `needs_rebase` — mechanical rebase needed (GitHub: `behind`; GitLab:
-    `need_rebase`).
+    `shouldBeRebased` GraphQL).
+  - `needs_approval` — required approvals not met (GitHub: `reviewDecision`; GitLab: `approved` GraphQL).
+  - `unresolved_discussions` — threads block the merge (GitLab: `blocking_discussions_resolved`; GitHub: excluded — gate rule unreadable for non-admins).
+  - `policy_denied` — security/org policy denies merge (GitLab: `policies_denied` / `security_policy_violations`; GitHub: no signal).
   - `gate_detail` — raw provider vocabulary for the merge gate (omitted when
     empty); powers the Blocked tooltip.
 - `since` — map from tag wire name to RFC 3339 onset time; only active tags

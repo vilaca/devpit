@@ -22,10 +22,11 @@ const userAgent = "devpit/0.1"
 
 // Provider is the GitLab implementation of sdk.Provider.
 type Provider struct {
-	cfg     sdk.ConnectionConfig
-	apiBase string
-	handle  string
-	http    *http.Client
+	cfg             sdk.ConnectionConfig
+	apiBase         string
+	graphqlEndpoint string
+	handle          string
+	http            *http.Client
 }
 
 // New builds a GitLab provider. BaseURL is the instance host (e.g.
@@ -36,9 +37,10 @@ func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 		base = "https://gitlab.com"
 	}
 	return &Provider{
-		cfg:     cfg,
-		apiBase: base + "/api/v4",
-		http:    &http.Client{Timeout: 30 * time.Second},
+		cfg:             cfg,
+		apiBase:         base + "/api/v4",
+		graphqlEndpoint: base + "/api/graphql",
+		http:            &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 

@@ -13,17 +13,16 @@ interactions:
     headers:
       Content-Type:
       - application/json
-      X-Next-Page:
-      - "2"
     body: |
       [
         {
           "iid": 7,
           "project_id": 12,
-          "title": "Page one MR",
+          "title": "Fix flaky sync test",
           "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
           "state": "opened",
-          "detailed_merge_status": "mergeable",
+          "draft": false,
+          "detailed_merge_status": "not_approved",
           "has_conflicts": false,
           "blocking_discussions_resolved": true,
           "updated_at": "2026-07-08T09:14:02Z",
@@ -34,38 +33,6 @@ interactions:
         }
       ]
 - id: 1
-  request:
-    method: GET
-    url: https://gitlab.com/api/v4/merge_requests?scope=assigned_to_me&state=opened&per_page=100&page=2
-    headers: {}
-    body: ""
-  response:
-    status: 200 OK
-    code: 200
-    headers:
-      Content-Type:
-      - application/json
-      X-Next-Page:
-      - ""
-    body: |
-      [
-        {
-          "iid": 8,
-          "project_id": 12,
-          "title": "Page two MR",
-          "web_url": "https://gitlab.com/acme/api/-/merge_requests/8",
-          "state": "opened",
-          "detailed_merge_status": "mergeable",
-          "has_conflicts": false,
-          "blocking_discussions_resolved": true,
-          "updated_at": "2026-07-08T08:00:00Z",
-          "author": {"username": "jdoe"},
-          "assignees": [{"username": "octocat"}],
-          "reviewers": [],
-          "references": {"full": "acme/api!8"}
-        }
-      ]
-- id: 2
   request:
     method: GET
     url: https://gitlab.com/api/v4/merge_requests?scope=created_by_me&state=opened&per_page=100
@@ -79,7 +46,7 @@ interactions:
       - application/json
     body: |
       []
-- id: 3
+- id: 2
   request:
     method: POST
     url: https://gitlab.com/api/graphql
@@ -92,4 +59,4 @@ interactions:
       Content-Type:
       - application/json
     body: |
-      {"data":{"a0":{"mergeRequest":{"approved":true,"shouldBeRebased":false,"headPipeline":null}},"a1":{"mergeRequest":{"approved":true,"shouldBeRebased":false,"headPipeline":null}}}}
+      {"data":{"a0":{"mergeRequest":{"approved":false,"shouldBeRebased":false,"headPipeline":null}}}}

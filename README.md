@@ -35,20 +35,20 @@ Six states in v0.1, shown as tags on each item:
 
 | State | Meaning |
 |---|---|
-| **Ready to Merge** | Your PR; provider merge gate reports mergeable |
 | **Needs Review** | A review was requested from you |
 | **Changes Requested** | Your PR; a reviewer asked for changes |
 | **Blocked** | Your PR; merge gate reports not mergeable |
+| **Ready to Merge** | Your PR; provider merge gate reports mergeable |
 | **Mentioned** | You were mentioned |
 | **Waiting on Author** | You reviewed; ball is back with the author |
 
-Precedence (highest first): Ready to Merge → Needs Review → Changes
-Requested → Blocked → Mentioned → Waiting on Author.
+Precedence (highest first): Needs Review → Changes Requested → Blocked →
+Ready to Merge → Mentioned → Waiting on Author.
 
 ## Configuration
 
 A single YAML file with a list of named connections (type, base URL, token).
-See [`docs/Configuration.md`](docs/Configuration.md).
+See [`ADR/ADR-0015_Multi_Account_Connections.md`](ADR/ADR-0015_Multi_Account_Connections.md) and [`internal/config/config.go`](internal/config/config.go).
 
 ## Running
 

@@ -36,7 +36,6 @@ type Engine struct {
 	store  Store
 	notify Notifier
 	cfgs   []sdk.ConnectionConfig
-	conns  []*conn
 
 	fastEvery, reconEvery, closeTimeout time.Duration
 
@@ -127,7 +126,6 @@ func (e *Engine) Run(ctx context.Context) error {
 			continue
 		}
 
-		e.conns = append(e.conns, c)
 		e.wg.Go(func() {
 			c.run(ctx)
 		})

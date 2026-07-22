@@ -44,3 +44,6 @@ second decision log — the ADRs are it.
   `docs/Provider_API_Analysis.md` for the per-provider API research.
 - Declare capabilities honestly; the engine never asks a provider to produce a
   bucket it declared unavailable.
+- Prefer duplicating helper code (JSON decode, time parse, status mapping) over
+  a shared `provider/*` helper — providers evolve independently by design
+  (`ADR/ADR-0003_Provider_Plugin_Model.md`).

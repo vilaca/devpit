@@ -4,13 +4,20 @@ workdir: .
 # External/stdlib imports are unrestricted; we only govern our own layering.
 allow:
   depOnAnyVendor: true
-  # Enforce layering at the import level only. The deep scan (method calls /
-  # dependency injection) cannot distinguish intentional dependency inversion
-  # from a real violation: the engine defines the Notifier interface, internal/api
-  # implements it *without importing engine*, and cmd (the composition root, which
-  # may depend on everything) injects api.Server via engine.WithNotifier. deepScan
-  # misattributes that wiring as an api -> engine dependency, so it is disabled.
-  deepScan: false
+  # deepScan analyses method calls and dependency injection, not just imports,
+  # so it catches layering violations the import-level check misses. It is on.
+  # Its one false positive is the composition-root wiring: cmd injects an
+  # api.Server into engine.WithNotifier (the engine defines the Notifier
+  # interface, internal/api implements it *without importing engine*), which
+  # deepScan misattributes as an api -> engine dependency. cmd may depend on
+  # everything, so excluding main.go from analysis costs no real enforcement.
+  deepScan: true
+
+# The sole composition root: excluded from arch analysis so deepScan does not
+# misread its dependency-injection wiring as a layer violation (see above).
+# Keep this list minimal — if the wiring moves, update it deliberately.
+excludeFiles:
+  - "cmd/devpit/main.go"
 
 components:
   sdk: { in: sdk }
@@ -37,6 +44,10 @@ deps:
     mayDependOn: [sdk, storage, attention, web]
   engine:
     mayDependOn: [sdk, storage]
+  # Providers depend on sdk only — not each other, and not any shared provider/*
+  # helper. Shared-looking code is duplicated per provider by design so a change
+  # to one cannot regress another (ADR-0003); any provider/shared package would
+  # be both unmapped here and rejected by the sdk-only edge.
   providerGithub:
     mayDependOn: [sdk]
   providerGitlab:

@@ -32,27 +32,36 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 	var rate *int
 
 	for _, scope := range reconcileScopes {
-		u := p.apiBase + "/merge_requests?scope=" + scope + "&state=opened"
+		base := p.apiBase + "/merge_requests?scope=" + scope + "&state=opened&per_page=100"
 		if updatedAfter != "" {
-			u += "&updated_after=" + url.QueryEscape(updatedAfter)
+			base += "&updated_after=" + url.QueryEscape(updatedAfter)
 		}
-		resp, err := p.do(ctx, u)
-		if err != nil {
-			return sdk.PollResult{}, err
-		}
-		if r := rateRemaining(resp.Header); r != nil {
-			rate = r
-		}
-		var mrs []glMergeRequest
-		if err := decodeJSON(resp, &mrs); err != nil {
-			return sdk.PollResult{}, err
-		}
-		for _, mr := range mrs {
-			if seen[mr.WebURL] {
-				continue
+		// Follow GitLab's X-Next-Page cursor so a scope with more than one page
+		// is not silently truncated to the first 100 MRs.
+		for u := base; u != ""; {
+			resp, err := p.do(ctx, u)
+			if err != nil {
+				return sdk.PollResult{}, err
 			}
-			seen[mr.WebURL] = true
-			events = append(events, p.observedFromMR(mr))
+			if r := rateRemaining(resp.Header); r != nil {
+				rate = r
+			}
+			next := resp.Header.Get("X-Next-Page")
+			var mrs []glMergeRequest
+			if err := decodeJSON(resp, &mrs); err != nil {
+				return sdk.PollResult{}, err
+			}
+			for _, mr := range mrs {
+				if seen[mr.WebURL] {
+					continue
+				}
+				seen[mr.WebURL] = true
+				events = append(events, p.observedFromMR(mr))
+			}
+			if next == "" {
+				break
+			}
+			u = base + "&page=" + next
 		}
 	}
 

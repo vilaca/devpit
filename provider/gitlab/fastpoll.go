@@ -25,19 +25,33 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 	// unconditional (no 304 on GitLab).
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	u := p.apiBase + "/todos?state=pending"
+	base := p.apiBase + "/todos?state=pending&per_page=100"
 	if ua := state[cursorFastUpdatedAfter]; ua != "" {
-		u += "&updated_after=" + url.QueryEscape(ua)
+		base += "&updated_after=" + url.QueryEscape(ua)
 	}
-	resp, err := p.do(ctx, u)
-	if err != nil {
-		return sdk.PollResult{}, err
-	}
-	rate := rateRemaining(resp.Header)
 
+	// Follow GitLab's X-Next-Page cursor so a busy todos feed is not silently
+	// truncated to the first 100 entries.
 	var todos []glTodo
-	if err := decodeJSON(resp, &todos); err != nil {
-		return sdk.PollResult{}, err
+	var rate *int
+	for u := base; u != ""; {
+		resp, err := p.do(ctx, u)
+		if err != nil {
+			return sdk.PollResult{}, err
+		}
+		if r := rateRemaining(resp.Header); r != nil {
+			rate = r
+		}
+		next := resp.Header.Get("X-Next-Page")
+		var page []glTodo
+		if err := decodeJSON(resp, &page); err != nil {
+			return sdk.PollResult{}, err
+		}
+		todos = append(todos, page...)
+		if next == "" {
+			break
+		}
+		u = base + "&page=" + next
 	}
 
 	var events []sdk.Event

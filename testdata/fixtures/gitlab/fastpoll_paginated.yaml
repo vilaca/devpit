@@ -13,8 +13,8 @@ interactions:
     headers:
       Content-Type:
       - application/json
-      Ratelimit-Remaining:
-      - "1998"
+      X-Next-Page:
+      - "2"
     body: |
       [
         {
@@ -25,18 +25,35 @@ interactions:
           "project": {"id": 12},
           "author": {"username": "jdoe"},
           "updated_at": "2026-07-08T09:14:02Z"
-        },
-        {
-          "id": 18443,
-          "action_name": "mentioned",
-          "target_type": "Issue",
-          "target": {"iid": 3, "web_url": "https://gitlab.com/acme/api/-/issues/3"},
-          "project": {"id": 12},
-          "author": {"username": "jdoe"},
-          "updated_at": "2026-07-08T09:00:00Z"
         }
       ]
 - id: 1
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/todos?state=pending&per_page=100&page=2
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+      X-Next-Page:
+      - ""
+    body: |
+      [
+        {
+          "id": 18443,
+          "action_name": "assigned",
+          "target_type": "MergeRequest",
+          "target": {"iid": 8, "web_url": "https://gitlab.com/acme/api/-/merge_requests/8"},
+          "project": {"id": 12},
+          "author": {"username": "jdoe"},
+          "updated_at": "2026-07-08T08:00:00Z"
+        }
+      ]
+- id: 2
   request:
     method: GET
     url: https://gitlab.com/api/v4/projects/12/merge_requests/7
@@ -52,14 +69,39 @@ interactions:
       {
         "iid": 7,
         "project_id": 12,
-        "title": "Fix flaky sync test",
+        "title": "Page one MR",
         "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
         "state": "opened",
-        "draft": false,
         "detailed_merge_status": "not_approved",
         "updated_at": "2026-07-08T09:14:02Z",
         "author": {"username": "jdoe"},
         "assignees": [],
         "reviewers": [{"username": "octocat"}],
         "references": {"full": "acme/api!7"}
+      }
+- id: 3
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/projects/12/merge_requests/8
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {
+        "iid": 8,
+        "project_id": 12,
+        "title": "Page two MR",
+        "web_url": "https://gitlab.com/acme/api/-/merge_requests/8",
+        "state": "opened",
+        "detailed_merge_status": "not_approved",
+        "updated_at": "2026-07-08T08:00:00Z",
+        "author": {"username": "jdoe"},
+        "assignees": [{"username": "octocat"}],
+        "reviewers": [],
+        "references": {"full": "acme/api!8"}
       }

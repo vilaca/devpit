@@ -3,11 +3,46 @@ package github
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/vilaca/devpit/sdk"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
+
+// stubRT is a synthetic http.RoundTripper returning a fixed status, headers and
+// body so do()'s status classification can be exercised without a live server.
+type stubRT struct {
+	status int
+	header http.Header
+	body   string
+}
+
+func (rt stubRT) RoundTrip(_ *http.Request) (*http.Response, error) {
+	h := rt.header
+	if h == nil {
+		h = http.Header{}
+	}
+	return &http.Response{
+		StatusCode: rt.status,
+		Header:     h,
+		Body:       io.NopCloser(strings.NewReader(rt.body)),
+	}, nil
+}
+
+func newStubProvider(t *testing.T, rt stubRT) *Provider {
+	t.Helper()
+	p, err := New(sdk.ConnectionConfig{Type: "github", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	p.http.Transport = rt
+	return p
+}
 
 // newTestProvider wires the provider's HTTP client to a replay-only VCR
 // recorder backed by the named cassette. Replayable interactions are enabled
@@ -158,6 +193,26 @@ func TestReconcileDedup(t *testing.T) {
 	}
 }
 
+// TestSearchPagination verifies search() follows the Link header rel="next"
+// and returns items from every page, not just the first.
+func TestSearchPagination(t *testing.T) {
+	p := newTestProvider(t, "search_paginated", "octocat")
+	res, rate, err := p.search(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(res.Items) != 2 {
+		t.Fatalf("items = %d, want 2 (both pages)", len(res.Items))
+	}
+	if res.Items[0].Number != 1 || res.Items[1].Number != 2 {
+		t.Errorf("items = %v, want #1 then #2", res.Items)
+	}
+	// Rate is taken from the last page fetched.
+	if rate == nil || *rate != 27 {
+		t.Errorf("rate = %v, want 27 (from last page)", rate)
+	}
+}
+
 func TestRegistered(t *testing.T) {
 	if _, ok := sdk.Registry["github"]; !ok {
 		t.Fatal("github not registered")
@@ -176,6 +231,116 @@ func makePR(mergeableState string) ghPull {
 	}
 	pr.Base.Repo.FullName = "acme/api"
 	return pr
+}
+
+func TestDoStatusClassification(t *testing.T) {
+	cases := []struct {
+		name       string
+		status     int
+		wantErr    error
+		wantStatus int // asserted when the error is a *sdk.StatusError
+	}{
+		{"ok", http.StatusOK, nil, 0},
+		{"not modified", http.StatusNotModified, nil, 0},
+		{"unauthorized", http.StatusUnauthorized, sdk.ErrUnauthorized, 0},
+		{"forbidden", http.StatusForbidden, sdk.ErrRateLimited, 0},
+		{"too many requests", http.StatusTooManyRequests, sdk.ErrRateLimited, 0},
+		{"server error", http.StatusInternalServerError, sdk.ErrServer, 500},
+		{"service unavailable", http.StatusServiceUnavailable, sdk.ErrServer, 503},
+		{"unexpected", http.StatusTeapot, sdk.ErrUnexpected, 418},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := newStubProvider(t, stubRT{status: c.status, body: "{}"})
+			resp, err := p.do(context.Background(), "https://api.github.com/x", nil)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if c.wantErr == nil {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				if resp == nil || resp.StatusCode != c.status {
+					t.Fatalf("resp status = %v, want %d", resp, c.status)
+				}
+				return
+			}
+			if !errors.Is(err, c.wantErr) {
+				t.Fatalf("err = %v, want %v", err, c.wantErr)
+			}
+			if c.wantStatus != 0 {
+				var se *sdk.StatusError
+				if !errors.As(err, &se) {
+					t.Fatalf("err = %v, want *sdk.StatusError", err)
+				}
+				if se.Status != c.wantStatus {
+					t.Errorf("status = %d, want %d", se.Status, c.wantStatus)
+				}
+			}
+		})
+	}
+}
+
+func TestParseRateDelay(t *testing.T) {
+	future := time.Now().Add(time.Hour).Unix()
+	near := time.Now().Add(30 * time.Second).Unix()
+	// wantMin/wantMax bound the result; reset uses time.Until so its exact value
+	// drifts a few ms between the header value and the call.
+	cases := []struct {
+		name       string
+		retryAfter string
+		reset      string
+		wantMin    time.Duration
+		wantMax    time.Duration
+	}{
+		{"only retry-after", "45", "", 45 * time.Second, 45 * time.Second},
+		{"only reset", "", strconv.FormatInt(future, 10), 55 * time.Minute, time.Hour},
+		{"both reset larger", "10", strconv.FormatInt(future, 10), 55 * time.Minute, time.Hour},
+		{"both retry-after larger", "7200", strconv.FormatInt(near, 10), 7200 * time.Second, 7200 * time.Second},
+		{"neither", "", "", 0, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resp := &http.Response{Header: http.Header{}}
+			if c.retryAfter != "" {
+				resp.Header.Set("Retry-After", c.retryAfter)
+			}
+			if c.reset != "" {
+				resp.Header.Set("X-Ratelimit-Reset", c.reset)
+			}
+			if d := parseRateDelay(resp); d < c.wantMin || d > c.wantMax {
+				t.Errorf("d = %v, want [%v, %v]", d, c.wantMin, c.wantMax)
+			}
+		})
+	}
+}
+
+func TestRateRemaining(t *testing.T) {
+	cases := []struct {
+		name string
+		set  bool
+		val  string
+		want *int
+	}{
+		{"present", true, "29", new(29)},
+		{"absent", false, "", nil},
+		{"malformed", true, "abc", nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := http.Header{}
+			if c.set {
+				h.Set("X-Ratelimit-Remaining", c.val)
+			}
+			got := rateRemaining(h)
+			switch {
+			case c.want == nil && got != nil:
+				t.Errorf("got %d, want nil", *got)
+			case c.want != nil && (got == nil || *got != *c.want):
+				t.Errorf("got %v, want %d", got, *c.want)
+			}
+		})
+	}
 }
 
 func TestNormalizeMarkers(t *testing.T) {

@@ -50,18 +50,25 @@ re-derives org rules. That is why it is trustworthy.
 
 ## Diagnostic badges (cosmetic — explain, never move)
 
-| badge | it means | GitHub | GitLab | hover |
+| badge | meaning (when `blocked`) | GitHub | GitLab | hover |
 |---|---|---|---|---|
-| `conflict` | manual conflict resolution needed | `dirty` | `conflict` | for {N} |
-| `rebase` | mechanical rebase / update-branch | `behind` | `need_rebase` | for {N} |
-| `checks failing` | CI / pipeline red (non-gating) | `unstable` | `ci_must_pass` | for {N} |
+| `conflict` | manual conflict resolution needed | ✓ `has_conflicts` (REST) | ✓ `has_conflicts` (REST) | for {N} |
+| `rebase` | mechanical rebase unlocks it | ⚠ `behind` — only when repo requires up-to-date branches | ✓ `shouldBeRebased` (GraphQL) | for {N} |
+| `checks failing` | CI / pipeline red | ⚠ non-gating CI only (`unstable`); gating-CI failures hide inside `blocked` | ✓ `headPipeline` (GraphQL, any pipeline) | for {N} |
 | `draft` | provider draft; merge gate suspended | draft flag | draft flag | for {N} |
+| `missing approvals` | required approvals not met | ✓ `reviewDecision` (GraphQL) | ✓ `approved` (GraphQL) | for {N} |
+| `discussions` | unresolved threads gate the merge | ✗ gate rule unreadable for non-admins | ✓ `blocking_discussions_resolved` (REST) | for {N} |
+| `policy` | security/org policy denies merge | ✗ no equivalent signal | ⚠ `policies_denied` etc. — masked when a co-present reason wins the verdict field | for {N} |
 
-Honest gaps: GitHub gating-CI failures hide inside its opaque `blocked`
-status (no badge — the item still ranks blocked); GitLab non-gating CI
-failures are invisible (no pipeline fetch); GitHub only reports `behind`
-when the target branch requires up-to-date branches — no `rebase` badge is
-not proof of freshness.
+Legend: ✓ full signal · ⚠ partial/conditional · ✗ structurally unavailable.
+
+GitLab shows every applicable reason at once (except the `policy` residual);
+GitHub shows what its API discloses. The old "GitLab non-gating CI invisible"
+gap is closed by the `headPipeline` join; GitHub's gating-CI opacity remains.
+
+Both providers use a batched GraphQL join (one query per sync cycle, MRs/PRs
+via aliases) for the GraphQL-sourced signals; on failure the join degrades
+gracefully (badges absent, sync_log entry).
 
 ## Age tags (the one exception — they band the list)
 

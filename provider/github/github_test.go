@@ -381,6 +381,48 @@ func TestNormalizeMarkers(t *testing.T) {
 	}
 }
 
+func TestGraphQLJoinReviewRequired(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_review_required", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType == "item.observed" && e.NativeID == "acme/api#42" {
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatal("payload type assertion failed")
+			}
+			if !pl.NeedsApproval {
+				t.Error("needs_approval should be true for REVIEW_REQUIRED blocked non-draft PR")
+			}
+			return
+		}
+	}
+	t.Fatal("missing item.observed for acme/api#42")
+}
+
+func TestGraphQLJoinDegraded(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_degraded", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType == "item.observed" && e.NativeID == "acme/api#42" {
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatal("payload type assertion failed")
+			}
+			if pl.NeedsApproval {
+				t.Error("needs_approval should be false when GraphQL is degraded")
+			}
+			return
+		}
+	}
+	t.Fatal("missing item.observed for acme/api#42")
+}
+
 // TestDirtyPRIsBlockedWithConflict verifies dirty → blocked + merge_conflict, not failing_checks.
 func TestDirtyPRIsBlockedWithConflict(t *testing.T) {
 	p := &Provider{handle: "octocat"}

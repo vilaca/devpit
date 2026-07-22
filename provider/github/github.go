@@ -22,20 +22,23 @@ const userAgent = "devpit/0.1"
 
 // Provider is the GitHub implementation of sdk.Provider.
 type Provider struct {
-	cfg     sdk.ConnectionConfig
-	apiBase string
-	handle  string
-	http    *http.Client
+	cfg             sdk.ConnectionConfig
+	apiBase         string
+	graphqlEndpoint string
+	handle          string
+	http            *http.Client
 }
 
 // New builds a GitHub provider. BaseURL is the web host (e.g.
 // "https://github.com"); the REST API lives at api.github.com for the public
 // host and at "{base}/api/v3" for Enterprise.
 func New(cfg sdk.ConnectionConfig) (*Provider, error) {
+	base := apiBase(cfg.BaseURL)
 	return &Provider{
-		cfg:     cfg,
-		apiBase: apiBase(cfg.BaseURL),
-		http:    &http.Client{Timeout: 30 * time.Second},
+		cfg:             cfg,
+		apiBase:         base,
+		graphqlEndpoint: strings.TrimSuffix(base, "/v3") + "/graphql",
+		http:            &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 

@@ -65,6 +65,8 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 		}
 	}
 
+	events = p.graphqlJoin(ctx, events)
+
 	out[cursorRecUpdatedAfter] = now
 	return sdk.PollResult{
 		Events:        events,

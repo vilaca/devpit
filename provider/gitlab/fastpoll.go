@@ -70,6 +70,8 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		}
 	}
 
+	events = p.graphqlJoin(ctx, events)
+
 	out[cursorFastUpdatedAfter] = now
 	return sdk.PollResult{
 		Events:        events,

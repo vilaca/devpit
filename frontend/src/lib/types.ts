@@ -44,6 +44,9 @@ export interface AttentionItem {
   failing_checks: boolean;
   merge_conflict: boolean;
   needs_rebase: boolean;
+  needs_approval: boolean;
+  unresolved_discussions: boolean;
+  policy_denied: boolean;
   gate_detail?: string;
   flagged_at?: string; // RFC 3339 UTC; present only when pinned
   since?: Record<string, string>; // tag key → RFC 3339 onset time; active tags only

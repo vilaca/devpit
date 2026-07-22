@@ -19,16 +19,15 @@ const eventItemObserved = "item.observed"
 
 // Normalized gate and detailed_merge_status values.
 const (
-	dmsMergeable  = "mergeable"
-	dmsCiMustPass = "ci_must_pass"
-	dmsConflict   = "conflict"
-	dmsNeedRebase = "need_rebase"
-	gateReady     = "ready"
-	gateBlocked   = "blocked"
-	gateUnknown   = "unknown"
-	stateOpen     = "open"
-	stateMerged   = "merged"
-	stateClosed   = "closed"
+	dmsMergeable      = "mergeable"
+	dmsPolicyDenied   = "policies_denied"
+	dmsSecurityPolicy = "security_policy_violations"
+	gateReady         = "ready"
+	gateBlocked       = "blocked"
+	gateUnknown       = "unknown"
+	stateOpen         = "open"
+	stateMerged       = "merged"
+	stateClosed       = "closed"
 )
 
 // mergeGate maps detailed_merge_status to the normalized gate class.
@@ -104,20 +103,29 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 	}
 	sort.Strings(roles) // deterministic role order for the dedupe hash
 
+	var unresolvedDiscussions bool
+	if mr.BlockingDiscussionsResolved != nil {
+		unresolvedDiscussions = !*mr.BlockingDiscussionsResolved
+	} else {
+		unresolvedDiscussions = mr.DetailedMergeStatus == "discussions_not_resolved"
+	}
+
 	payload := sdk.ItemObservedPayload{
-		Title:             mr.Title,
-		URL:               mr.WebURL,
-		Repo:              repoFromRef(mr.References.Full),
-		State:             state,
-		Draft:             mr.Draft,
-		Author:            mr.Author.Username,
-		MyRoles:           roles,
-		Gate:              mergeGate(mr.DetailedMergeStatus),
-		GateDetail:        mr.DetailedMergeStatus,
-		FailingChecks:     mr.DetailedMergeStatus == dmsCiMustPass,
-		MergeConflict:     mr.DetailedMergeStatus == dmsConflict,
-		NeedsRebase:       mr.DetailedMergeStatus == dmsNeedRebase,
-		ProviderUpdatedAt: mr.UpdatedAt,
+		Title:                 mr.Title,
+		URL:                   mr.WebURL,
+		Repo:                  repoFromRef(mr.References.Full),
+		State:                 state,
+		Draft:                 mr.Draft,
+		Author:                mr.Author.Username,
+		MyRoles:               roles,
+		Gate:                  mergeGate(mr.DetailedMergeStatus),
+		GateDetail:            mr.DetailedMergeStatus,
+		FailingChecks:         false, // set by GraphQL join (headPipeline.status)
+		MergeConflict:         mr.HasConflicts,
+		NeedsRebase:           false, // set by GraphQL join (shouldBeRebased)
+		UnresolvedDiscussions: unresolvedDiscussions,
+		PolicyDenied:          isPolicyDenied(mr.DetailedMergeStatus),
+		ProviderUpdatedAt:     mr.UpdatedAt,
 	}
 
 	return sdk.Event{
@@ -129,6 +137,10 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		DedupeKey:  observedDedupeKey(payload),
 		Payload:    payload,
 	}
+}
+
+func isPolicyDenied(dms string) bool {
+	return dms == dmsPolicyDenied || dms == dmsSecurityPolicy
 }
 
 func observedDedupeKey(p sdk.ItemObservedPayload) string {

@@ -85,6 +85,15 @@
     <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016) -->
     <span class="tag marker-conflict" title={titleForMarker("failing_checks")}>Failing Checks</span>
   {/if}
+  {#if item.needs_approval}
+    <span class="tag marker-conflict" title={titleForMarker("needs_approval")}>Missing Approvals</span>
+  {/if}
+  {#if item.unresolved_discussions}
+    <span class="tag marker-conflict" title={titleForMarker("unresolved_discussions")}>Discussions</span>
+  {/if}
+  {#if item.policy_denied}
+    <span class="tag marker-conflict" title={titleForMarker("policy_denied")}>Policy</span>
+  {/if}
 
   {#if item.old}
     <span class="tag marker-old" title={oldTitle}>Old</span>

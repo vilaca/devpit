@@ -15,29 +15,32 @@ type attentionResponse struct {
 
 // attentionItem is one entry in the GET /attention response.
 type attentionItem struct {
-	ID              string               `json:"id"`
-	ConnectionID    string               `json:"connection_id"`
-	ConnectionLabel string               `json:"connection_label"`
-	ConnectionType  string               `json:"connection_type"`
-	ObjectType      string               `json:"object_type"`
-	NativeID        string               `json:"native_id"`
-	Title           string               `json:"title"`
-	URL             string               `json:"url"`
-	Repo            string               `json:"repo"`
-	Author          string               `json:"author"`
-	Draft           bool                 `json:"draft"`
-	States          []attention.State    `json:"states"`
-	Flagged         bool                 `json:"flagged"`
-	Stale           bool                 `json:"stale"`
-	Old             bool                 `json:"old"`
-	UpdatedAt       time.Time            `json:"updated_at"`
-	SignalCounts    map[string]int       `json:"signal_counts,omitempty"`
-	FailingChecks   bool                 `json:"failing_checks"`
-	MergeConflict   bool                 `json:"merge_conflict"`
-	NeedsRebase     bool                 `json:"needs_rebase"`
-	GateDetail      string               `json:"gate_detail,omitempty"`
-	FlaggedAt       *time.Time           `json:"flagged_at,omitempty"`
-	Since           map[string]time.Time `json:"since,omitempty"`
+	ID                    string               `json:"id"`
+	ConnectionID          string               `json:"connection_id"`
+	ConnectionLabel       string               `json:"connection_label"`
+	ConnectionType        string               `json:"connection_type"`
+	ObjectType            string               `json:"object_type"`
+	NativeID              string               `json:"native_id"`
+	Title                 string               `json:"title"`
+	URL                   string               `json:"url"`
+	Repo                  string               `json:"repo"`
+	Author                string               `json:"author"`
+	Draft                 bool                 `json:"draft"`
+	States                []attention.State    `json:"states"`
+	Flagged               bool                 `json:"flagged"`
+	Stale                 bool                 `json:"stale"`
+	Old                   bool                 `json:"old"`
+	UpdatedAt             time.Time            `json:"updated_at"`
+	SignalCounts          map[string]int       `json:"signal_counts,omitempty"`
+	FailingChecks         bool                 `json:"failing_checks"`
+	MergeConflict         bool                 `json:"merge_conflict"`
+	NeedsRebase           bool                 `json:"needs_rebase"`
+	NeedsApproval         bool                 `json:"needs_approval"`
+	UnresolvedDiscussions bool                 `json:"unresolved_discussions"`
+	PolicyDenied          bool                 `json:"policy_denied"`
+	GateDetail            string               `json:"gate_detail,omitempty"`
+	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
+	Since                 map[string]time.Time `json:"since,omitempty"`
 }
 
 // handleAttention serves GET /attention. The optional ?state= query parameter
@@ -70,28 +73,31 @@ func hasState(it attention.WorkItem, state attention.State) bool {
 // toAttentionItem maps a WorkItem and its ConnectionMeta to the wire shape.
 func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
 	return attentionItem{
-		ID:              it.ID,
-		ConnectionID:    it.ConnectionID,
-		ConnectionLabel: meta.Label,
-		ConnectionType:  meta.Type,
-		ObjectType:      it.ObjectType,
-		NativeID:        it.NativeID,
-		Title:           it.Title,
-		URL:             it.URL,
-		Repo:            it.Repo,
-		Author:          it.Author,
-		Draft:           it.Draft,
-		States:          it.States,
-		Flagged:         it.Flagged,
-		Stale:           it.Stale,
-		Old:             it.Old,
-		UpdatedAt:       it.UpdatedAt,
-		SignalCounts:    it.SignalCounts,
-		FailingChecks:   it.FailingChecks,
-		MergeConflict:   it.MergeConflict,
-		NeedsRebase:     it.NeedsRebase,
-		GateDetail:      it.GateDetail,
-		FlaggedAt:       it.FlaggedAt,
-		Since:           it.Since,
+		ID:                    it.ID,
+		ConnectionID:          it.ConnectionID,
+		ConnectionLabel:       meta.Label,
+		ConnectionType:        meta.Type,
+		ObjectType:            it.ObjectType,
+		NativeID:              it.NativeID,
+		Title:                 it.Title,
+		URL:                   it.URL,
+		Repo:                  it.Repo,
+		Author:                it.Author,
+		Draft:                 it.Draft,
+		States:                it.States,
+		Flagged:               it.Flagged,
+		Stale:                 it.Stale,
+		Old:                   it.Old,
+		UpdatedAt:             it.UpdatedAt,
+		SignalCounts:          it.SignalCounts,
+		FailingChecks:         it.FailingChecks,
+		MergeConflict:         it.MergeConflict,
+		NeedsRebase:           it.NeedsRebase,
+		NeedsApproval:         it.NeedsApproval,
+		UnresolvedDiscussions: it.UnresolvedDiscussions,
+		PolicyDenied:          it.PolicyDenied,
+		GateDetail:            it.GateDetail,
+		FlaggedAt:             it.FlaggedAt,
+		Since:                 it.Since,
 	}
 }

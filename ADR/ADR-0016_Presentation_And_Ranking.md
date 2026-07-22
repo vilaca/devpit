@@ -9,7 +9,9 @@ Accepted
 Fold and ranking **Implemented (v0.1)** (`internal/attention`); the user-facing
 presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the
 full UI is built in `frontend/`. The marker vocabulary and age bands
-(decision 2026-07-10, below) are **Implemented (v0.1.1)**. See `docs/Roadmap.md`.
+(decision 2026-07-10, below) are **Implemented (v0.1.1)**. Blocked diagnostic
+badges (`needs_approval`, `unresolved_discussions`, `policy_denied`) are
+**Implemented (v0.1.2)**. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -46,6 +48,30 @@ it.
   raw gate reason on Blocked, the non-required-check note on ready-but-red,
   the no-decay caveat on Mentioned). A tag with nothing beyond its label to
   say still shows its duration.
+- **Parity principle for diagnostic badges** (2026-07-10): a badge ships on a
+  provider only when that provider reports a *verdict* readable by any user —
+  never reconstructed from raw facts plus org rules DevPit would have to
+  re-derive. Otherwise the badge is a documented gap for that provider (see the
+  provider-parity table in `docs/UI_Vocabulary.md`).
+- **Three new diagnostic badges** explain *why* an item is `blocked`:
+  `missing approvals`, `discussions`, `policy`. Like `conflict`, `rebase`, and
+  `checks failing` they are cosmetic — cosmetic markers never move items — and
+  are provider-normalized booleans in the `item.observed` payload.
+  `missing approvals` ships on both providers. `discussions` and `policy` are
+  GitLab-only (see parity table).
+- **GitLab shows all applicable reasons simultaneously.** GitLab's
+  `detailed_merge_status` is single-valued, so badges move off it onto
+  independent per-fact signals: `has_conflicts` and
+  `blocking_discussions_resolved` (REST fields, free) plus a batched GraphQL
+  join (`approved`/`approvalsLeft`, `shouldBeRebased`,
+  `headPipeline.status`). Only `policy` stays on `detailed_merge_status`
+  (no independent field exists) and can be masked by a co-present reason —
+  accepted residual. GitHub gets the same batched GraphQL join shape
+  (`reviewDecision`).
+- **GitLab `checks failing` extended** (2026-07-10): moves from
+  `ci_must_pass` (gating only) to `headPipeline.status` red (any pipeline
+  via GraphQL join), closing the documented "GitLab non-gating CI invisible"
+  gap.
 - **Age tiers band the list** (2026-07-10). `stale` (idle 7–30 days) and
   `old` (idle >30 days) are mutually exclusive tiers, and they are the
   *single deliberate exception* to "markers never move items": the list sorts

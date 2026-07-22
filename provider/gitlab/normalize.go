@@ -120,9 +120,10 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		MyRoles:               roles,
 		Gate:                  mergeGate(mr.DetailedMergeStatus),
 		GateDetail:            mr.DetailedMergeStatus,
-		FailingChecks:         false, // set by GraphQL join (headPipeline.status)
+		FailingChecks:         mr.DetailedMergeStatus == "ci_must_pass", // GraphQL join refines via headPipeline.status
 		MergeConflict:         mr.HasConflicts,
-		NeedsRebase:           false, // set by GraphQL join (shouldBeRebased)
+		NeedsRebase:           mr.DetailedMergeStatus == "need_rebase", // GraphQL join refines via shouldBeRebased
+		NeedsApproval:         mr.DetailedMergeStatus == "not_approved",
 		UnresolvedDiscussions: unresolvedDiscussions,
 		PolicyDenied:          isPolicyDenied(mr.DetailedMergeStatus),
 		ProviderUpdatedAt:     mr.UpdatedAt,

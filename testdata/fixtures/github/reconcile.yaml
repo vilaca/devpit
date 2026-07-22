@@ -4,7 +4,7 @@ interactions:
 - id: 0
   request:
     method: GET
-    url: https://api.github.com/search/issues?q=is%3Apr+is%3Aopen+review-requested%3Aoctocat
+    url: https://api.github.com/search/issues?q=is%3Apr+is%3Aopen+review-requested%3Aoctocat&per_page=100
     headers: {}
     body: ""
   response:
@@ -34,7 +34,7 @@ interactions:
 - id: 1
   request:
     method: GET
-    url: https://api.github.com/search/issues?q=is%3Apr+is%3Aopen+assignee%3Aoctocat
+    url: https://api.github.com/search/issues?q=is%3Apr+is%3Aopen+assignee%3Aoctocat&per_page=100
     headers: {}
     body: ""
   response:
@@ -48,7 +48,7 @@ interactions:
 - id: 2
   request:
     method: GET
-    url: https://api.github.com/search/issues?q=is%3Apr+is%3Aopen+author%3Aoctocat
+    url: https://api.github.com/search/issues?q=is%3Apr+is%3Aopen+author%3Aoctocat&per_page=100
     headers: {}
     body: ""
   response:

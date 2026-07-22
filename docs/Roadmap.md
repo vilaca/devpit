@@ -69,6 +69,25 @@ Decided 2026-07-10 (ADR-0016). Implementation plan in
 - GitLab `checks failing` now covers any pipeline (closes the non-gating CI gap).
 - Provider parity table in `docs/UI_Vocabulary.md`.
 
+## v0.1.3 — GraphQL badge freshness ✓ Built
+
+Decided 2026-07-10 (ADR-0004); implementation plan in
+`docs/plans/2026-07-10_fast_poll_pipeline_freshness.md`.
+
+- Fast_poll now refreshes the three volatile GraphQL-derived booleans
+  (`failing_checks`, `needs_approval`, `needs_rebase`) for **all open items**
+  on every ~60 s cycle — not just todo-bearing ones.
+- Mechanism: Reconcile populates an in-memory `openSnapshots` cache (full
+  REST+GraphQL payloads keyed by native ID). Fast_poll's open-set refresh
+  issues a batched GraphQL query for uncovered items, merges only the three
+  booleans onto the cached payload, and emits `item.observed` events.
+  REST-derived fields (state, title, `merge_conflict`, etc.) are never
+  clobbered. Dedup absorbs no-change cycles.
+- Graceful degradation: GraphQL failure logs to sync_log and skips the
+  open-set refresh; the cycle still succeeds.
+- Fixes the live bug where an MR showed `failing_checks: true` while GitLab
+  reported `headPipeline: RUNNING` until the next reconcile.
+
 ## v0.2 — More forges + sync hardening
 
 - Providers: Forgejo, Gitea (with capability declaration/degradation, ADR-0003).
@@ -202,4 +221,59 @@ Noted, not committed to any release.
     or a separate "Watching" tier may be needed).
   - Whether label tracking and user tracking are additive (union) or
     configurable per-subscription.
+
+- Number of reviewers: surface approval progress on each row — how many
+  reviewers have approved out of how many are required (e.g. "2/3
+  approved"). Much of the signal is already fetched for the `missing
+  approvals` badge: GitLab's GraphQL join returns `approved` /
+  `approvalsLeft`, and GitHub returns `reviewDecision`; a count would need
+  the required-approvals total and the current approval count alongside
+  them (GitLab exposes both via approvals; GitHub's required count is
+  branch-protection data, admin-only to read for non-admins — likely a
+  documented parity gap, same shape as `discussions`/`policy`).
+
+  The main design questions:
+  - Presentation: a hover detail on the existing `missing approvals`
+    badge, an enrichment of the badge label itself ("missing approvals
+    2/3"), or a standalone element. Keep it cosmetic — approval count must
+    not re-derive the merge gate or move an item (ADR-0016).
+  - Whether to show the count only while `blocked` on approvals, or always
+    (a fully-approved "3/3" on a ready item may be reassuring but competes
+    for the same visual space).
+  - Whether "reviewers" means required approvers, requested reviewers, or
+    everyone who has left a review — these differ on both providers and
+    the honest, provider-readable one is the approval verdict, not a
+    reviewer roster.
+
+- Surface rebase need earlier: today the `rebase` diagnostic badge is
+  driven purely by GitLab's `shouldBeRebased` (GraphQL), which only turns
+  true once a rebase is the *operative* blocker — while approvals or CI
+  are outstanding GitLab reports those instead and the badge stays absent
+  even when the branch is behind. To show "this will also need a rebase"
+  alongside the other gates, DevPit would have to derive it from
+  `diverged_commits_count` plus the project's merge method rather than
+  trusting the provider's verdict.
+
+  This is in direct tension with ADR-0016's "defer to the provider, never
+  re-derive org rules" principle, so it is deliberately deferred, not
+  planned. The main questions if ever revisited:
+  - Whether `diverged_commits_count > 0` + a fast-forward/semi-linear
+    merge method is a safe enough derivation, or still a rumor (it does
+    not account for whether the rebase would conflict).
+  - Whether it earns a distinct treatment (e.g. a muted "behind" hint)
+    versus reusing the `rebase` badge, to keep the derived signal visually
+    honest about being weaker than the provider verdict.
+  - The GitHub equivalent (`behind` mergeable state) already has this
+    shape — only meaningful when the repo requires up-to-date branches —
+    so any derivation should be specified for both providers together.
+
+- Sharper `failing_checks` label. "Failing Checks" is broad; a
+  "tests failing" (or a per-category) reading would be more actionable.
+  GitLab's `headPipeline.status` is a single rollup — it cannot say
+  *what* failed — so specificity needs either the job/stage breakdown
+  (`headPipeline.jobs` / `stages`, another GraphQL cost) or the merge
+  widget's per-check list. Open question: is a coarse "tests failing"
+  honest if we cannot tell tests from lint/build, or does specificity
+  require the job breakdown? The provider-readable, cheap signal today
+  is only the rollup. (Freshness was fixed in v0.1.3.)
 

@@ -220,9 +220,9 @@ minimum supported GitLab version]**.
 
 | Tier | GitHub | GitLab | Default cadence |
 |----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------|
-| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark lists | 60s (obey `X-Poll-Interval` on GitHub) |
+| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items (v0.1.3) | 60s (obey `X-Poll-Interval` on GitHub) |
 | Detail fetch | included in GraphQL responses | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
-| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after` | 15 min |
+| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | 15 min |
 
 Cadences are proposed defaults (fixed in v0.1); the reconciliation
 sweep also self-heals anything the fast tier missed (deleted todos,

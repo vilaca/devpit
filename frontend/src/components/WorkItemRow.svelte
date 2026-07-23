@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { AttentionItem } from "../lib/types";
   import { relativeTime } from "../lib/format";
+  import { dashboard } from "../lib/dashboard.svelte";
   import StateTags from "./StateTags.svelte";
 
   const {
@@ -15,6 +16,11 @@
     onFocus: (id: string) => void;
   } = $props();
 
+  const mine = $derived(
+    !!item.author &&
+    dashboard.connections.find((c) => c.id === item.connection_id)?.identity === item.author,
+  );
+
   let rowEl: HTMLDivElement | undefined = $state();
 
   // Scroll focused row into view when keyboard nav lands on it.
@@ -27,6 +33,8 @@
   bind:this={rowEl}
   class="row"
   class:focused
+  class:mine
+  class:old={item.old}
   onclick={() => onFocus(item.id)}
   onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") onFocus(item.id); }}
   role="option"
@@ -89,6 +97,12 @@
   .row.focused {
     border-color: var(--accent);
     outline: none;
+  }
+  .row.mine {
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg-raised));
+  }
+  .row.old {
+    background: color-mix(in srgb, var(--marker-old) 7%, var(--bg-raised));
   }
   .pin {
     border: none;

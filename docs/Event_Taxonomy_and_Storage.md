@@ -76,16 +76,26 @@ its fields:
   - `draft` — item is in draft / WIP mode (pre-existing since v0.1; providers
     set this from the native draft flag).
   - `failing_checks` (v0.1.1) — CI/checks red (GitHub: `mergeable_state ==
-    "unstable"`; GitLab: `detailed_merge_status == "ci_must_pass"`). Previously
-    this also included `"dirty"` (narrowed in v0.1.1).
+    "unstable"`; GitLab: `headPipeline.status` red via the GraphQL join — any
+    pipeline, extended from `ci_must_pass` in v0.1.2). Previously this also
+    included `"dirty"` (narrowed in v0.1.1).
   - `merge_conflict` (v0.1.1) — manual conflict resolution needed (GitHub:
-    `"dirty"`; GitLab: `"conflict"`).
+    `mergeable_state == "dirty"`; GitLab: `has_conflicts` REST field).
   - `needs_rebase` (v0.1.1) — mechanical rebase / update-branch needed (GitHub:
-    `"behind"`; GitLab: `"need_rebase"`).
+    `mergeable_state == "behind"`; GitLab: `shouldBeRebased` via the GraphQL join).
+  - `needs_approval` (v0.1.2) — required approvals not met (GitHub:
+    `reviewDecision`; GitLab: `approved` — both via the GraphQL join).
+  - `unresolved_discussions` (v0.1.2) — unresolved threads gate the merge
+    (GitLab: `blocking_discussions_resolved` REST; GitHub excluded — gate rule
+    unreadable for non-admins). Set only when the gate is `blocked`.
+  - `policy_denied` (v0.1.2) — security/org policy denies merge (GitLab:
+    `policies_denied` / `security_policy_violations` on `detailed_merge_status`;
+    GitHub: no signal).
   - `gate_detail` (v0.1.1) — raw provider vocabulary for the merge gate (opaque
     string; powers the Blocked tooltip).
-  Old `item.observed` events lack the v0.1.1 fields (unmarshal to `false`/`""`);
-  the fold reads the latest snapshot, so items pick them up on the next poll cycle.
+  Old `item.observed` events lack the v0.1.1/v0.1.2 fields (unmarshal to
+  `false`/`""`); the fold reads the latest snapshot, so items pick them up on
+  the next poll cycle.
 
 The fold rules that turn this fact set into buckets live in
 `docs/Attention_Engine.md`.

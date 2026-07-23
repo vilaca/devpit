@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Accepted — but the closed attention-state set and the "what is *your* move?"
+framing below are **superseded by `ADR/ADR-0021_Signal_Based_Presentation.md`**
+(neutral provider signals replace the named states). Everything else here —
+single ranked list, pinned zone, markers-carry-gate-diagnostics, age bands, the
+hover rule, authored tint, and approval count — still stands.
 
 ## Scope
 

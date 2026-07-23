@@ -7,7 +7,7 @@ Accepted
 ## Scope
 
 Single-user localhost core **Implemented (v0.1)**. Team visibility (own-token
-observation) is **Planned**; federation is **Uncommitted**.
+observation) is **Planned**.
 
 ## Context
 

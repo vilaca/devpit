@@ -114,23 +114,23 @@ func TestFoldStateConditions(t *testing.T) {
 			want: []State{StateWaitingOnAuthor},
 		},
 		{
-			name: "draft author is neither blocked nor ready",
+			name: "draft author is neither blocked nor ready but still shows",
 			facts: func(f sdk.ItemObservedPayload) sdk.ItemObservedPayload {
 				f.MyRoles = []string{"author"}
 				f.Draft = true
 				f.Gate = "blocked"
 				return f
 			},
-			want: nil, // dropped: no state
+			want: []State{}, // present, no state tag (Draft marker carries it)
 		},
 		{
-			name: "gate unknown, author, not draft, no review: no state",
+			name: "gate unknown, author, not draft, no review: shows stateless",
 			facts: func(f sdk.ItemObservedPayload) sdk.ItemObservedPayload {
 				f.MyRoles = []string{"author"}
 				f.Gate = "unknown"
 				return f
 			},
-			want: nil,
+			want: []State{}, // present, no state tag
 		},
 	}
 

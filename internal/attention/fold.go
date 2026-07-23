@@ -104,7 +104,8 @@ func List(
 // staleThreshold, and oldThreshold drive the age tiers. The result is
 // sorted by age band (fresh, stale, old) then state precedence
 // (highest first) then newest-first, with the item ID as a stable final
-// tiebreak. Items that are removed, not open, or match no state are dropped.
+// tiebreak. Stateless items sort below every actionable state. Items that are
+// removed or not open (merged/closed) are dropped.
 func Fold(
 	events []storage.StoredEvent, now time.Time,
 	staleThreshold, oldThreshold time.Duration,
@@ -132,7 +133,8 @@ func Fold(
 
 // foldItem folds one item's events into a WorkItem, or reports ok=false if the
 // item should not appear (no snapshot, removed after the last snapshot, not
-// open, malformed facts, or no matching state).
+// open, or malformed facts). An open item with no matching state still appears
+// — only merged/closed and removed items vanish.
 func foldItem(
 	k itemKey, events []storage.StoredEvent, now time.Time,
 	staleThreshold, oldThreshold time.Duration,
@@ -180,9 +182,14 @@ func foldItem(
 		return WorkItem{}, false // merged/closed vanish
 	}
 
+	// Every open item we hold is one the user is involved in (the reconcile
+	// scopes are assigned_to_me/created_by_me, plus mention signals), so an open
+	// item always shows. States are still computed to drive tags and ranking,
+	// but an empty set no longer hides the item — it renders as a plain row
+	// (authored ones carry the blue "mine" tint; drafts carry the Draft tag).
 	states := statesFor(facts, hasMention)
-	if len(states) == 0 {
-		return WorkItem{}, false // open but not actionable — not in the list
+	if states == nil {
+		states = []State{} // keep the JSON "states" field an array, never null
 	}
 
 	updatedAt := rankingTime(signals, facts, latestObserved.ObservedAt)
@@ -388,6 +395,15 @@ func signalCounts(signals []storage.StoredEvent) map[string]int {
 	return repeated
 }
 
+// stateRank is the precedence rank of an item's ranking state, or one past the
+// lowest state for a stateless item so those sort below every actionable one.
+func stateRank(it WorkItem) int {
+	if len(it.States) == 0 {
+		return len(precedence)
+	}
+	return rankOf[it.States[0]]
+}
+
 // ageBand returns 0 for fresh, 1 for stale, 2 for old.
 func ageBand(it WorkItem) int {
 	if it.Old {
@@ -408,7 +424,7 @@ func sortItems(items []WorkItem) {
 		if bi != bj {
 			return bi < bj
 		}
-		ri, rj := rankOf[items[i].States[0]], rankOf[items[j].States[0]]
+		ri, rj := stateRank(items[i]), stateRank(items[j])
 		if ri != rj {
 			return ri < rj
 		}

@@ -11,6 +11,15 @@ into a single ranked list of WorkItems, each tagged with the attention states
 it currently satisfies. It computes nothing on the write path — buckets are
 derived at read time from the latest facts and signals.
 
+**List membership.** Every open item you are involved in appears — the sync
+scopes (assigned/authored) plus mention signals define involvement, so an open
+item in the log is one you have a stake in. States drive tags and ranking, but
+an item that matches *no* state still appears as a plain row (an authored one
+carries the blue "mine" tint; a draft carries the Draft marker). Only
+merged/closed items and items removed after their last snapshot drop out. This
+is deliberate: an authored MR quietly waiting on reviewers, or one whose merge
+gate the provider has not yet computed (`unknown`), should not vanish.
+
 The bucket predicates and the precedence order are **direct code**
 (`internal/attention/states.go`, `internal/attention/fold.go`); this spec is
 the design behind them. Where the two ever disagree, the code is authoritative
@@ -43,8 +52,10 @@ Six states in v0.1. A WorkItem may carry several at once; they render as tags.
   missed, but only merge-gating failures put a PR in the Blocked bucket —
   keeping Blocked trustworthy.
 - **Drafts are never Blocked and never Ready to Merge** (their unmergeable
-  state is expected); they still surface for Mentioned and explicit review
-  requests. Normal rules resume once marked ready.
+  state is expected). An authored draft therefore carries no author state and
+  appears as a plain row with the Draft marker; it still picks up Mentioned and
+  explicit-review states where they apply. Normal author rules resume once
+  marked ready.
 - **Changes Requested (author) vs Waiting on Author (reviewer)** are the two
   sides of a review round-trip, split because they have opposite actionability.
   Changes Requested is high-precedence (your turn); Waiting on Author is
@@ -104,7 +115,8 @@ is that what demands your action outranks what is merely done.
 - **Age bands sort the list first** (the single deliberate marker exception):
   fresh (0) < stale (1) < old (2). Fresh actionable work stays on top;
   rot sinks.
-- **Within a band: state-precedence**, highest first.
+- **Within a band: state-precedence**, highest first. Stateless items (open,
+  involved, no matching state) sort below every stated item in the band.
 - **Within a state: newest-first**, where an item's timestamp is its newest
   signal (falling back to the latest snapshot's provider-updated time).
 - **Stale badge** once an item's age exceeds 7 days (default, a constant in

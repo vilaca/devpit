@@ -11,7 +11,8 @@ presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the
 full UI is built in `frontend/`. The marker vocabulary and age bands
 (decision 2026-07-10, below) are **Implemented (v0.1.1)**. Blocked diagnostic
 badges (`needs_approval`, `unresolved_discussions`, `policy_denied`) are
-**Implemented (v0.1.2)**. See `docs/Roadmap.md`.
+**Implemented (v0.1.2)**. Showing all involved open items regardless of state
+is **Implemented (v0.1.4)**. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -103,6 +104,17 @@ it.
   count is branch-protection data (admin-only for non-admins) and CODEOWNERS
   makes raw counts misleading for gate purposes — the existing `needs_approval`
   badge already carries the honest gate verdict.
+
+- **Open involved items always show, even stateless** (2026-07-10). The fold no
+  longer drops an open item that matches no attention state. Every item in the
+  log is one the user is involved in (sync scopes are assigned/authored, plus
+  mention signals), so an open MR waiting on reviewers, or one whose merge gate
+  the provider has not yet computed (`unknown`), stays visible instead of
+  silently disappearing. States still drive tags and ranking; a stateless item
+  renders as a plain row — the authored blue tint and the `draft` marker carry
+  its context — and sorts below every stated item within its age band. Only
+  merged/closed and removed items drop out. Wire effect: `states` may be an
+  empty array (`docs/REST_API.md`).
 
 ## Rationale
 

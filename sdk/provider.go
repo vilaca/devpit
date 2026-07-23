@@ -161,6 +161,7 @@ type ItemObservedPayload struct {
 	NeedsApproval         bool     `json:"needs_approval"`
 	UnresolvedDiscussions bool     `json:"unresolved_discussions"`
 	PolicyDenied          bool     `json:"policy_denied"`
+	ApprovalsCount        int      `json:"approvals_count,omitempty"` // -1=unknown, 0=none/hide, N=show
 	ProviderUpdatedAt     string   `json:"provider_updated_at"`
 }
 

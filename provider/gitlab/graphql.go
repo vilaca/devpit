@@ -13,6 +13,9 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
+const mrQueryFmt = `a%d:project(fullPath:"%s")` +
+	`{mergeRequest(iid:"%d"){approved shouldBeRebased headPipeline{status} approvedBy{count}}}`
+
 // doGraphQL POSTs a GraphQL query to the GitLab GraphQL API and returns the "data" map.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
 	body, _ := json.Marshal(struct { //nolint:errchkjson // struct has no interface fields; Marshal cannot fail
@@ -66,6 +69,9 @@ type glGraphQLMR struct {
 	Approved     bool        `json:"approved"`
 	ShouldRebase bool        `json:"shouldBeRebased"`
 	HeadPipeline *glPipeline `json:"headPipeline"`
+	ApprovedBy   struct {
+		Count int `json:"count"`
+	} `json:"approvedBy"`
 }
 
 // graphqlJoin enriches item.observed events with GitLab GraphQL data.
@@ -108,8 +114,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		var q strings.Builder
 		q.WriteString("query{")
 		for j, it := range batch {
-			fmt.Fprintf(&q, `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){approved shouldBeRebased headPipeline{status}}}`,
-				j, it.fullPath, it.iid)
+			fmt.Fprintf(&q, mrQueryFmt, j, it.fullPath, it.iid)
 		}
 		q.WriteString("}")
 
@@ -160,6 +165,7 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR) sdk.ItemObservedPa
 		pl.NeedsApproval = !mr.Approved
 		pl.NeedsRebase = mr.ShouldRebase
 		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
+		pl.ApprovalsCount = mr.ApprovedBy.Count
 	}
 	return pl
 }
@@ -198,8 +204,7 @@ func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, cover
 		var q strings.Builder
 		q.WriteString("query{")
 		for j, it := range batch {
-			fmt.Fprintf(&q, `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){approved shouldBeRebased headPipeline{status}}}`,
-				j, it.fullPath, it.iid)
+			fmt.Fprintf(&q, mrQueryFmt, j, it.fullPath, it.iid)
 		}
 		q.WriteString("}")
 

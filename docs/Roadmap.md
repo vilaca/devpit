@@ -160,6 +160,19 @@ Noted, not committed to any release.
   toggle in TopBar; `localStorage("theme")` persists the choice; falls back to
   OS `prefers-color-scheme`; inline script in `index.html` prevents paint flash.
   See ADR-0020.
+
+- App menu + quieter SSE status: replace the always-on live-stream dot in the
+  top bar with a small app menu after the "DevPit" brand (desktop-app style),
+  housing things like `Help`, `Check for updates`, `About`, and a live-updates
+  status line. Rationale: SSE liveness ≠ data correctness — if the stream drops,
+  the next poll/reconcile still brings everything in and the list is never
+  wrong; the per-connection health dot already covers data currency. So the SSE
+  indicator should be **quiet by default**: neutral/invisible while live, no
+  toast on every blip (auto-reconnect usually wins in seconds), surfacing only
+  after the stream has been down past a threshold (e.g. >30–60s of failed
+  reconnects). Open question: whether a *prolonged* outage (say >2 min, meaning
+  we're relying purely on polling) should escalate from the quiet menu line to
+  something more noticeable, or stay quiet always. Not a priority.
 - Issues as first-class attention items (GitHub issues / GitLab issues).
   Issues already appear in the data model (`object_type = issue`) and in
   the Mentioned bucket (`mentions:@me` search includes issues by design,

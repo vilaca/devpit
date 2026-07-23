@@ -68,6 +68,9 @@ Decided 2026-07-10 (ADR-0016). Implementation plan in
 - GitLab shows all blocked reasons at once (moved off single-valued `detailed_merge_status`).
 - GitLab `checks failing` now covers any pipeline (closes the non-gating CI gap).
 - Provider parity table in `docs/UI_Vocabulary.md`.
+- `discussions` badge is gate-gated: `blocking_discussions_resolved` is a raw "threads
+  exist" fact — it returns false even when the project allows merging with open threads.
+  Badge is only set when `gate = blocked`; ready MRs may have unresolved threads.
 
 ## v0.1.3 — GraphQL badge freshness ✓ Built
 

@@ -104,11 +104,17 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 	}
 	sort.Strings(roles) // deterministic role order for the dedupe hash
 
+	// blocking_discussions_resolved is a raw "threads exist" fact, not a gate verdict —
+	// it returns false even when the project allows merging with open threads.
+	// Gate it on gateBlocked so the badge never appears on a ready item.
+	gate := mergeGate(mr.DetailedMergeStatus)
 	var unresolvedDiscussions bool
-	if mr.BlockingDiscussionsResolved != nil {
-		unresolvedDiscussions = !*mr.BlockingDiscussionsResolved
-	} else {
-		unresolvedDiscussions = mr.DetailedMergeStatus == "discussions_not_resolved"
+	if gate == gateBlocked {
+		if mr.BlockingDiscussionsResolved != nil {
+			unresolvedDiscussions = !*mr.BlockingDiscussionsResolved
+		} else {
+			unresolvedDiscussions = mr.DetailedMergeStatus == "discussions_not_resolved"
+		}
 	}
 
 	payload := sdk.ItemObservedPayload{
@@ -119,7 +125,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		Draft:                 mr.Draft,
 		Author:                mr.Author.Username,
 		MyRoles:               roles,
-		Gate:                  mergeGate(mr.DetailedMergeStatus),
+		Gate:                  gate,
 		GateDetail:            mr.DetailedMergeStatus,
 		FailingChecks:         mr.DetailedMergeStatus == dmsCIMustPass, // GraphQL join refines via headPipeline.status
 		MergeConflict:         mr.HasConflicts,

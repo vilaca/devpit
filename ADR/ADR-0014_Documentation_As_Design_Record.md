@@ -64,6 +64,19 @@ known future trigger, record it as a **forward-dependency note** in the ADR's
 Consequences (e.g. "log kept uncompacted until a real instance proves
 compaction necessary — revisit then").
 
+### Amending vs. adding ADRs
+
+**Mutate an ADR in place by default.** An ADR records the *current* decision,
+not a frozen snapshot — the git history is the archive of prior versions, so
+editing loses nothing. Create a *new* ADR only when there is a reason to: a
+genuinely distinct decision, or a shift large enough to deserve its own record
+and rationale. When you do, you still **mutate the affected existing ADR(s)** —
+move content to its new home, drop what no longer holds, cross-link — rather than
+leaving a stale copy behind. Supersession is *update-old-and-add-new*, not
+*freeze-old*. `Superseded by ADR-XXXX` is reserved for an ADR whose decision is
+**wholly** replaced; one only *partly* affected is edited down to what still
+stands, not stamped superseded.
+
 ## Rationale
 
 Drift came from copies, so the fix is to forbid copies: one home per fact, at

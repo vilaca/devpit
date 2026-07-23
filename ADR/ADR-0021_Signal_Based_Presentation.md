@@ -72,6 +72,16 @@ An item carries **every** signal that applies; its **highest** (lowest-numbered)
 signal sets its rank, the rest ride as additional tags. `draft` and the approval
 count remain a marker and a meta-row fact respectively, not ranking signals.
 
+**Role scope.** The signal *vocabulary* is one word-set — no separate
+author/reviewer labels, no authorship tag (the blue tint carries authorship,
+below). The *conditions* stay role-aware where the fact is inherently about a
+role: the gate/verdict signals (Changes requested, Blocked, Ready to merge,
+Auto-merge armed, Checks running) describe an MR **you authored**; Review
+requested and Review submitted are reviewer-relative; Mentioned is any-role.
+**Checking (#8) is the exception — role-neutral:** it fires on any involved item
+whose gate is `unknown`, including a draft you only review, so it can backstop a
+row that would otherwise be bare.
+
 The precedence, the signal set, and the age thresholds are **direct code**
 (`internal/attention/states.go`, `internal/attention/fold.go`); this list is the
 design behind them.
@@ -89,8 +99,12 @@ via CI or a rebase anyway.
 
 The only distinction between an item you authored and one you merely contribute
 to is the subtle **blue background tint** already defined in
-`ADR/ADR-0016_Presentation_And_Ranking.md`. There is no authorship tag; the same
-signal vocabulary applies regardless of your role.
+`ADR/ADR-0016_Presentation_And_Ranking.md`. There is no authorship tag: the same
+signal *vocabulary* — one word-set — applies regardless of your role. That is a
+statement about labels, **not** conditions: the gate/verdict signals stay scoped
+to MRs you authored and the review signals to your reviewer role (see Role scope
+above), because a Blocked or Ready verdict on someone else's MR is not attention
+you must act on.
 
 ### Provider parity (goal)
 
@@ -100,8 +114,10 @@ signal vocabulary applies regardless of your role.
   provider is Blocked on the other. (**Auto-merge armed** (#6) and **Checks
   running** (#7) are held to best-effort, not the hard guarantee: auto-merge
   fields are unverified on both, and GitHub cannot report an in-progress *gating*
-  pipeline — it hides inside `blocked`. They ship where readable and are
-  documented gaps otherwise.)
+  pipeline — it hides inside `blocked`, so **Checks running is GitLab-only**
+  (GitHub is a documented ✗ gap; we do not reconstruct it from
+  `statusCheckRollup`). Auto-merge armed ships on both where the field is
+  readable.)
 - **Explanatory badges — best-effort per provider, gaps documented.** The
   why-blocked badges hanging off a Blocked row (discussions, policy, checks
   failing, needs rebase) ship only where that provider reports a user-readable
@@ -122,9 +138,9 @@ via capability declaration (`ADR/ADR-0003_Provider_Plugin_Model.md`).
 Showing observed signals rather than an inferred state keeps DevPit honest: it
 reports what the provider says and never assumes a team's workflow — the same
 defer-to-the-provider discipline that keeps Blocked trustworthy. Dropping the
-"your move" framing removes the bare-row gap (every shown item now carries at
-least one signal, if only "Checking") and lets one neutral vocabulary describe
-an MR whatever your role, with the blue tint carrying authorship. A fixed
+"your move" framing removes the bare-row gap for authored MRs (each now carries
+at least one signal, if only "Checking") and lets one neutral vocabulary
+describe an MR whatever your role, with the blue tint carrying authorship. A fixed
 precedence keeps the list trustworthy — it cannot be tuned into uselessness —
 and the "attention" judgment now lives entirely in that ordering.
 
@@ -139,9 +155,12 @@ and the "attention" judgment now lives entirely in that ordering.
   spec (`docs/Attention_Engine.md`), the tag reference (`docs/UI_Vocabulary.md`),
   and the wire shape (`docs/REST_API.md`) are updated **when this is
   implemented** — until then they correctly describe the shipped v0.1.4 model.
-- Wire effect: the `states` array becomes the signal list and is **never empty**
-  for a shown item (worst case `["checking"]`), removing the empty-array case
-  introduced in v0.1.4 (`docs/REST_API.md`).
+- Wire effect: the `states` array becomes the signal list. An **authored** MR is
+  never bare — its gate always yields `ready_to_merge`/`blocked`/`checking`
+  (worst case `["checking"]`). A non-authored involved item with no reviewer or
+  mention signal (e.g. a pure assignee on a ready MR) may still carry an empty
+  array, so the v0.1.4 empty-array case narrows rather than disappears
+  (`docs/REST_API.md`).
 - New signal **auto-merge armed** requires a provider field not read today
   (GitHub `auto_merge`, GitLab `merge_when_pipeline_succeeds` / auto-merge) —
   **[verify at implementation]**.

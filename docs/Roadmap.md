@@ -123,6 +123,35 @@ inferred workflow. Supersedes the attention-state set of ADR-0016.
 - Specs (`docs/Attention_Engine.md`, `docs/UI_Vocabulary.md`,
   `docs/REST_API.md`) update when this ships.
 
+## First public release — packaging & distribution gate
+
+Version-agnostic release-readiness gate: whichever version first ships publicly
+**must** satisfy all of the following before it goes out.
+
+- Homebrew-installable: publish a tap (`homebrew-devpit`) so users can
+  `brew install vilaca/devpit/devpit`. Requires a release binary (GitHub
+  Releases via goreleaser or similar), a formula with the correct SHA256, and a
+  `brew test` block. The single-binary nature makes this straightforward once
+  the CI release pipeline is in place.
+- Self-update awareness: the running app detects when a newer release exists
+  (e.g. polling the GitHub Releases feed) and prompts the user to update. The
+  app does not silently update; it surfaces the availability and lets the user
+  act.
+- Start scripts for all three platforms: first-run/launch scripts for macOS,
+  Windows, and Linux so users can start the app without knowing the invocation.
+- Revised logging: review and tighten all log output before public exposure —
+  remove debug noise, ensure errors are actionable, and confirm nothing
+  sensitive (tokens, URLs with credentials) leaks into the log stream.
+- Docker image: publish an official image (e.g. `ghcr.io/vilaca/devpit`) so
+  users can run the app in a container without a local Go toolchain. The image
+  mounts config and the SQLite DB from the host via a volume.
+- `/up` health endpoint: a lightweight HTTP endpoint that returns `200 OK` when
+  the service is running. Used by Docker health-checks, process supervisors, and
+  start scripts to know when the app is ready.
+- README updated: install (brew), Docker run, start-script, and update
+  instructions documented; the README reflects the actual first-public-release
+  surface.
+
 ## v0.2 — More forges + sync hardening
 
 - Providers: Forgejo, Gitea (with capability declaration/degradation, ADR-0003).
@@ -179,12 +208,6 @@ Noted, not committed to any release.
   provider observes the user's own reply/review after it. Requires a new
   own-activity signal from providers; preferred over time decay or a local
   dismiss, which are quieter but less honest.
-- Homebrew distribution: publish a tap (`homebrew-devpit`) so users can install
-  with `brew install vilaca/devpit/devpit`. Requires a release binary (GitHub
-  Releases via goreleaser or similar), a formula with the correct SHA256, and
-  a `brew test` block. Single-binary nature makes this straightforward once the
-  CI release pipeline is in place.
-
 - ~~Night mode (dark theme), remembered so it is set once.~~ ✓ Built — sun/moon
   toggle in TopBar; `localStorage("theme")` persists the choice; falls back to
   OS `prefers-color-scheme`; inline script in `index.html` prevents paint flash.

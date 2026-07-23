@@ -222,28 +222,14 @@ Noted, not committed to any release.
   - Whether label tracking and user tracking are additive (union) or
     configurable per-subscription.
 
-- Number of reviewers: surface approval progress on each row — how many
-  reviewers have approved out of how many are required (e.g. "2/3
-  approved"). Much of the signal is already fetched for the `missing
-  approvals` badge: GitLab's GraphQL join returns `approved` /
-  `approvalsLeft`, and GitHub returns `reviewDecision`; a count would need
-  the required-approvals total and the current approval count alongside
-  them (GitLab exposes both via approvals; GitHub's required count is
-  branch-protection data, admin-only to read for non-admins — likely a
-  documented parity gap, same shape as `discussions`/`policy`).
-
-  The main design questions:
-  - Presentation: a hover detail on the existing `missing approvals`
-    badge, an enrichment of the badge label itself ("missing approvals
-    2/3"), or a standalone element. Keep it cosmetic — approval count must
-    not re-derive the merge gate or move an item (ADR-0016).
-  - Whether to show the count only while `blocked` on approvals, or always
-    (a fully-approved "3/3" on a ready item may be reassuring but competes
-    for the same visual space).
-  - Whether "reviewers" means required approvers, requested reviewers, or
-    everyone who has left a review — these differ on both providers and
-    the honest, provider-readable one is the approval verdict, not a
-    reviewer roster.
+- ~~Number of reviewers~~: ✓ Built (2026-07-10, ADR-0016). Shows "N approved"
+  in the meta-row (between author and timestamp) when at least one reviewer
+  has approved. Raw approved-reviewer count — not a gate verdict, never moves
+  items. GitLab: `approvedBy { count }` via GraphQL join; GitHub: APPROVED
+  count from `latestReviews`. Required-approvals denominator omitted:
+  branch-protection data is admin-only on GitHub and CODEOWNERS makes raw
+  counts misleading for gate purposes — the `needs_approval` badge carries
+  the honest gate verdict.
 
 - Surface rebase need earlier: today the `rebase` diagnostic badge is
   driven purely by GitLab's `shouldBeRebased` (GraphQL), which only turns

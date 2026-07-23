@@ -48,7 +48,7 @@ const (
 // consumed only on success — on any error the engine persists nothing and
 // leaves cursors untouched, so the next cycle re-covers the whole batch from
 // the unchanged cursor (INSERT OR IGNORE makes the re-fetch idempotent).
-func (c *conn) cycle(ctx context.Context, op operation) {
+func (c *conn) cycle(ctx context.Context, op operation, startup bool) {
 	if ctx.Err() != nil {
 		return // shutting down; the select loop will observe Done next
 	}
@@ -79,7 +79,14 @@ func (c *conn) cycle(ctx context.Context, op operation) {
 	case opFastPoll:
 		result, err = c.prov.FastPoll(ctx, state)
 	case opReconcile:
-		result, err = c.prov.Reconcile(ctx, state)
+		// startup=true passes nil so providers do a full sweep regardless of the
+		// stored updated_after cursor, populating openSnapshots for all open items.
+		// SaveCursors is upsert-only so the fast_poll cursor in the DB is safe.
+		if startup {
+			result, err = c.prov.Reconcile(ctx, nil)
+		} else {
+			result, err = c.prov.Reconcile(ctx, state)
+		}
 	}
 	if err != nil {
 		if ctx.Err() != nil {

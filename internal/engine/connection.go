@@ -57,7 +57,7 @@ func (c *conn) run(ctx context.Context) {
 	defer fast.Stop()
 	defer recon.Stop()
 
-	c.cycle(ctx, opReconcile)
+	c.cycle(ctx, opReconcile, true)
 
 	for {
 		select {
@@ -66,10 +66,10 @@ func (c *conn) run(ctx context.Context) {
 			return
 		case <-fast.C:
 			if c.caps.FastSignal {
-				c.cycle(ctx, opFastPoll)
+				c.cycle(ctx, opFastPoll, false)
 			}
 		case <-recon.C:
-			c.cycle(ctx, opReconcile)
+			c.cycle(ctx, opReconcile, false)
 		}
 	}
 }

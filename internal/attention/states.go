@@ -2,36 +2,42 @@ package attention
 
 import "github.com/vilaca/devpit/sdk"
 
-// State is one of the six v0.1 attention states (docs/Attention_Engine.md). A
-// WorkItem may carry several at once; they render as tags.
+// State is a provider signal (ADR/ADR-0021_Signal_Based_Presentation.md, folded
+// into ADR/ADR-0016_Presentation_And_Ranking.md). A WorkItem may carry several
+// at once; they render as chips in precedence order.
 type State string
 
-// The six attention states. String values are the wire form used by the REST
-// API (docs/REST_API.md GET /attention).
+// Nine signals in wire form (REST API docs/REST_API.md GET /attention).
+// Precedence order: highest first. Author-scoped gate/verdict signals keep
+// their roles[author] guard; reviewer signals keep roles[reviewer]; mentioned is
+// any-role; checking is role-neutral (the bare-row backstop).
 const (
-	StateReadyToMerge     State = "ready_to_merge"
-	StateNeedsReview      State = "needs_review"
 	StateChangesRequested State = "changes_requested"
+	StateReviewRequested  State = "review_requested"  // was StateNeedsReview / "needs_review"
 	StateBlocked          State = "blocked"
 	StateMentioned        State = "mentioned"
-	StateWaitingOnAuthor  State = "waiting_on_author"
+	StateReadyToMerge     State = "ready_to_merge"
+	StateAutoMergeArmed   State = "auto_merge_armed"
+	StateChecksRunning    State = "checks_running"
+	StateChecking         State = "checking"
+	StateReviewSubmitted  State = "review_submitted" // was StateWaitingOnAuthor / "waiting_on_author"
 )
 
-// precedence lists the states highest-first. An item sorts by its
-// highest-precedence state, and its States slice is emitted in this order.
-// This is the canonical order — docs/Attention_Engine.md and docs/REST_API.md
-// describe it but do not restate it. Action-demanding states rank above
-// Ready to Merge (a quick win, but nothing is stuck there).
+// precedence lists signals highest-first. An item sorts by its highest-precedence
+// signal; its States slice is emitted in this order.
 var precedence = []State{
-	StateNeedsReview,
 	StateChangesRequested,
+	StateReviewRequested,
 	StateBlocked,
-	StateReadyToMerge,
 	StateMentioned,
-	StateWaitingOnAuthor,
+	StateReadyToMerge,
+	StateAutoMergeArmed,
+	StateChecksRunning,
+	StateChecking,
+	StateReviewSubmitted,
 }
 
-// rankOf maps a state to its precedence index (0 = highest).
+// rankOf maps a signal to its precedence index (0 = highest).
 var rankOf = func() map[State]int {
 	m := make(map[State]int, len(precedence))
 	for i, s := range precedence {
@@ -45,6 +51,7 @@ const (
 	stateOpen                = "open"
 	gateReady                = "ready"
 	gateBlocked              = "blocked"
+	gateUnknown              = "unknown"
 	decisionChangesRequested = "changes_requested"
 	roleAuthor               = "author"
 	roleReviewer             = "reviewer"
@@ -56,10 +63,9 @@ const (
 	reviewStateChangesRequested = "changes_requested"
 )
 
-// statesFor evaluates the fold table (docs/Attention_Engine.md) against the
-// latest facts and whether
-// the item has any mention signal. Returns the matching states in precedence
-// order (so States[0] is the highest-precedence state).
+// statesFor evaluates the signal table against the latest facts and whether
+// the item has any mention signal. Returns matching signals in precedence order
+// (States[0] is the highest-precedence signal).
 func statesFor(f sdk.ItemObservedPayload, hasMention bool) []State {
 	roles := make(map[string]bool, len(f.MyRoles))
 	for _, r := range f.MyRoles {
@@ -75,29 +81,33 @@ func statesFor(f sdk.ItemObservedPayload, hasMention bool) []State {
 	return states
 }
 
-// matches reports whether a single state's condition holds. The Mentioned
-// state is signal-driven; the other five derive from the latest facts.
+// matches reports whether a single signal's condition holds.
 func matches(s State, f sdk.ItemObservedPayload, roles map[string]bool, hasMention bool) bool {
 	switch s {
-	case StateReadyToMerge:
-		return roles[roleAuthor] && !f.Draft && f.Gate == gateReady
-	case StateNeedsReview:
-		return roles[roleReviewer] && f.MyReviewState == reviewStateRequested
 	case StateChangesRequested:
 		return roles[roleAuthor] && f.ReviewDecision == decisionChangesRequested
+	case StateReviewRequested:
+		return roles[roleReviewer] && f.MyReviewState == reviewStateRequested
 	case StateBlocked:
 		return roles[roleAuthor] && !f.Draft && f.Gate == gateBlocked
 	case StateMentioned:
 		return hasMention
-	case StateWaitingOnAuthor:
+	case StateReadyToMerge:
+		return roles[roleAuthor] && !f.Draft && f.Gate == gateReady
+	case StateAutoMergeArmed:
+		return roles[roleAuthor] && !f.Draft && f.AutoMergeArmed
+	case StateChecksRunning:
+		return roles[roleAuthor] && !f.Draft && f.ChecksRunning
+	case StateChecking:
+		return f.Gate == gateUnknown // role-neutral backstop (D3)
+	case StateReviewSubmitted:
 		return roles[roleReviewer] && reviewIsDone(f.MyReviewState)
 	default:
 		return false
 	}
 }
 
-// reviewIsDone reports whether the reviewer's own review has been submitted,
-// putting the ball back with the author (the Waiting on Author state).
+// reviewIsDone reports whether the reviewer's own review has been submitted.
 func reviewIsDone(myReviewState string) bool {
 	switch myReviewState {
 	case reviewStateReviewed, reviewStateApproved, reviewStateChangesRequested:

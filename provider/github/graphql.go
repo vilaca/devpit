@@ -14,7 +14,7 @@ import (
 )
 
 const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
-	`{pullRequest(number:%d){reviewDecision latestReviews{nodes{state}}}}`
+	`{pullRequest(number:%d){reviewDecision latestReviews{nodes{state}} autoMergeRequest{enabledAt}}}`
 
 type prItem struct {
 	evIdx  int
@@ -28,6 +28,7 @@ type prItem struct {
 type ghResult struct {
 	reviewDecision string
 	approvalsCount int
+	autoMergeArmed bool
 }
 
 type ghPRNode struct {
@@ -38,6 +39,12 @@ type ghPRNode struct {
 				State string `json:"state"`
 			} `json:"nodes"`
 		} `json:"latestReviews"`
+		// autoMergeRequest is null unless auto-merge is armed on the PR; a
+		// non-null object means AutoMergeArmed. Pointer so absent/null reads as
+		// nil (a fine-grained PAT that cannot read it degrades to false, no crash).
+		AutoMergeRequest *struct {
+			EnabledAt string `json:"enabledAt"`
+		} `json:"autoMergeRequest"`
 	} `json:"pullRequest"`
 }
 
@@ -57,7 +64,7 @@ func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, result
 				count++
 			}
 		}
-		results[it.evIdx] = ghResult{node.PullRequest.ReviewDecision, count}
+		results[it.evIdx] = ghResult{node.PullRequest.ReviewDecision, count, node.PullRequest.AutoMergeRequest != nil}
 	}
 }
 
@@ -106,10 +113,14 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 	return result.Data, nil
 }
 
-// graphqlJoin enriches item.observed events with GitHub GraphQL data (reviewDecision).
+// graphqlJoin enriches item.observed events with GitHub GraphQL data
+// (reviewDecision, approvals, and auto-merge state).
 // On any GraphQL error it logs and returns the original events unchanged (graceful degradation).
 // NeedsApproval is set only when reviewDecision == "REVIEW_REQUIRED" && !draft && gate == blocked,
 // avoiding the "ready to merge · missing approvals" contradiction caused by timing skew or drafts.
+// AutoMergeArmed is set from autoMergeRequest (non-null ⇒ armed); it degrades to false when the
+// field is unreadable or GraphQL fails. ChecksRunning is left false on GitHub (documented parity
+// gap: a gating in-progress pipeline is hidden inside the blocked gate, ADR-0016).
 func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Event {
 	var items []prItem
 	for i, ev := range events {
@@ -166,6 +177,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		}
 		pl.NeedsApproval = r.reviewDecision == "REVIEW_REQUIRED" && !pl.Draft && pl.Gate == gateBlocked
 		pl.ApprovalsCount = r.approvalsCount
+		pl.AutoMergeArmed = r.autoMergeArmed
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
 		out[evIdx] = ev

@@ -391,6 +391,86 @@ func TestNormalizeMarkers(t *testing.T) {
 	}
 }
 
+// TestAutoMergeArmedFromREST verifies AutoMergeArmed is read from the REST
+// merge_when_pipeline_succeeds field on the list payload (no GraphQL needed).
+func TestAutoMergeArmedFromREST(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+
+	armed := makeMR("mergeable")
+	armed.MergeWhenPipelineSucceeds = true
+	pl, ok := p.observedFromMR(armed).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
+	if !pl.AutoMergeArmed {
+		t.Error("auto_merge_armed should be true when merge_when_pipeline_succeeds is set")
+	}
+
+	plain, ok := p.observedFromMR(makeMR("mergeable")).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
+	if plain.AutoMergeArmed {
+		t.Error("auto_merge_armed should be false when merge_when_pipeline_succeeds is absent")
+	}
+}
+
+func TestIsPipelineRunning(t *testing.T) {
+	cases := []struct {
+		status string
+		want   bool
+	}{
+		{"RUNNING", true},
+		{"PENDING", true},
+		{"CREATED", true},
+		{"WAITING_FOR_RESOURCE", true},
+		{"PREPARING", true},
+		{"SCHEDULED", true},
+		{"SUCCESS", false},
+		{"FAILED", false},
+		{"CANCELED", false},
+		{"SKIPPED", false},
+		{"MANUAL", false},
+	}
+	for _, c := range cases {
+		t.Run(c.status, func(t *testing.T) {
+			if got := isPipelineRunning(&glPipeline{Status: c.status}); got != c.want {
+				t.Errorf("isPipelineRunning(%q) = %v, want %v", c.status, got, c.want)
+			}
+		})
+	}
+	if isPipelineRunning(nil) {
+		t.Error("isPipelineRunning(nil) should be false")
+	}
+}
+
+// TestGraphQLJoinChecksRunning verifies a RUNNING headPipeline sets ChecksRunning
+// true and FailingChecks false for the same pipeline (a running pipeline is not red).
+func TestGraphQLJoinChecksRunning(t *testing.T) {
+	p := newTestProvider(t, "graphql_join_checks_running", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	for _, e := range res.Events {
+		if e.EventType != "item.observed" || e.NativeID != "acme/api!7" {
+			continue
+		}
+		pl, ok := e.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Fatal("payload type assertion failed")
+		}
+		if !pl.ChecksRunning {
+			t.Error("checks_running should be true: headPipeline status RUNNING")
+		}
+		if pl.FailingChecks {
+			t.Error("failing_checks should be false: a running pipeline is not red")
+		}
+		return
+	}
+	t.Fatal("missing item.observed for acme/api!7")
+}
+
 func TestGraphQLJoinNeedsApproval(t *testing.T) {
 	p := newTestProvider(t, "graphql_join_needs_approval", "octocat")
 	res, err := p.Reconcile(context.Background(), nil)

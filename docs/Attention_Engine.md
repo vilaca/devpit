@@ -3,7 +3,7 @@
 > **Status:** the fold (read-time computation of buckets and ranking) is
 > **implemented** in `internal/attention`. The user-facing presentation
 > (pinned zone, tags, filters, marker vocabulary, age bands, blocked
-> diagnostic badges) is **implemented** in `frontend/` through v0.1.4.
+> diagnostic badges) is **implemented** in `frontend/` through v0.1.5.
 > Decision: `ADR/ADR-0005_Event_Based_Attention_Engine.md` and
 > `ADR/ADR-0016_Presentation_And_Ranking.md`.
 
@@ -26,20 +26,40 @@ The bucket predicates and the precedence order are **direct code**
 the design behind them. Where the two ever disagree, the code is authoritative
 for the exact conditions.
 
-## Attention states
+## Signals (v0.1.5)
 
-Six states in v0.1. A WorkItem may carry several at once; they render as tags.
+Nine signals replacing the former six attention states. A WorkItem may carry
+several at once; they render as chips. The signal *vocabulary* is one word-set —
+no separate author/reviewer labels, no authorship tag (the blue tint carries
+authorship). The *conditions* stay role-aware where the fact is inherently about
+a role (see Role scope below).
 
-- **Needs Review** — you are a requested reviewer and have not yet reviewed.
-- **Changes Requested** — a PR you authored where a reviewer requested changes;
-  the ball is in your court.
-- **Blocked** — a non-draft PR you authored that the provider's merge gate
-  reports as not mergeable.
-- **Ready to Merge** — a non-draft PR you authored that the merge gate reports
-  as mergeable. Symmetric with Blocked.
-- **Mentioned** — an open item with at least one mention signal aimed at you.
-- **Waiting on Author** — a PR you are reviewing where your review is done and
-  the ball is back with the author.
+Highest precedence first (index 0 ranks the item):
+
+| # | wire value | label | condition |
+|---|---|---|---|
+| 1 | `changes_requested` | Changes Requested | `roles[author] && ReviewDecision == "changes_requested"` |
+| 2 | `review_requested`  | Review Requested  | `roles[reviewer] && MyReviewState == "requested"` |
+| 3 | `blocked`           | Blocked           | `roles[author] && !Draft && Gate == "blocked"` |
+| 4 | `mentioned`         | Mentioned         | `hasMention` |
+| 5 | `ready_to_merge`    | Ready to Merge    | `roles[author] && !Draft && Gate == "ready"` |
+| 6 | `auto_merge_armed`  | Auto-merge Armed  | `roles[author] && !Draft && AutoMergeArmed` |
+| 7 | `checks_running`    | Checks Running    | `roles[author] && !Draft && ChecksRunning` |
+| 8 | `checking`          | Checking          | `Gate == "unknown"` (role-neutral — the backstop) |
+| 9 | `review_submitted`  | Review Submitted  | `roles[reviewer] && reviewIsDone(MyReviewState)` |
+
+An item carries **every** signal that applies; its highest (lowest-numbered)
+signal sets its rank, the rest ride as additional tags. The precedence order and
+conditions are direct code (`internal/attention/states.go`).
+
+### Role scope
+
+The gate/verdict signals (Changes Requested, Blocked, Ready to Merge,
+Auto-merge Armed, Checks Running) describe an MR **you authored** — they keep
+their `roles[author]` guard. Review Requested and Review Submitted are
+reviewer-relative. Mentioned is any-role. **Checking (#8) is role-neutral**: it
+fires on any involved item whose gate is `unknown`, including a draft you only
+review, so it can backstop a row that would otherwise be bare.
 
 ### Edge definitions
 
@@ -50,20 +70,26 @@ Six states in v0.1. A WorkItem may carry several at once; they render as tags.
   merge-gate value mappings per provider live in `docs/Provider_API_Analysis.md`.
 - **Non-gating check failures are a failure *notification*, not Blocked.** Any
   red check is surfaced (the `failing_checks` marker on the item) so nothing is
-  missed, but only merge-gating failures put a PR in the Blocked bucket —
+  missed, but only merge-gating failures put a PR in the Blocked signal —
   keeping Blocked trustworthy.
-- **Drafts are never Blocked and never Ready to Merge** (their unmergeable
-  state is expected). An authored draft therefore carries no author state and
-  appears as a plain row with the Draft marker; it still picks up Mentioned and
-  explicit-review states where they apply. Normal author rules resume once
-  marked ready.
-- **Changes Requested (author) vs Waiting on Author (reviewer)** are the two
-  sides of a review round-trip, split because they have opposite actionability.
-  Changes Requested is high-precedence (your turn); Waiting on Author is
-  informational and lowest precedence (not your turn) — the stale badge is the
-  safety net for round-trips the author has forgotten. Where the org's merge
+- **Drafts carry Checking, not Blocked or Ready to Merge.** Both providers
+  report gate `unknown` for drafts, so a draft's gate/verdict signals are
+  suppressed (they keep their `!Draft` guard). An authored draft carries
+  `["checking"]` plus the Draft marker; it still picks up Mentioned and
+  review signals where they apply. Normal author rules resume once marked ready.
+- **Authored MRs are never bare** — gate `ready` → `ready_to_merge`, gate
+  `blocked` → `blocked`, gate `unknown` → `checking`. A non-authored involved
+  item with a known gate and no reviewer or mention signal (e.g. a pure assignee
+  on a ready MR) may still render marker-only (empty `states` array).
+- **Changes Requested (author) vs Review Submitted (reviewer)** are the two
+  sides of a review round-trip. Changes Requested is high-precedence (#1, your
+  turn); Review Submitted is lowest (#9, informational — the stale badge is the
+  safety net for round-trips the author has forgotten). Where the org's merge
   gate enforces approvals, Changes Requested co-occurs with Blocked; the item
-  carries both tags and ranks by the more actionable Changes Requested.
+  carries both tags and ranks by Changes Requested.
+- **Checking does not flap.** Transient gate values never reach storage; the
+  synthesizer carries the last known gate forward. A previously-blocked MR under
+  transient recompute keeps gate `blocked` and does not drop to `checking`.
 
 ## Markers (v0.1.1–v0.1.2)
 
@@ -95,7 +121,7 @@ Each active marker and state tag carries an onset timestamp: the start of the
 **latest contiguous run** of snapshots in which the condition has held,
 computed by walking the item's `item.observed` events newest → oldest. The
 `since` map is keyed by the wire name of each active tag (e.g.
-`"needs_review"`, `"merge_conflict"`). Exception: `mentioned` onset is the
+`"review_requested"`, `"merge_conflict"`). Exception: `mentioned` onset is the
 earliest mention signal's `coalesce(occurred_at, observed_at)` — the state
 never clears while the item is open.
 

@@ -102,26 +102,27 @@ Decided 2026-07-10 (ADR-0016).
   11 had gate `unknown` (CI running / gate not yet computed) and 5 were drafts.
 - Wire effect: `states` may be an empty array (`docs/REST_API.md`).
 
-## v0.1.5 — Signal-based presentation (Planned)
+## v0.1.5 — Signal-based presentation ✓ Built
 
-Decided 2026-07-13 (ADR-0021). Rows show the neutral provider signals present on
-the item instead of a closed set of viewer-relative "attention states" — no
+Decided 2026-07-13 (ADR-0016). Rows show the neutral provider signals present
+on the item instead of a closed set of viewer-relative "attention states" — no
 inferred workflow. Supersedes the attention-state set of ADR-0016.
 
-- Signal set + fixed precedence: Changes requested, Review requested, Blocked
-  (+ why-badges), Mentioned, Ready to merge, Auto-merge armed, Checks running,
-  Checking (gate `unknown`, replaces the bare row); Review submitted lowest.
+- Signal set + fixed precedence (nine signals): Changes requested, Review
+  requested, Blocked (+ why-badges), Mentioned, Ready to merge, Auto-merge
+  armed, Checks running, Checking (gate `unknown`, replaces the bare row);
+  Review submitted lowest.
 - Authorship is the blue row tint only — no authorship tag; same vocabulary
   regardless of role.
-- Parity goal: primary state signal is guaranteed identical across GitHub and
-  GitLab; explanatory badges stay best-effort per provider with documented gaps
-  (existing ADR-0016 parity principle).
-- New `auto-merge armed` signal needs a provider field not read today (GitHub
-  `auto_merge`, GitLab `merge_when_pipeline_succeeds`) — verify at implementation.
-- `states` array becomes the signal list and is never empty (worst case
-  `["checking"]`), removing the v0.1.4 empty-array case.
-- Specs (`docs/Attention_Engine.md`, `docs/UI_Vocabulary.md`,
-  `docs/REST_API.md`) update when this ships.
+- Primary signal guaranteed identical across GitHub and GitLab; best-effort
+  signals documented: `auto_merge_armed` ships on both where readable;
+  `checks_running` is GitLab-only (GitHub ✗ — gating pipeline hidden inside
+  `blocked`).
+- Authored MRs are never bare (worst case `["checking"]`); non-authored
+  involved items with no reviewer or mention signal may still carry an empty
+  `states` array (marker-only).
+- Wire renames: `needs_review` → `review_requested`;
+  `waiting_on_author` → `review_submitted`.
 
 ## First public release — packaging & distribution gate
 

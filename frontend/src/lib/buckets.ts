@@ -5,14 +5,17 @@ export interface Bucket {
   label: string;
 }
 
-// Six buckets in precedence order (ADR-0016 / internal/attention/states.go).
+// Nine buckets in precedence order (ADR-0016 / internal/attention/states.go).
 export const BUCKETS: Bucket[] = [
-  { state: "needs_review", label: "Needs Review" },
   { state: "changes_requested", label: "Changes Requested" },
+  { state: "review_requested", label: "Review Requested" },
   { state: "blocked", label: "Blocked" },
-  { state: "ready_to_merge", label: "Ready to Merge" },
   { state: "mentioned", label: "Mentioned" },
-  { state: "waiting_on_author", label: "Waiting on Author" },
+  { state: "ready_to_merge", label: "Ready to Merge" },
+  { state: "auto_merge_armed", label: "Auto-merge Armed" },
+  { state: "checks_running", label: "Checks Running" },
+  { state: "checking", label: "Checking" },
+  { state: "review_submitted", label: "Review Submitted" },
 ];
 
 // countByState returns a map of state → item count (non-flagged items only,

@@ -25,12 +25,15 @@ export function stateLabel(s: State): string {
 }
 
 const STATE_LABELS: Record<State, string> = {
-  needs_review: "Needs Review",
   changes_requested: "Changes Requested",
+  review_requested: "Review Requested",
   blocked: "Blocked",
-  ready_to_merge: "Ready to Merge",
   mentioned: "Mentioned",
-  waiting_on_author: "Waiting on Author",
+  ready_to_merge: "Ready to Merge",
+  auto_merge_armed: "Auto-merge Armed",
+  checks_running: "Checks Running",
+  checking: "Checking",
+  review_submitted: "Review Submitted",
 };
 
 // stateCSSVar maps a state to the corresponding CSS token on :root.

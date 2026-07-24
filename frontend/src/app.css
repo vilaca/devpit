@@ -17,13 +17,16 @@
   --text-faint: #8a929c;
   --accent: #2d6cdf;
 
-  /* Attention state tags (internal/attention/states.go precedence order). */
-  --state-needs-review: #b26a00;
+  /* Signal chips (internal/attention/states.go precedence order). */
   --state-changes-requested: #c0392b;
+  --state-review-requested: #b26a00;
   --state-blocked: #8e44ad;
-  --state-ready-to-merge: #1a7f37;
   --state-mentioned: #2d6cdf;
-  --state-waiting-on-author: #5c6570;
+  --state-ready-to-merge: #1a7f37;
+  --state-auto-merge-armed: #0e7c86;
+  --state-checks-running: #8a6d1f;
+  --state-checking: #5c6570;
+  --state-review-submitted: #5c6570;
 
   /* Health dots (ADR-0018). */
   --health-ok: #1a7f37;
@@ -58,12 +61,15 @@
     --text-faint: #6b747e;
     --accent: #5b8def;
 
-    --state-needs-review: #e8a438;
     --state-changes-requested: #f47068;
+    --state-review-requested: #e8a438;
     --state-blocked: #c084fc;
-    --state-ready-to-merge: #3fb559;
     --state-mentioned: #7eb3ff;
-    --state-waiting-on-author: #9aa3ad;
+    --state-ready-to-merge: #3fb559;
+    --state-auto-merge-armed: #4dd0d8;
+    --state-checks-running: #d6b24a;
+    --state-checking: #8b95a1;
+    --state-review-submitted: #9aa3ad;
 
     --health-ok: #3fb559;
     --health-degraded: #e8a438;
@@ -89,12 +95,15 @@
   --text-faint: #6b747e;
   --accent: #5b8def;
 
-  --state-needs-review: #e8a438;
   --state-changes-requested: #f47068;
+  --state-review-requested: #e8a438;
   --state-blocked: #c084fc;
-  --state-ready-to-merge: #3fb559;
   --state-mentioned: #7eb3ff;
-  --state-waiting-on-author: #9aa3ad;
+  --state-ready-to-merge: #3fb559;
+  --state-auto-merge-armed: #4dd0d8;
+  --state-checks-running: #d6b24a;
+  --state-checking: #8b95a1;
+  --state-review-submitted: #9aa3ad;
 
   --health-ok: #3fb559;
   --health-degraded: #e8a438;

@@ -2,25 +2,32 @@
 // internal/api (attention.go, connections.go, synclog.go) — that code is
 // authoritative (docs/REST_API.md). Keep field names in sync with the JSON tags.
 
-// The six attention states, in precedence order (internal/attention/states.go).
-// A WorkItem may carry several at once; they render as tags.
+// Nine provider signals in precedence order (internal/attention/states.go,
+// ADR/ADR-0016_Presentation_And_Ranking.md). states[0] ranks the item.
+// An authored MR is never bare; worst case ["checking"] (gate unknown).
 export type State =
-  | "needs_review"
   | "changes_requested"
+  | "review_requested"
   | "blocked"
-  | "ready_to_merge"
   | "mentioned"
-  | "waiting_on_author";
+  | "ready_to_merge"
+  | "auto_merge_armed"
+  | "checks_running"
+  | "checking"
+  | "review_submitted";
 
 // Canonical highest-first precedence, matching internal/attention/states.go.
 // Used for bucket ordering and as a client-side sort fallback.
 export const STATE_PRECEDENCE: State[] = [
-  "needs_review",
   "changes_requested",
+  "review_requested",
   "blocked",
-  "ready_to_merge",
   "mentioned",
-  "waiting_on_author",
+  "ready_to_merge",
+  "auto_merge_armed",
+  "checks_running",
+  "checking",
+  "review_submitted",
 ];
 
 export interface AttentionItem {
@@ -41,6 +48,8 @@ export interface AttentionItem {
   old: boolean;
   updated_at: string; // RFC 3339 UTC
   signal_counts?: Record<string, number>; // present only for counts > 1
+  auto_merge_armed: boolean;
+  checks_running: boolean;
   failing_checks: boolean;
   merge_conflict: boolean;
   needs_rebase: boolean;

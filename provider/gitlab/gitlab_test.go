@@ -2,6 +2,7 @@ package gitlab
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -446,6 +447,27 @@ func TestIsPipelineRunning(t *testing.T) {
 
 // TestGraphQLJoinChecksRunning verifies a RUNNING headPipeline sets ChecksRunning
 // true and FailingChecks false for the same pipeline (a running pipeline is not red).
+// TestApplyGraphQLMyReviewState verifies MyReviewState is set to "approved" only
+// when the authenticated handle appears in approvedBy, and never on drafts.
+func TestApplyGraphQLMyReviewState(t *testing.T) {
+	var mr glGraphQLMR
+	if err := json.Unmarshal([]byte(
+		`{"approved":true,"approvedBy":{"count":2,"nodes":[{"username":"octocat"},{"username":"other"}]}}`,
+	), &mr); err != nil {
+		t.Fatal(err)
+	}
+
+	if pl := applyGraphQL(sdk.ItemObservedPayload{}, mr, "octocat"); pl.MyReviewState != "approved" {
+		t.Errorf("MyReviewState = %q, want approved when handle is an approver", pl.MyReviewState)
+	}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{}, mr, "stranger"); pl.MyReviewState != "" {
+		t.Errorf("MyReviewState = %q, want empty for a non-approver", pl.MyReviewState)
+	}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{Draft: true}, mr, "octocat"); pl.MyReviewState != "" {
+		t.Errorf("MyReviewState = %q, want empty on a draft (suppressed)", pl.MyReviewState)
+	}
+}
+
 func TestGraphQLJoinChecksRunning(t *testing.T) {
 	p := newTestProvider(t, "graphql_join_checks_running", "octocat")
 	res, err := p.FastPoll(context.Background(), nil)

@@ -623,14 +623,15 @@ func TestAgeTierDisabledThresholds(t *testing.T) {
 // --- Age band sorting tests ---
 
 func TestAgeBandSorting(t *testing.T) {
-	// stale needs_review sorts below fresh waiting_on_author (lower-ranked state).
+	// A fresh lower-precedence item sorts above a stale higher-precedence one:
+	// age band dominates signal precedence. (Reviewed-done items are excluded
+	// here — they mute and sink regardless of age; see TestReviewedDoneMuted.)
 	freshFacts := openFacts()
-	freshFacts.MyRoles = []string{"reviewer"}
-	freshFacts.MyReviewState = "approved" // review_submitted
+	freshFacts.MyRoles = []string{"reviewer"} // mentioned only (#4)
 
 	staleFacts := openFacts()
 	staleFacts.MyRoles = []string{"reviewer"}
-	staleFacts.MyReviewState = "requested" // review_requested
+	staleFacts.MyReviewState = "requested" // review_requested (#2)
 
 	freshSig := sig(2, "acme/api#fresh", signalMentioned, baseTime.Add(-1*time.Hour))
 	staleSig := sig(4, "acme/api#stale", signalMentioned, baseTime.Add(-10*24*time.Hour))
@@ -644,7 +645,54 @@ func TestAgeBandSorting(t *testing.T) {
 		t.Fatalf("want 2 items, got %d", len(items))
 	}
 	if items[0].NativeID != "acme/api#fresh" {
-		t.Errorf("fresh review_submitted should rank above stale review_requested; got %q first", items[0].NativeID)
+		t.Errorf("fresh mentioned should rank above stale review_requested; got %q first", items[0].NativeID)
+	}
+}
+
+func TestReviewedDoneMuted(t *testing.T) {
+	// A reviewer who has approved has nothing left to do: the item is muted and
+	// sinks below everything, even a fresher one.
+	done := openFacts()
+	done.MyRoles = []string{"reviewer"}
+	done.MyReviewState = "approved"
+	doneSig := sig(2, "acme/api#done", signalMentioned, baseTime.Add(-1*time.Hour)) // fresh
+
+	active := openFacts()
+	active.MyRoles = []string{"reviewer"}
+	active.MyReviewState = "requested" // review_requested
+	activeSig := sig(4, "acme/api#active", signalMentioned, baseTime.Add(-20*24*time.Hour))
+
+	events := []storage.StoredEvent{
+		obs(1, "c", "acme/api#done", done), doneSig,
+		obs(3, "c", "acme/api#active", active), activeSig,
+	}
+	items := fold(events)
+	if len(items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(items))
+	}
+	if items[0].NativeID != "acme/api#active" {
+		t.Errorf("muted reviewed-done should sink below the active item; got %q first", items[0].NativeID)
+	}
+	if !items[1].Muted {
+		t.Error("reviewed-done item should be Muted")
+	}
+	if items[0].Muted {
+		t.Error("active review_requested item should not be Muted")
+	}
+}
+
+func TestAuthorNeverMuted(t *testing.T) {
+	// An authored item is never muted, even if a review by the user is recorded.
+	f := openFacts()
+	f.MyRoles = []string{"author", "reviewer"}
+	f.MyReviewState = "approved"
+	f.Gate = "ready"
+	items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if items[0].Muted {
+		t.Error("an authored item must never be muted")
 	}
 }
 

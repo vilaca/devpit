@@ -27,6 +27,7 @@ type attentionItem struct {
 	Author                string               `json:"author"`
 	Draft                 bool                 `json:"draft"`
 	States                []attention.State    `json:"states"`
+	Muted                 bool                 `json:"muted,omitempty"`
 	Flagged               bool                 `json:"flagged"`
 	Stale                 bool                 `json:"stale"`
 	Old                   bool                 `json:"old"`
@@ -39,6 +40,7 @@ type attentionItem struct {
 	UnresolvedDiscussions bool                 `json:"unresolved_discussions"`
 	PolicyDenied          bool                 `json:"policy_denied"`
 	ApprovalsCount        int                  `json:"approvals_count,omitempty"`
+	MyReviewState         string               `json:"my_review_state,omitempty"`
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"`
@@ -86,6 +88,7 @@ func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
 		Author:                it.Author,
 		Draft:                 it.Draft,
 		States:                it.States,
+		Muted:                 it.Muted,
 		Flagged:               it.Flagged,
 		Stale:                 it.Stale,
 		Old:                   it.Old,
@@ -98,6 +101,7 @@ func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
 		UnresolvedDiscussions: it.UnresolvedDiscussions,
 		PolicyDenied:          it.PolicyDenied,
 		ApprovalsCount:        it.ApprovalsCount,
+		MyReviewState:         it.MyReviewState,
 		GateDetail:            it.GateDetail,
 		FlaggedAt:             it.FlaggedAt,
 		Since:                 it.Since,

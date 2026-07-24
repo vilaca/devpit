@@ -14,7 +14,7 @@ import (
 )
 
 const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
-	`{pullRequest(number:%d){reviewDecision latestReviews{nodes{state}} autoMergeRequest{enabledAt}}}`
+	`{pullRequest(number:%d){reviewDecision latestReviews{nodes{state author{login}}} autoMergeRequest{enabledAt}}}`
 
 type prItem struct {
 	evIdx  int
@@ -29,6 +29,7 @@ type ghResult struct {
 	reviewDecision string
 	approvalsCount int
 	autoMergeArmed bool
+	myReviewState  string
 }
 
 type ghPRNode struct {
@@ -36,7 +37,10 @@ type ghPRNode struct {
 		ReviewDecision string `json:"reviewDecision"`
 		LatestReviews  struct {
 			Nodes []struct {
-				State string `json:"state"`
+				State  string `json:"state"`
+				Author struct {
+					Login string `json:"login"`
+				} `json:"author"`
 			} `json:"nodes"`
 		} `json:"latestReviews"`
 		// autoMergeRequest is null unless auto-merge is armed on the PR; a
@@ -48,7 +52,7 @@ type ghPRNode struct {
 	} `json:"pullRequest"`
 }
 
-func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, results map[int]ghResult) {
+func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, results map[int]ghResult, handle string) {
 	for j, it := range batch {
 		raw, ok := data[fmt.Sprintf("a%d", j)]
 		if !ok || raw == nil {
@@ -59,12 +63,32 @@ func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, result
 			continue
 		}
 		count := 0
+		var myReviewState string
 		for _, r := range node.PullRequest.LatestReviews.Nodes {
 			if r.State == "APPROVED" {
 				count++
 			}
+			if r.Author.Login == handle {
+				myReviewState = ghReviewState(r.State)
+			}
 		}
-		results[it.evIdx] = ghResult{node.PullRequest.ReviewDecision, count, node.PullRequest.AutoMergeRequest != nil}
+		results[it.evIdx] = ghResult{node.PullRequest.ReviewDecision, count, node.PullRequest.AutoMergeRequest != nil, myReviewState}
+	}
+}
+
+// ghReviewState maps a GitHub review state to a normalized my_review_state
+// value. Only submitted verdicts count as a completed review; PENDING/DISMISSED
+// leave it empty.
+func ghReviewState(state string) string {
+	switch state {
+	case "APPROVED":
+		return "approved"
+	case "CHANGES_REQUESTED":
+		return "changes_requested"
+	case "COMMENTED":
+		return "reviewed"
+	default:
+		return ""
 	}
 }
 
@@ -160,7 +184,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 			continue
 		}
 
-		mergeGHBatchResults(data, batch, results)
+		mergeGHBatchResults(data, batch, results, p.handle)
 	}
 
 	if len(results) == 0 {
@@ -178,6 +202,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		pl.NeedsApproval = r.reviewDecision == "REVIEW_REQUIRED" && !pl.Draft && pl.Gate == gateBlocked
 		pl.ApprovalsCount = r.approvalsCount
 		pl.AutoMergeArmed = r.autoMergeArmed
+		pl.MyReviewState = r.myReviewState
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
 		out[evIdx] = ev

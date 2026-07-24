@@ -50,6 +50,7 @@ type WorkItem struct {
 	Author                string               `json:"author"`
 	Draft                 bool                 `json:"draft"`
 	States                []State              `json:"states"`  // precedence order; States[0] ranks the item
+	Muted                 bool                 `json:"muted,omitempty"` // reviewed-done: nothing left for me; demoted + de-emphasized
 	Flagged               bool                 `json:"flagged"` // pinned in the "Handle next" zone
 	Stale                 bool                 `json:"stale"`
 	Old                   bool                 `json:"old"`
@@ -64,6 +65,7 @@ type WorkItem struct {
 	UnresolvedDiscussions bool                 `json:"unresolved_discussions"`
 	PolicyDenied          bool                 `json:"policy_denied"`
 	ApprovalsCount        int                  `json:"approvals_count,omitempty"`
+	MyReviewState         string               `json:"my_review_state,omitempty"` // "approved" | "changes_requested" | "reviewed" | ""
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"` // onset of each active tag
@@ -200,6 +202,12 @@ func foldItem(
 	old := oldThreshold > 0 && idle > oldThreshold
 	stale := !old && staleThreshold > 0 && idle > staleThreshold
 
+	// Reviewed-done: I'm a reviewer (not the author) who has submitted a review,
+	// so there is nothing left for me to do. Such items are muted and demoted
+	// below everything else, even a stale mention (ADR-0016).
+	roles := rolesSet(facts.MyRoles)
+	muted := roles[roleReviewer] && !roles[roleAuthor] && reviewIsDone(facts.MyReviewState)
+
 	// Sort observed events newest-first for onset computation.
 	sort.Slice(allObserved, func(i, j int) bool { return allObserved[i].ID > allObserved[j].ID })
 
@@ -214,6 +222,7 @@ func foldItem(
 		Author:                facts.Author,
 		Draft:                 facts.Draft,
 		States:                states,
+		Muted:                 muted,
 		Stale:                 stale,
 		Old:                   old,
 		UpdatedAt:             updatedAt,
@@ -227,6 +236,7 @@ func foldItem(
 		UnresolvedDiscussions: facts.UnresolvedDiscussions,
 		PolicyDenied:          facts.PolicyDenied,
 		ApprovalsCount:        facts.ApprovalsCount,
+		MyReviewState:         facts.MyReviewState,
 		GateDetail:            facts.GateDetail,
 		Since:                 computeSince(allObserved, states, facts, hasMention, mentionSigs),
 	}, true
@@ -419,11 +429,15 @@ func ageBand(it WorkItem) int {
 	return 0
 }
 
-// sortItems orders items by age band (fresh < stale < old) first, then
+// sortItems orders items by reviewed-done first (muted items sink to the very
+// bottom, beneath even old ones), then age band (fresh < stale < old), then
 // state precedence (highest-precedence state), then newest-first, then item ID
 // for a stable total order. Pinned items are not sorted here — pin() handles them.
 func sortItems(items []WorkItem) {
 	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Muted != items[j].Muted {
+			return !items[i].Muted // non-muted first
+		}
 		bi, bj := ageBand(items[i]), ageBand(items[j])
 		if bi != bj {
 			return bi < bj

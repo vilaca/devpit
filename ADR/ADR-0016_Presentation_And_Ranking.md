@@ -15,8 +15,9 @@ UI is built in `frontend/`. The marker vocabulary and age bands (decision
 (`needs_approval`, `unresolved_discussions`, `policy_denied`) are **Implemented
 (v0.1.2)**. Showing all involved open items regardless of state is **Implemented
 (v0.1.4)**. Signal-based presentation (nine neutral provider signals replacing
-the former six attention states) is **Implemented (v0.1.5)**. See
-`docs/Roadmap.md`.
+the former six attention states) is **Implemented (v0.1.5)**. Reviewed-done
+demotion/muting and the "you + N approved" meta-row (populating `MyReviewState`
+from provider approval data) are **Implemented (v0.1.5)**. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -131,12 +132,34 @@ transient recompute keeps gate `blocked` and does not drop to `checking`.
 
 ### Ranking
 
-**Age band first** (fresh < stale < old), then **signal precedence** above,
-then **newest-first**. The pinned "Handle next" zone stays exempt.
+**Reviewed-done first** (muted items sink to the very bottom, below even `old`),
+then **age band** (fresh < stale < old), then **signal precedence** above, then
+**newest-first**. The pinned "Handle next" zone stays exempt.
 
 Reviewing another person's work (Review Requested, #2) ranks above your own
 Blocked MR (#3): a quick action that unblocks someone else outranks a block you
 will often clear via CI or a rebase anyway.
+
+#### Reviewed-done demotion and muting (2026-07-13)
+
+An item where you are a **reviewer** (and not the author) and your review has
+been submitted — `reviewIsDone(MyReviewState)` — has nothing left for *you* to
+do. Such items are **muted** (`muted: true`): they sort below every other item,
+beneath even `old`, and render de-emphasized with their signal chips suppressed
+(a stale `mentioned` no longer keeps them afloat). This is the second deliberate
+exception to "the highest signal ranks the item" — the reviewed-done state
+dominates ranking regardless of any co-present higher signal, because "nothing to
+do" should get out of the way.
+
+This requires `MyReviewState` to actually be populated, which the v0.1.5 signal
+model defined but no provider filled. It is now populated from provider approval
+data: **GitLab** sets `approved` when the authenticated user appears in
+`approvedBy.nodes` (GitLab exposes no cheap per-user state for comment-only
+reviews, so only approval is detected); **GitHub** maps the user's entry in
+`latestReviews` (`APPROVED`→`approved`, `CHANGES_REQUESTED`→`changes_requested`,
+`COMMENTED`→`reviewed`). `review_requested` (#2) remains driven by
+`MyReviewState == "requested"` and is still not populated — a known gap, not in
+scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
 
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 
@@ -219,6 +242,11 @@ will often clear via CI or a rebase anyway.
   count is branch-protection data (admin-only for non-admins) and CODEOWNERS
   makes raw counts misleading for gate purposes — the existing `needs_approval`
   badge already carries the honest gate verdict.
+  - **"you + N approved" (2026-07-13).** When the authenticated user is among the
+    approvers (`my_review_state == "approved"`), the meta-row phrases the count as
+    "you approved" (you alone) or "you + N approved" (you plus N others), so your
+    own approval is visible at a glance without a separate chip. Otherwise the
+    count reads "N approved" as before.
 - **Open involved items always show, even stateless** (2026-07-10). The fold
   no longer drops an open item that matches no signal. Every item in the log is
   one the user is involved in (sync scopes are assigned/authored, plus mention

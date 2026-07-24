@@ -158,13 +158,14 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 	return out
 }
 
-// applyGraphQL merges the three GraphQL-derived booleans onto a payload.
-// Draft items keep all three booleans false (draft suppression).
+// applyGraphQL merges the GraphQL-derived booleans onto a payload.
+// Draft items keep all these booleans false (draft suppression).
 func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR) sdk.ItemObservedPayload {
 	if !pl.Draft {
 		pl.NeedsApproval = !mr.Approved
 		pl.NeedsRebase = mr.ShouldRebase
 		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
+		pl.ChecksRunning = isPipelineRunning(mr.HeadPipeline)
 		pl.ApprovalsCount = mr.ApprovedBy.Count
 	}
 	return pl
@@ -247,6 +248,22 @@ func isPipelineRed(pip *glPipeline) bool {
 	}
 	switch pip.Status {
 	case "FAILED", "CANCELED":
+		return true
+	default:
+		return false
+	}
+}
+
+// isPipelineRunning reports whether the pipeline is in progress — queued,
+// preparing, or executing — per the GitLab GraphQL PipelineStatusEnum. Terminal
+// statuses (SUCCESS, FAILED, CANCELED, SKIPPED) and MANUAL (awaiting a manual
+// job) are not running.
+func isPipelineRunning(pip *glPipeline) bool {
+	if pip == nil {
+		return false
+	}
+	switch pip.Status {
+	case "RUNNING", "PENDING", "CREATED", "WAITING_FOR_RESOURCE", "PREPARING", "SCHEDULED":
 		return true
 	default:
 		return false

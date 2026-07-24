@@ -1,0 +1,70 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/todos?state=pending&per_page=100
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      [
+        {
+          "id": 18443,
+          "action_name": "review_requested",
+          "target_type": "MergeRequest",
+          "target": {"iid": 7, "web_url": "https://gitlab.com/acme/api/-/merge_requests/7"},
+          "project": {"id": 12},
+          "author": {"username": "jdoe"},
+          "updated_at": "2026-07-08T09:14:02Z"
+        }
+      ]
+- id: 1
+  request:
+    method: GET
+    url: https://gitlab.com/api/v4/projects/12/merge_requests/7
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {
+        "iid": 7,
+        "project_id": 12,
+        "title": "Pipeline still running",
+        "web_url": "https://gitlab.com/acme/api/-/merge_requests/7",
+        "state": "opened",
+        "draft": false,
+        "detailed_merge_status": "ci_still_running",
+        "has_conflicts": false,
+        "blocking_discussions_resolved": true,
+        "updated_at": "2026-07-08T09:14:02Z",
+        "author": {"username": "jdoe"},
+        "assignees": [],
+        "reviewers": [{"username": "octocat"}],
+        "references": {"full": "acme/api!7"}
+      }
+- id: 2
+  request:
+    method: POST
+    url: https://gitlab.com/api/graphql
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      {"data":{"a0":{"mergeRequest":{"approved":true,"shouldBeRebased":false,"headPipeline":{"status":"RUNNING"}}}}}

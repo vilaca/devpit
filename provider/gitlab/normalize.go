@@ -133,6 +133,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		NeedsApproval:         mr.DetailedMergeStatus == "not_approved",
 		UnresolvedDiscussions: unresolvedDiscussions,
 		PolicyDenied:          isPolicyDenied(mr.DetailedMergeStatus),
+		AutoMergeArmed:        mr.MergeWhenPipelineSucceeds, // REST list field; ChecksRunning is refined by the GraphQL join
 		ProviderUpdatedAt:     mr.UpdatedAt,
 	}
 

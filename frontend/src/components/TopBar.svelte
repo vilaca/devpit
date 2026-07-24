@@ -23,21 +23,23 @@
 <header class="topbar">
   <a class="brand" href="/" onclick={(e) => e.preventDefault()}>DevPit</a>
 
+  {#if streamState !== "open"}
+    <button
+      class="stream stream-{streamState}"
+      title={streamTitle[streamState]}
+      onclick={() => onShowLog()}
+      aria-label="Open sync log"
+    >
+      <span class="dot"></span>
+      <span class="sr-only">{streamState}</span>
+    </button>
+  {/if}
+
   <nav class="connections">
     {#each connections as c (c.id)}
       <ConnectionHealth connection={c} onShowLog={(id) => onShowLog(id)} />
     {/each}
   </nav>
-
-  <button
-    class="stream stream-{streamState}"
-    title={streamTitle[streamState]}
-    onclick={() => onShowLog()}
-    aria-label="Open sync log"
-  >
-    <span class="dot"></span>
-    <span class="sr-only">{streamState}</span>
-  </button>
 </header>
 
 <style>

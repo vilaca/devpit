@@ -106,11 +106,10 @@ func List(
 
 // Fold folds an event log into the ranked WorkItem list. Events may span
 // multiple connections; they are grouped by identity triple. now,
-// staleThreshold, and oldThreshold drive the age tiers. The result is
-// sorted by age band (fresh, stale, old) then state precedence
-// (highest first) then newest-first, with the item ID as a stable final
-// tiebreak. Stateless items sort below every actionable state. Items that are
-// removed or not open (merged/closed) are dropped.
+// staleThreshold, and oldThreshold drive the age tiers. The result is sorted
+// by age band (fresh < stale < old) then most-recent-update-first, with the
+// item ID as a stable final tiebreak — each band is a pure recency list.
+// Items that are removed or not open (merged/closed) are dropped.
 func Fold(
 	events []storage.StoredEvent, now time.Time,
 	staleThreshold, oldThreshold time.Duration,
@@ -204,8 +203,9 @@ func foldItem(
 	stale := !old && staleThreshold > 0 && idle > staleThreshold
 
 	// Reviewed-done: I'm a reviewer (not the author) who has submitted a review,
-	// so there is nothing left for me to do. Such items are muted and demoted
-	// below everything else, even a stale mention (ADR-0016).
+	// so there is nothing left for me to do. Such items are muted — a display
+	// cue only (the row dims and suppresses its chips); muting no longer affects
+	// ranking, which is pure age band + recency (ADR-0016).
 	roles := rolesSet(facts.MyRoles)
 	muted := roles[roleReviewer] && !roles[roleAuthor] && reviewIsDone(facts.MyReviewState)
 
@@ -411,15 +411,6 @@ func signalCounts(signals []storage.StoredEvent) map[string]int {
 	return repeated
 }
 
-// stateRank is the precedence rank of an item's ranking state, or one past the
-// lowest state for a stateless item so those sort below every actionable one.
-func stateRank(it WorkItem) int {
-	if len(it.States) == 0 {
-		return len(precedence)
-	}
-	return rankOf[it.States[0]]
-}
-
 // ageBand returns 0 for fresh, 1 for stale, 2 for old.
 func ageBand(it WorkItem) int {
 	if it.Old {
@@ -431,22 +422,15 @@ func ageBand(it WorkItem) int {
 	return 0
 }
 
-// sortItems orders items by reviewed-done first (muted items sink to the very
-// bottom, beneath even old ones), then age band (fresh < stale < old), then
-// state precedence (highest-precedence state), then newest-first, then item ID
-// for a stable total order. Pinned items are not sorted here — pin() handles them.
+// sortItems orders items by age band (fresh < stale < old), then by most-recent
+// update (newest first), then by item ID for a stable total order. Within a band
+// the list is pure recency: neither signal precedence nor the reviewed-done mute
+// moves an item (ADR-0016) — mute is a display cue only. Pinned items are not
+// sorted here — pin() handles them.
 func sortItems(items []WorkItem) {
 	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].Muted != items[j].Muted {
-			return !items[i].Muted // non-muted first
-		}
-		bi, bj := ageBand(items[i]), ageBand(items[j])
-		if bi != bj {
+		if bi, bj := ageBand(items[i]), ageBand(items[j]); bi != bj {
 			return bi < bj
-		}
-		ri, rj := stateRank(items[i]), stateRank(items[j])
-		if ri != rj {
-			return ri < rj
 		}
 		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
 			return items[i].UpdatedAt.After(items[j].UpdatedAt)

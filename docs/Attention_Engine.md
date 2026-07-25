@@ -34,7 +34,8 @@ no separate author/reviewer labels, no authorship tag (the blue tint carries
 authorship). The *conditions* stay role-aware where the fact is inherently about
 a role (see Role scope below).
 
-Highest precedence first (index 0 ranks the item):
+Highest precedence first (index 0 is the leading chip; precedence orders chips,
+not item ranking — see Ranking):
 
 | # | wire value | label | condition |
 |---|---|---|---|
@@ -142,18 +143,17 @@ already in the hover text).
 
 ## Ranking
 
-Fixed state-precedence plus age bands — **no numeric score, no configuration**.
-Action-demanding states rank above Ready to Merge (a quick win, but nothing is
-stuck there). The exact precedence order is code (`states.go`); the principle
-is that what demands your action outranks what is merely done.
+Age bands plus recency — **no numeric score, no configuration** (revised
+2026-07-13; signal precedence no longer ranks items). The principle is that fresh
+work stays on top and, within a tier, the list mirrors what actually just moved.
 
 - **Age bands sort the list first** (the single deliberate marker exception):
-  fresh (0) < stale (1) < old (2). Fresh actionable work stays on top;
-  rot sinks.
-- **Within a band: state-precedence**, highest first. Stateless items (open,
-  involved, no matching state) sort below every stated item in the band.
-- **Within a state: newest-first**, where an item's timestamp is its newest
-  signal (falling back to the latest snapshot's provider-updated time).
+  fresh, then stale, then old last. Fresh work stays on top; rot sinks.
+- **Within a band: most-recent-update-first**, where an item's timestamp is its
+  newest signal (falling back to the latest snapshot's provider-updated time).
+  Item ID is the stable final tiebreak. Neither signal precedence nor the
+  reviewed-done mute reorders a band — a stateless or muted item sorts by recency
+  like any other; signals survive only as chips (precedence orders the chips).
 - Two age tiers, both constants in `fold.go`, mutually exclusive
   (`!old && stale` guards the stale tier): `stale` once an item's age exceeds
   7 days, `old` once idle more than 30 days. Both render the muted **"Stale"**

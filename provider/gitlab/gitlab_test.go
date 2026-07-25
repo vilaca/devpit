@@ -1,9 +1,11 @@
 package gitlab
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -672,4 +674,178 @@ func TestGraphQLJoinGitLabDegraded(t *testing.T) {
 		}
 	}
 	t.Fatal("missing item.observed for acme/api!7")
+}
+
+// complexityCeilingRT is a fake http.RoundTripper that rejects GraphQL queries
+// containing more than maxItems MR aliases with a GitLab-style complexity error,
+// and returns minimal valid data otherwise.
+type complexityCeilingRT struct {
+	maxItems int
+}
+
+func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !strings.Contains(req.URL.Path, "graphql") {
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("[]"))}, nil
+	}
+
+	body, _ := io.ReadAll(req.Body)
+	_ = req.Body.Close()
+	var envelope struct {
+		Query string `json:"query"`
+	}
+	_ = json.Unmarshal(body, &envelope)
+
+	// Each MR in the batch produces one "project(" token in the query.
+	count := strings.Count(envelope.Query, "project(")
+
+	if count > rt.maxItems {
+		resp := `{"data":null,"errors":[{"message":"Query has complexity of 420 which exceeds max complexity of 250"}]}`
+		return &http.Response{
+			StatusCode: 200,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(resp)),
+		}, nil
+	}
+
+	// Return a valid response: each alias gets one approved MR entry with one approver.
+	data := make(map[string]any, count)
+	for i := range count {
+		data[fmt.Sprintf("a%d", i)] = map[string]any{
+			"mergeRequest": map[string]any{
+				"approved":                 true,
+				"shouldBeRebased":          false,
+				"divergedFromTargetBranch": false,
+				"headPipeline":             nil,
+				"approvedBy":               map[string]any{"count": 1, "nodes": []any{map[string]any{"username": "octocat"}}},
+			},
+		}
+	}
+	respBody, _ := json.Marshal(map[string]any{"data": data})
+	return &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(bytes.NewReader(respBody)),
+	}, nil
+}
+
+// TestGraphQLBatchingUnderCeiling verifies that graphqlJoin never sends a batch
+// larger than graphQLBatchSize, so the complexity ceiling (250 complexity / ≈14
+// per MR → safe up to 17) is never hit. Uses a fake transport that returns a
+// complexity error for any query with more than 17 MR aliases.
+func TestGraphQLBatchingUnderCeiling(t *testing.T) {
+	const n = 20 // > 17 would trigger the old bug; batchSize=12 keeps each batch safe
+
+	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: "https://gitlab.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.http.Transport = &complexityCeilingRT{maxItems: 17}
+	p.handle = "octocat"
+
+	events := make([]sdk.Event, n)
+	for i := range n {
+		mr := makeMR("not_approved")
+		mr.IID = i + 1
+		mr.WebURL = fmt.Sprintf("https://gitlab.com/acme/api/-/merge_requests/%d", mr.IID)
+		mr.References.Full = fmt.Sprintf("acme/api!%d", mr.IID)
+		events[i] = p.observedFromMR(mr)
+	}
+
+	out, degraded := p.graphqlJoin(context.Background(), events)
+	if degraded {
+		t.Fatal("graphqlJoin degraded with 20 MRs: complexity ceiling hit — batch size too large")
+	}
+	// Every event should be enriched: the fake transport returns approvedBy.count=1
+	// and approvedBy.nodes=[{username:"octocat"}], so MyReviewState="approved".
+	for i, ev := range out {
+		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Errorf("event %d: payload type %T", i, ev.Payload)
+			continue
+		}
+		if pl.MyReviewState != "approved" {
+			t.Errorf("event %d (%s): MyReviewState=%q, want approved — item was not enriched by GraphQL", i, ev.NativeID, pl.MyReviewState)
+		}
+	}
+}
+
+// TestDoGraphQLErrorsField verifies that doGraphQL surfaces a HTTP-200 response
+// with a non-empty errors field and null data as a *graphQLError instead of
+// silently returning nil data (the old behaviour that hid complexity rejections).
+func TestDoGraphQLErrorsField(t *testing.T) {
+	p := newStubProvider(t, stubRT{
+		status: 200,
+		body:   `{"data":null,"errors":[{"message":"Query has complexity of 420 which exceeds max complexity of 250"}]}`,
+	})
+	_, err := p.doGraphQL(context.Background(), `query{a0:project(fullPath:"x"){mergeRequest(iid:"1"){approved}}}`)
+	if err == nil {
+		t.Fatal("doGraphQL: expected error when errors field is non-empty and data is null, got nil")
+	}
+	var gErr *graphQLError
+	if !errors.As(err, &gErr) {
+		t.Fatalf("doGraphQL: err type = %T (%v), want *graphQLError", err, err)
+	}
+	if !strings.Contains(gErr.Error(), "complexity") {
+		t.Errorf("error message %q should mention complexity", gErr.Error())
+	}
+}
+
+// reconcileDegradeRT serves a single opened MR on the REST merge_requests
+// endpoint and rejects every GraphQL query with a GitLab-style complexity
+// error, so a Reconcile always fetches items but their enrichment always
+// degrades.
+type reconcileDegradeRT struct{ mrsJSON []byte }
+
+func (rt reconcileDegradeRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.Contains(req.URL.Path, "graphql") {
+		resp := `{"data":null,"errors":[{"message":"Query has complexity of 420 which exceeds max complexity of 250"}]}`
+		return &http.Response{
+			StatusCode: 200,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(resp)),
+		}, nil
+	}
+	return &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(bytes.NewReader(rt.mrsJSON)),
+	}, nil
+}
+
+// TestReconcileDegradedHoldsCursors verifies C1: when this cycle's GraphQL
+// enrichment degrades, Reconcile must not advance any scope cursor — the
+// returned State must equal the input state so the next reconcile re-fetches
+// and retries the un-enriched items instead of skipping them.
+func TestReconcileDegradedHoldsCursors(t *testing.T) {
+	mrsJSON, err := json.Marshal([]glMergeRequest{makeMR("not_approved")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: "https://gitlab.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.http.Transport = reconcileDegradeRT{mrsJSON: mrsJSON}
+	p.handle = "octocat"
+
+	// Seed a prior cursor for every scope so we can prove none of them move.
+	in := sdk.PollState{}
+	for _, q := range p.reconcileQueries() {
+		in[cursorRecQuery(q)] = "2026-07-01T00:00:00Z"
+	}
+
+	res, err := p.Reconcile(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if !res.Degraded {
+		t.Fatal("Reconcile should report Degraded when the GraphQL join hits the complexity ceiling")
+	}
+	for _, q := range p.reconcileQueries() {
+		key := cursorRecQuery(q)
+		if got := res.State[key]; got != in[key] {
+			t.Errorf("cursor %q advanced to %q on a degraded enrichment; want held at %q", key, got, in[key])
+		}
+	}
 }

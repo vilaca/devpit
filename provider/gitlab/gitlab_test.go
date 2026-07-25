@@ -36,6 +36,9 @@ func (rt stubRT) RoundTrip(_ *http.Request) (*http.Response, error) {
 	}, nil
 }
 
+// testBaseURL is the GitLab base URL shared across test providers.
+const testBaseURL = "https://gitlab.com"
+
 func newStubProvider(t *testing.T, rt stubRT) *Provider {
 	t.Helper()
 	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token"})
@@ -62,7 +65,7 @@ func newTestProvider(t *testing.T, cassette, handle string) *Provider {
 	p, err := New(sdk.ConnectionConfig{
 		ID:      "conn1",
 		Type:    "gitlab",
-		BaseURL: "https://gitlab.com",
+		BaseURL: testBaseURL,
 		Token:   "test-token",
 	})
 	if err != nil {
@@ -467,7 +470,7 @@ func TestApplyGraphQLMyReviewState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if pl := applyGraphQL(sdk.ItemObservedPayload{}, mr, "octocat"); pl.MyReviewState != "approved" {
+	if pl := applyGraphQL(sdk.ItemObservedPayload{}, mr, "octocat"); pl.MyReviewState != reviewStateApproved {
 		t.Errorf("MyReviewState = %q, want approved when handle is an approver", pl.MyReviewState)
 	}
 	if pl := applyGraphQL(sdk.ItemObservedPayload{}, mr, "stranger"); pl.MyReviewState != "" {
@@ -685,7 +688,11 @@ type complexityCeilingRT struct {
 
 func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	if !strings.Contains(req.URL.Path, "graphql") {
-		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("[]"))}, nil
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("[]")),
+		}, nil
 	}
 
 	body, _ := io.ReadAll(req.Body)
@@ -701,7 +708,7 @@ func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, err
 	if count > rt.maxItems {
 		resp := `{"data":null,"errors":[{"message":"Query has complexity of 420 which exceeds max complexity of 250"}]}`
 		return &http.Response{
-			StatusCode: 200,
+			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
 			Body:       io.NopCloser(strings.NewReader(resp)),
 		}, nil
@@ -720,9 +727,9 @@ func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, err
 			},
 		}
 	}
-	respBody, _ := json.Marshal(map[string]any{"data": data})
+	respBody, _ := json.Marshal(map[string]any{"data": data}) //nolint:errchkjson // fixed JSON-safe test map
 	return &http.Response{
-		StatusCode: 200,
+		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(bytes.NewReader(respBody)),
 	}, nil
@@ -735,7 +742,7 @@ func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, err
 func TestGraphQLBatchingUnderCeiling(t *testing.T) {
 	const n = 20 // > 17 would trigger the old bug; batchSize=12 keeps each batch safe
 
-	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: "https://gitlab.com"})
+	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: testBaseURL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -763,8 +770,9 @@ func TestGraphQLBatchingUnderCeiling(t *testing.T) {
 			t.Errorf("event %d: payload type %T", i, ev.Payload)
 			continue
 		}
-		if pl.MyReviewState != "approved" {
-			t.Errorf("event %d (%s): MyReviewState=%q, want approved — item was not enriched by GraphQL", i, ev.NativeID, pl.MyReviewState)
+		if pl.MyReviewState != reviewStateApproved {
+			t.Errorf("event %d (%s): MyReviewState=%q, want approved — not enriched by GraphQL",
+				i, ev.NativeID, pl.MyReviewState)
 		}
 	}
 }
@@ -800,13 +808,13 @@ func (rt reconcileDegradeRT) RoundTrip(req *http.Request) (*http.Response, error
 	if strings.Contains(req.URL.Path, "graphql") {
 		resp := `{"data":null,"errors":[{"message":"Query has complexity of 420 which exceeds max complexity of 250"}]}`
 		return &http.Response{
-			StatusCode: 200,
+			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
 			Body:       io.NopCloser(strings.NewReader(resp)),
 		}, nil
 	}
 	return &http.Response{
-		StatusCode: 200,
+		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(bytes.NewReader(rt.mrsJSON)),
 	}, nil
@@ -822,7 +830,7 @@ func TestReconcileDegradedHoldsCursors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: "https://gitlab.com"})
+	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: testBaseURL})
 	if err != nil {
 		t.Fatal(err)
 	}

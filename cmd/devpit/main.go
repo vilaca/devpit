@@ -20,6 +20,7 @@ import (
 	"github.com/vilaca/devpit/internal/attention"
 	"github.com/vilaca/devpit/internal/config"
 	"github.com/vilaca/devpit/internal/engine"
+	"github.com/vilaca/devpit/internal/jira"
 	"github.com/vilaca/devpit/internal/storage"
 	"github.com/vilaca/devpit/sdk"
 
@@ -99,6 +100,16 @@ func run() error {
 		}
 	}()
 	log.Printf("devpit: API listening on http://%s", httpAddr)
+
+	if cfg.Jira != nil {
+		r := jira.NewRefresher(jira.Config{
+			BaseURL:  cfg.Jira.BaseURL,
+			Email:    cfg.Jira.Email,
+			APIToken: cfg.Jira.APIToken,
+		}, db, srv)
+		r.Start(ctx)
+		log.Printf("devpit: jira enricher started (base_url=%s)", cfg.Jira.BaseURL)
+	}
 
 	eng := engine.New(db, cfg.Connections, engine.WithNotifier(srv))
 	runErr := eng.Run(ctx)

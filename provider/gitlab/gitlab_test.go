@@ -151,8 +151,16 @@ func TestReconcileDedup(t *testing.T) {
 	if count["acme/api!7"] != 1 {
 		t.Errorf("acme/api!7 observed %d times, want 1 (deduped)", count["acme/api!7"])
 	}
-	if res.State[cursorRecUpdatedAfter] == "" {
-		t.Errorf("reconcile cursor not set")
+	// The reviewer sweep (scope=all&reviewer_username=…) must be exercised: !9 is
+	// returned only by that query, so its presence proves reviewer MRs the user
+	// did not author are reconciled — the gap that stranded stale reviewer MRs.
+	if count["acme/api!9"] != 1 {
+		t.Errorf("acme/api!9 (reviewer-only) observed %d times, want 1", count["acme/api!9"])
+	}
+	for _, q := range p.reconcileQueries() {
+		if res.State[cursorRecQuery(q)] == "" {
+			t.Errorf("reconcile cursor for %q not set", q)
+		}
 	}
 }
 

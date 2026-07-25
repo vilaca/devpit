@@ -158,6 +158,107 @@ connections:
 	}
 }
 
+func TestLoadJiraAbsent(t *testing.T) {
+	stubRegistry(t, "github")
+	path := writeConfig(t, `
+db_path: x
+connections:
+  - id: a
+    type: github
+    token: t
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Jira != nil {
+		t.Errorf("Jira = %+v, want nil when block absent", cfg.Jira)
+	}
+}
+
+func TestLoadJiraComplete(t *testing.T) {
+	stubRegistry(t, "github")
+	path := writeConfig(t, `
+db_path: x
+connections:
+  - id: a
+    type: github
+    token: t
+jira:
+  base_url: https://example.atlassian.net
+  email: user@example.com
+  api_token: secret
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Jira == nil {
+		t.Fatal("Jira is nil, want config")
+	}
+	if cfg.Jira.BaseURL != "https://example.atlassian.net" {
+		t.Errorf("BaseURL = %q", cfg.Jira.BaseURL)
+	}
+	if cfg.Jira.Email != "user@example.com" {
+		t.Errorf("Email = %q", cfg.Jira.Email)
+	}
+	if cfg.Jira.APIToken != "secret" {
+		t.Errorf("APIToken = %q", cfg.Jira.APIToken)
+	}
+}
+
+func TestLoadJiraPartialErrors(t *testing.T) {
+	stubRegistry(t, "github")
+	base := `
+db_path: x
+connections:
+  - id: a
+    type: github
+    token: t
+`
+	cases := map[string]string{
+		"missing base_url": base + `jira:
+  email: u@e.com
+  api_token: t
+`,
+		"missing email": base + `jira:
+  base_url: https://x.atlassian.net
+  api_token: t
+`,
+		"missing api_token": base + `jira:
+  base_url: https://x.atlassian.net
+  email: u@e.com
+`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := writeConfig(t, body)
+			if _, err := Load(path); err == nil {
+				t.Fatalf("Load(%s): want error, got nil", name)
+			}
+		})
+	}
+}
+
+func TestLoadJiraUnknownKey(t *testing.T) {
+	stubRegistry(t, "github")
+	path := writeConfig(t, `
+db_path: x
+connections:
+  - id: a
+    type: github
+    token: t
+jira:
+  base_url: https://x.atlassian.net
+  email: u@e.com
+  api_token: t
+  unknown_field: oops
+`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load with unknown jira key: want error")
+	}
+}
+
 func TestDefaultPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/custom/xdg")
 	if got := DefaultPath(); got != "/custom/xdg/devpit/config.yaml" {

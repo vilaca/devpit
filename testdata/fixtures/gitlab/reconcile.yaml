@@ -83,6 +83,37 @@ interactions:
       ]
 - id: 2
   request:
+    method: GET
+    url: https://gitlab.com/api/v4/merge_requests?scope=all&reviewer_username=octocat&state=opened&per_page=100
+    headers: {}
+    body: ""
+  response:
+    status: 200 OK
+    code: 200
+    headers:
+      Content-Type:
+      - application/json
+    body: |
+      [
+        {
+          "iid": 9,
+          "project_id": 12,
+          "title": "Reviewer-only MR",
+          "web_url": "https://gitlab.com/acme/api/-/merge_requests/9",
+          "state": "opened",
+          "draft": false,
+          "detailed_merge_status": "mergeable",
+          "has_conflicts": false,
+          "blocking_discussions_resolved": true,
+          "updated_at": "2026-07-08T07:00:00Z",
+          "author": {"username": "jdoe"},
+          "assignees": [],
+          "reviewers": [{"username": "octocat"}],
+          "references": {"full": "acme/api!9"}
+        }
+      ]
+- id: 3
+  request:
     method: POST
     url: https://gitlab.com/api/graphql
     headers: {}

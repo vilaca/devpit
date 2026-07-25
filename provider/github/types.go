@@ -28,6 +28,7 @@ type ghPull struct {
 	Merged             bool     `json:"merged"`
 	MergeableState     string   `json:"mergeable_state"`
 	UpdatedAt          string   `json:"updated_at"`
+	Body               string   `json:"body"`
 	User               ghUser   `json:"user"`
 	Assignees          []ghUser `json:"assignees"`
 	RequestedReviewers []ghUser `json:"requested_reviewers"`
@@ -36,6 +37,9 @@ type ghPull struct {
 			FullName string `json:"full_name"`
 		} `json:"repo"`
 	} `json:"base"`
+	Head struct {
+		Ref string `json:"ref"`
+	} `json:"head"`
 }
 
 // ghSearchItem is one row of GET /search/issues; PRs carry pull_request.

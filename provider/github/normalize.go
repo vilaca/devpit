@@ -111,6 +111,7 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 		MergeConflict:     pr.MergeableState == msDirty,
 		NeedsRebase:       pr.MergeableState == msBehind,
 		ProviderUpdatedAt: pr.UpdatedAt,
+		TicketKeys:        sdk.ExtractTicketKeys(pr.Title, pr.Head.Ref, pr.Body),
 	}
 
 	nid := nativeID(repo, pr.Number)
@@ -139,6 +140,7 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 		MyRoles:           roles,
 		Gate:              gateUnknown,
 		ProviderUpdatedAt: it.UpdatedAt,
+		TicketKeys:        sdk.ExtractTicketKeys(it.Title),
 	}
 	return sdk.Event{
 		ObjectType: objectType,

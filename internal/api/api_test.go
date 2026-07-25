@@ -158,6 +158,95 @@ func TestAttentionUnknownStateFilterReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestAttentionJiraDecoration(t *testing.T) {
+	db := openTestDB(t)
+	facts := openFacts([]string{"author"}, "", "ready")
+	facts.TicketKeys = []string{"RPC-1", "RPC-2"}
+	writeTestEvent(t, db, "acme/api#1", facts)
+
+	// Seed RPC-1 with status, RPC-2 without.
+	now := time.Now()
+	if err := db.UpsertJiraTicket(context.Background(), storage.JiraTicket{
+		Key: "RPC-1", Status: "In Review", URL: "https://example.atlassian.net/browse/RPC-1", FetchedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertJiraTicket: %v", err)
+	}
+
+	s := newTestServer(t, db)
+	w := do(t, s, "GET", "/attention")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var resp attentionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(resp.Items))
+	}
+	item := resp.Items[0]
+	if item.Jira == nil {
+		t.Fatal("Jira should be set when ticket has status")
+	}
+	if item.Jira.Key != "RPC-1" {
+		t.Errorf("Jira.Key = %q, want RPC-1", item.Jira.Key)
+	}
+	if item.Jira.Status != "In Review" {
+		t.Errorf("Jira.Status = %q, want In Review", item.Jira.Status)
+	}
+}
+
+func TestAttentionJiraAbsentWhenNoStatus(t *testing.T) {
+	db := openTestDB(t)
+	facts := openFacts([]string{"author"}, "", "ready")
+	facts.TicketKeys = []string{"RPC-99"}
+	writeTestEvent(t, db, "acme/api#2", facts)
+
+	// No row in jira_tickets for RPC-99.
+	s := newTestServer(t, db)
+	w := do(t, s, "GET", "/attention")
+	var resp attentionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(resp.Items))
+	}
+	if resp.Items[0].Jira != nil {
+		t.Errorf("Jira = %+v, want nil when no row", resp.Items[0].Jira)
+	}
+}
+
+func TestAttentionJiraFirstKeyWithData(t *testing.T) {
+	db := openTestDB(t)
+	facts := openFacts([]string{"author"}, "", "ready")
+	facts.TicketKeys = []string{"NO-STATUS", "HAS-STATUS"}
+	writeTestEvent(t, db, "acme/api#3", facts)
+
+	now := time.Now()
+	// NO-STATUS has an empty status (row exists but blank).
+	if err := db.UpsertJiraTicket(context.Background(), storage.JiraTicket{
+		Key: "NO-STATUS", Status: "", FetchedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertJiraTicket: %v", err)
+	}
+	if err := db.UpsertJiraTicket(context.Background(), storage.JiraTicket{
+		Key: "HAS-STATUS", Status: "Done", URL: "https://x/browse/HAS-STATUS", FetchedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertJiraTicket: %v", err)
+	}
+
+	s := newTestServer(t, db)
+	w := do(t, s, "GET", "/attention")
+	var resp attentionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Items[0].Jira == nil || resp.Items[0].Jira.Key != "HAS-STATUS" {
+		t.Errorf("Jira = %+v, want key=HAS-STATUS (first with non-empty status)", resp.Items[0].Jira)
+	}
+}
+
 // --- GET /connections ---
 
 func TestConnectionsReturnsAll(t *testing.T) {

@@ -118,18 +118,19 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 	}
 
 	payload := sdk.ItemObservedPayload{
-		Title:                 mr.Title,
-		URL:                   mr.WebURL,
-		Repo:                  repoFromRef(mr.References.Full),
-		State:                 state,
-		Draft:                 mr.Draft,
-		Author:                mr.Author.Username,
-		MyRoles:               roles,
-		Gate:                  gate,
-		GateDetail:            mr.DetailedMergeStatus,
-		FailingChecks:         mr.DetailedMergeStatus == dmsCIMustPass, // GraphQL join refines via headPipeline.status
-		MergeConflict:         mr.HasConflicts,
-		NeedsRebase:           mr.DetailedMergeStatus == "need_rebase", // GraphQL join refines via shouldBeRebased
+		Title:         mr.Title,
+		URL:           mr.WebURL,
+		Repo:          repoFromRef(mr.References.Full),
+		State:         state,
+		Draft:         mr.Draft,
+		Author:        mr.Author.Username,
+		MyRoles:       roles,
+		Gate:          gate,
+		GateDetail:    mr.DetailedMergeStatus,
+		FailingChecks: mr.DetailedMergeStatus == dmsCIMustPass, // GraphQL join refines via headPipeline.status
+		MergeConflict: mr.HasConflicts,
+		// GraphQL join ORs in shouldBeRebased + divergedFromTargetBranch.
+		NeedsRebase:           mr.DetailedMergeStatus == "need_rebase",
 		NeedsApproval:         mr.DetailedMergeStatus == "not_approved",
 		UnresolvedDiscussions: unresolvedDiscussions,
 		PolicyDenied:          isPolicyDenied(mr.DetailedMergeStatus),

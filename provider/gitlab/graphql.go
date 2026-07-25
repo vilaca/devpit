@@ -13,8 +13,9 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
-const mrQueryFmt = `a%d:project(fullPath:"%s")` +
-	`{mergeRequest(iid:"%d"){approved shouldBeRebased headPipeline{status} approvedBy{count nodes{username}}}}`
+const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
+	`approved shouldBeRebased divergedFromTargetBranch ` +
+	`headPipeline{status} approvedBy{count nodes{username}}}}`
 
 // doGraphQL POSTs a GraphQL query to the GitLab GraphQL API and returns the "data" map.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
@@ -68,6 +69,7 @@ type glPipeline struct {
 type glGraphQLMR struct {
 	Approved     bool        `json:"approved"`
 	ShouldRebase bool        `json:"shouldBeRebased"`
+	Diverged     bool        `json:"divergedFromTargetBranch"`
 	HeadPipeline *glPipeline `json:"headPipeline"`
 	ApprovedBy   struct {
 		Count int `json:"count"`
@@ -169,7 +171,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk.ItemObservedPayload {
 	if !pl.Draft {
 		pl.NeedsApproval = !mr.Approved
-		pl.NeedsRebase = mr.ShouldRebase
+		pl.NeedsRebase = pl.NeedsRebase || mr.ShouldRebase || mr.Diverged
 		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
 		pl.ChecksRunning = isPipelineRunning(mr.HeadPipeline)
 		pl.ApprovalsCount = mr.ApprovedBy.Count

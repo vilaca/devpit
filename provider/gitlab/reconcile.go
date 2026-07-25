@@ -25,6 +25,42 @@ func (p *Provider) reconcileQueries() []string {
 
 func cursorRecQuery(q string) string { return "gl.rec.updated_after." + q }
 
+// fetchScopeMRs fetches all opened MRs for one reconcile scope, following
+// GitLab's X-Next-Page cursor so a multi-page query is not silently truncated
+// to the first 100 MRs. It emits an item.observed event per MR not already in
+// seen (dedupe across scopes) and returns those events plus the latest
+// rate-remaining header value observed.
+func (p *Provider) fetchScopeMRs(ctx context.Context, base string, seen map[string]bool) ([]sdk.Event, *int, error) {
+	var events []sdk.Event
+	var rate *int
+	for u := base; u != ""; {
+		resp, err := p.do(ctx, u)
+		if err != nil {
+			return nil, nil, err
+		}
+		if r := rateRemaining(resp.Header); r != nil {
+			rate = r
+		}
+		next := resp.Header.Get("X-Next-Page")
+		var mrs []glMergeRequest
+		if err := decodeJSON(resp, &mrs); err != nil {
+			return nil, nil, err
+		}
+		for _, mr := range mrs {
+			if seen[mr.WebURL] {
+				continue
+			}
+			seen[mr.WebURL] = true
+			events = append(events, p.observedFromMR(mr))
+		}
+		if next == "" {
+			break
+		}
+		u = base + "&page=" + next
+	}
+	return events, rate, nil
+}
+
 // Reconcile implements sdk.Provider: it sweeps the user's involved merge
 // requests across the reconcile queries and emits item.observed snapshots.
 func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
@@ -47,32 +83,13 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 		if updatedAfter != "" {
 			base += "&updated_after=" + url.QueryEscape(updatedAfter)
 		}
-		// Follow GitLab's X-Next-Page cursor so a query with more than one page
-		// is not silently truncated to the first 100 MRs.
-		for u := base; u != ""; {
-			resp, err := p.do(ctx, u)
-			if err != nil {
-				return sdk.PollResult{}, err
-			}
-			if r := rateRemaining(resp.Header); r != nil {
-				rate = r
-			}
-			next := resp.Header.Get("X-Next-Page")
-			var mrs []glMergeRequest
-			if err := decodeJSON(resp, &mrs); err != nil {
-				return sdk.PollResult{}, err
-			}
-			for _, mr := range mrs {
-				if seen[mr.WebURL] {
-					continue
-				}
-				seen[mr.WebURL] = true
-				events = append(events, p.observedFromMR(mr))
-			}
-			if next == "" {
-				break
-			}
-			u = base + "&page=" + next
+		scopeEvents, scopeRate, err := p.fetchScopeMRs(ctx, base, seen)
+		if err != nil {
+			return sdk.PollResult{}, err
+		}
+		events = append(events, scopeEvents...)
+		if scopeRate != nil {
+			rate = scopeRate
 		}
 	}
 

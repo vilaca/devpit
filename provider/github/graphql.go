@@ -16,6 +16,11 @@ import (
 const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
 	`{pullRequest(number:%d){reviewDecision latestReviews{nodes{state author{login}}} autoMergeRequest{enabledAt}}}`
 
+const (
+	ghReviewStateApproved = "APPROVED"
+	normalizedApproved    = "approved"
+)
+
 type prItem struct {
 	evIdx  int
 	owner  string
@@ -65,14 +70,17 @@ func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, result
 		count := 0
 		var myReviewState string
 		for _, r := range node.PullRequest.LatestReviews.Nodes {
-			if r.State == "APPROVED" {
+			if r.State == ghReviewStateApproved {
 				count++
 			}
 			if r.Author.Login == handle {
 				myReviewState = ghReviewState(r.State)
 			}
 		}
-		results[it.evIdx] = ghResult{node.PullRequest.ReviewDecision, count, node.PullRequest.AutoMergeRequest != nil, myReviewState}
+		results[it.evIdx] = ghResult{
+			node.PullRequest.ReviewDecision, count,
+			node.PullRequest.AutoMergeRequest != nil, myReviewState,
+		}
 	}
 }
 
@@ -81,8 +89,8 @@ func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, result
 // leave it empty.
 func ghReviewState(state string) string {
 	switch state {
-	case "APPROVED":
-		return "approved"
+	case ghReviewStateApproved:
+		return normalizedApproved
 	case "CHANGES_REQUESTED":
 		return "changes_requested"
 	case "COMMENTED":

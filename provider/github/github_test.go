@@ -384,7 +384,7 @@ func TestNormalizeMarkers(t *testing.T) {
 
 func TestGHReviewState(t *testing.T) {
 	for in, want := range map[string]string{
-		"APPROVED":          "approved",
+		ghReviewStateApproved: normalizedApproved,
 		"CHANGES_REQUESTED": "changes_requested",
 		"COMMENTED":         "reviewed",
 		"DISMISSED":         "",
@@ -412,7 +412,7 @@ func TestMergeGHBatchResultsMyReviewState(t *testing.T) {
 	if !ok {
 		t.Fatal("missing result for evIdx 5")
 	}
-	if r.myReviewState != "approved" {
+	if r.myReviewState != normalizedApproved {
 		t.Errorf("myReviewState = %q, want approved", r.myReviewState)
 	}
 	if r.approvalsCount != 1 {

@@ -498,7 +498,9 @@ func TestListReadsFoldsAndPins(t *testing.T) {
 		t.Errorf("pinned ready_to_merge should lead; got %q flagged=%v", items[0].NativeID, items[0].Flagged)
 	}
 	if items[1].NativeID != "acme/api#nr" || items[1].Flagged {
-		t.Errorf("auto-ranked review_requested should follow unflagged; got %q flagged=%v", items[1].NativeID, items[1].Flagged)
+		t.Errorf(
+			"auto-ranked review_requested should follow unflagged; got %q flagged=%v",
+			items[1].NativeID, items[1].Flagged)
 	}
 }
 

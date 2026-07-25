@@ -165,6 +165,7 @@ type ItemObservedPayload struct {
 	ChecksRunning         bool     `json:"checks_running"`
 	ApprovalsCount        int      `json:"approvals_count,omitempty"` // -1=unknown, 0=none/hide, N=show
 	ProviderUpdatedAt     string   `json:"provider_updated_at"`
+	TicketKeys            []string `json:"ticket_keys,omitempty"`
 }
 
 // item.removed carries no payload (Payload: nil).

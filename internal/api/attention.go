@@ -1,16 +1,25 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"slices"
 	"time"
 
 	"github.com/vilaca/devpit/internal/attention"
+	"github.com/vilaca/devpit/internal/storage"
 )
 
 // attentionResponse is the GET /attention response envelope.
 type attentionResponse struct {
 	Items []attentionItem `json:"items"`
+}
+
+// jiraRef is the optional Jira context embedded in an attentionItem.
+type jiraRef struct {
+	Key    string `json:"key"`
+	Status string `json:"status"`
+	URL    string `json:"url"`
 }
 
 // attentionItem is one entry in the GET /attention response.
@@ -44,16 +53,20 @@ type attentionItem struct {
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"`
+	Jira                  *jiraRef             `json:"jira,omitempty"`
 }
 
 // handleAttention serves GET /attention. The optional ?state= query parameter
 // filters the list to items whose States slice contains the given state value.
 func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
-	items, err := attention.List(r.Context(), s.db, s.connectionIDs(), time.Now(), s.staleThres, s.oldThres)
+	ctx := r.Context()
+	items, err := attention.List(ctx, s.db, s.connectionIDs(), time.Now(), s.staleThres, s.oldThres)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to load attention list")
 		return
 	}
+
+	jiraTickets := s.fetchJiraTickets(ctx, items)
 
 	stateFilter := attention.State(r.URL.Query().Get("state"))
 
@@ -62,10 +75,33 @@ func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
 		if stateFilter != "" && !hasState(it, stateFilter) {
 			continue
 		}
-		result = append(result, toAttentionItem(it, s.connByID[it.ConnectionID]))
+		result = append(result, toAttentionItem(it, s.connByID[it.ConnectionID], jiraTickets))
 	}
 
 	writeJSON(w, http.StatusOK, attentionResponse{Items: result})
+}
+
+// fetchJiraTickets collects the union of TicketKeys across all items and does
+// a single bulk read from jira_tickets. Returns nil on error or no keys.
+func (s *Server) fetchJiraTickets(ctx context.Context, items []attention.WorkItem) map[string]storage.JiraTicket {
+	seen := map[string]bool{}
+	var keys []string
+	for _, it := range items {
+		for _, k := range it.TicketKeys {
+			if !seen[k] {
+				seen[k] = true
+				keys = append(keys, k)
+			}
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	tickets, err := s.db.GetJiraTickets(ctx, keys)
+	if err != nil {
+		return nil
+	}
+	return tickets
 }
 
 // hasState reports whether item carries the given state.
@@ -74,8 +110,11 @@ func hasState(it attention.WorkItem, state attention.State) bool {
 }
 
 // toAttentionItem maps a WorkItem and its ConnectionMeta to the wire shape.
-func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
-	return attentionItem{
+// jiraTickets is the bulk-fetched jira_tickets cache (may be nil).
+func toAttentionItem(
+	it attention.WorkItem, meta ConnectionMeta, jiraTickets map[string]storage.JiraTicket,
+) attentionItem {
+	ai := attentionItem{
 		ID:                    it.ID,
 		ConnectionID:          it.ConnectionID,
 		ConnectionLabel:       meta.Label,
@@ -106,4 +145,12 @@ func toAttentionItem(it attention.WorkItem, meta ConnectionMeta) attentionItem {
 		FlaggedAt:             it.FlaggedAt,
 		Since:                 it.Since,
 	}
+	// Decorate with the first ticket key that has a cached row with a non-empty status.
+	for _, key := range it.TicketKeys {
+		if t, ok := jiraTickets[key]; ok && t.Status != "" {
+			ai.Jira = &jiraRef{Key: key, Status: t.Status, URL: t.URL}
+			break
+		}
+	}
+	return ai
 }

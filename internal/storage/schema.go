@@ -45,4 +45,14 @@ var migrations = []string{
 		item_id    TEXT PRIMARY KEY,
 		flagged_at TEXT NOT NULL
 	);`,
+
+	`CREATE TABLE jira_tickets (
+		key         TEXT PRIMARY KEY,
+		status      TEXT NOT NULL DEFAULT '',
+		summary     TEXT NOT NULL DEFAULT '',
+		assignee    TEXT NOT NULL DEFAULT '',
+		url         TEXT NOT NULL DEFAULT '',
+		fetched_at  TEXT NOT NULL,
+		fetch_error TEXT
+	);`,
 }

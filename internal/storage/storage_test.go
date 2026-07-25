@@ -473,6 +473,148 @@ func TestLastSyncedAt(t *testing.T) {
 	}
 }
 
+func TestMigrationUpgrade(t *testing.T) {
+	// Open creates a fresh DB at the latest schema version; verify the
+	// jira_tickets table (migration 2) exists and accepts a round-trip.
+	db := openTest(t)
+	ctx := context.Background()
+
+	var version int
+	if err := db.write.QueryRowContext(ctx, `SELECT version FROM schema_version`).Scan(&version); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if version != len(migrations) {
+		t.Fatalf("schema_version = %d, want %d", version, len(migrations))
+	}
+
+	// Upsert then read back.
+	now := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	tk := JiraTicket{Key: "RPC-1", Status: "In Review", Summary: "Fix it", Assignee: "bob",
+		URL: "https://example.atlassian.net/browse/RPC-1", FetchedAt: now}
+	if err := db.UpsertJiraTicket(ctx, tk); err != nil {
+		t.Fatalf("UpsertJiraTicket: %v", err)
+	}
+	got, err := db.GetJiraTickets(ctx, []string{"RPC-1"})
+	if err != nil {
+		t.Fatalf("GetJiraTickets: %v", err)
+	}
+	row, ok := got["RPC-1"]
+	if !ok {
+		t.Fatal("RPC-1 missing from GetJiraTickets result")
+	}
+	if row.Status != "In Review" || row.Summary != "Fix it" || row.Assignee != "bob" {
+		t.Errorf("row = %+v", row)
+	}
+	if !row.FetchedAt.Equal(now) {
+		t.Errorf("FetchedAt = %v, want %v", row.FetchedAt, now)
+	}
+	if row.FetchError != nil {
+		t.Errorf("FetchError = %v, want nil", row.FetchError)
+	}
+}
+
+func TestJiraTicketUpsertStaleBeatsBlank(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+
+	// Insert a good row.
+	good := JiraTicket{Key: "RPC-2", Status: "Done", Summary: "All fixed",
+		URL: "https://x/browse/RPC-2", FetchedAt: now}
+	if err := db.UpsertJiraTicket(ctx, good); err != nil {
+		t.Fatalf("initial upsert: %v", err)
+	}
+
+	// Upsert with an error — stale status/summary must be preserved.
+	errStr := "status 500"
+	bad := JiraTicket{Key: "RPC-2", FetchedAt: now.Add(time.Minute), FetchError: &errStr}
+	if err := db.UpsertJiraTicket(ctx, bad); err != nil {
+		t.Fatalf("error upsert: %v", err)
+	}
+	got, err := db.GetJiraTickets(ctx, []string{"RPC-2"})
+	if err != nil {
+		t.Fatalf("GetJiraTickets: %v", err)
+	}
+	row := got["RPC-2"]
+	if row.Status != "Done" {
+		t.Errorf("status = %q, want %q (stale beats blank)", row.Status, "Done")
+	}
+	if row.FetchError == nil || *row.FetchError != errStr {
+		t.Errorf("FetchError = %v, want %q", row.FetchError, errStr)
+	}
+}
+
+func TestJiraTicketPrune(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+
+	for _, key := range []string{"A-1", "B-2", "C-3"} {
+		if err := db.UpsertJiraTicket(ctx, JiraTicket{Key: key, FetchedAt: now}); err != nil {
+			t.Fatalf("upsert %s: %v", key, err)
+		}
+	}
+
+	// Prune, keeping only A-1 and B-2.
+	if err := db.PruneJiraTickets(ctx, []string{"A-1", "B-2"}); err != nil {
+		t.Fatalf("PruneJiraTickets: %v", err)
+	}
+	got, err := db.GetJiraTickets(ctx, []string{"A-1", "B-2", "C-3"})
+	if err != nil {
+		t.Fatalf("GetJiraTickets after prune: %v", err)
+	}
+	if _, ok := got["C-3"]; ok {
+		t.Error("C-3 should have been pruned")
+	}
+	if _, ok := got["A-1"]; !ok {
+		t.Error("A-1 should survive prune")
+	}
+}
+
+func TestAllOpenTicketKeys(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+
+	// Write two item.observed events: one open with keys, one closed.
+	events := []sdk.Event{
+		{
+			ObjectType: "merge_request", NativeID: "conn1/api#1",
+			EventType: "item.observed", DedupeKey: "k1",
+			Payload: sdk.ItemObservedPayload{
+				State: "open", Title: "Fix", TicketKeys: []string{"RPC-1", "RPC-2"},
+			},
+		},
+		{
+			ObjectType: "merge_request", NativeID: "conn1/api#2",
+			EventType: "item.observed", DedupeKey: "k2",
+			Payload: sdk.ItemObservedPayload{State: "merged", TicketKeys: []string{"RPC-9"}},
+		},
+		{
+			ObjectType: "merge_request", NativeID: "conn1/api#3",
+			EventType: "item.observed", DedupeKey: "k3",
+			Payload: sdk.ItemObservedPayload{State: "open"},
+		},
+	}
+	if _, err := db.WriteEvents(ctx, "conn1", events); err != nil {
+		t.Fatalf("WriteEvents: %v", err)
+	}
+
+	keys, err := db.AllOpenTicketKeys(ctx)
+	if err != nil {
+		t.Fatalf("AllOpenTicketKeys: %v", err)
+	}
+	got := map[string]bool{}
+	for _, k := range keys {
+		got[k] = true
+	}
+	if !got["RPC-1"] || !got["RPC-2"] {
+		t.Errorf("keys = %v, want RPC-1 and RPC-2", keys)
+	}
+	if got["RPC-9"] {
+		t.Error("RPC-9 from merged item should not appear")
+	}
+}
+
 func TestHandleNextOrdering(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()

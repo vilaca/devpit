@@ -17,7 +17,22 @@ const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
 	`approved shouldBeRebased divergedFromTargetBranch ` +
 	`headPipeline{status} approvedBy{count nodes{username}}}}`
 
+// graphQLBatchSize is the max MRs per GraphQL query. Each MR node costs ≈14
+// complexity; GitLab's ceiling is 250. 12 × 14 = 168, leaving headroom for
+// extra fields and stricter instances.
+const graphQLBatchSize = 12
+
+// graphQLError is returned by doGraphQL when the server responds HTTP 200 but
+// includes a non-empty errors array with null data (e.g. complexity-ceiling rejection).
+type graphQLError struct {
+	msg string
+}
+
+func (e *graphQLError) Error() string { return "gitlab graphql: " + e.msg }
+
 // doGraphQL POSTs a GraphQL query to the GitLab GraphQL API and returns the "data" map.
+// Returns *graphQLError when the server returns HTTP 200 with a non-empty errors field
+// and null data — this is how GitLab signals a complexity-ceiling rejection.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
 	body, _ := json.Marshal(struct { //nolint:errchkjson // struct has no interface fields; Marshal cannot fail
 		Query string `json:"query"`
@@ -58,6 +73,19 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 	if err := decodeJSON(resp, &result); err != nil {
 		return nil, err
 	}
+	// GitLab returns HTTP 200 with data:null and a non-empty errors array when the
+	// query exceeds the complexity ceiling. Surface this as an error so callers can
+	// record a degraded outcome instead of silently treating all nodes as missing.
+	if result.Data == nil && len(result.Errors) > 0 {
+		var errs []struct {
+			Message string `json:"message"`
+		}
+		msg := "server returned errors with no data"
+		if json.Unmarshal(result.Errors, &errs) == nil && len(errs) > 0 {
+			msg = errs[0].Message
+		}
+		return nil, &graphQLError{msg: msg}
+	}
 	return result.Data, nil
 }
 
@@ -80,10 +108,12 @@ type glGraphQLMR struct {
 }
 
 // graphqlJoin enriches item.observed events with GitLab GraphQL data.
-// On failure it logs and returns original events (graceful degradation).
+// Returns the enriched events and a degraded flag (true when at least one batch
+// failed). On failure it logs and falls back to last-known enrichment from
+// openSnapshots (B3: fail closed), so good data is never downgraded to nil.
 // Draft suppression: all GraphQL-joined booleans (NeedsApproval, NeedsRebase, FailingChecks)
 // are set to false for draft MRs.
-func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Event {
+func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool) {
 	type mrItem struct {
 		evIdx    int
 		fullPath string
@@ -107,14 +137,14 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		items = append(items, mrItem{i, fp, iid, pl.Draft})
 	}
 	if len(items) == 0 {
-		return events
+		return events, false
 	}
 
 	gqlResults := make(map[int]glGraphQLMR, len(items))
+	var degraded bool
 
-	const batchSize = 30
-	for start := 0; start < len(items); start += batchSize {
-		batch := items[start:min(start+batchSize, len(items))]
+	for start := 0; start < len(items); start += graphQLBatchSize {
+		batch := items[start:min(start+graphQLBatchSize, len(items))]
 
 		var q strings.Builder
 		q.WriteString("query{")
@@ -126,6 +156,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		data, err := p.doGraphQL(ctx, q.String())
 		if err != nil {
 			log.Printf("devpit: gitlab graphql join degraded: %v", err)
+			degraded = true
 			continue
 		}
 
@@ -143,24 +174,43 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		}
 	}
 
-	if len(gqlResults) == 0 {
-		return events
+	if len(gqlResults) == 0 && !degraded {
+		return events, false
 	}
 
 	out := make([]sdk.Event, len(events))
 	copy(out, events)
-	for evIdx, mr := range gqlResults {
-		ev := out[evIdx]
+	for _, it := range items {
+		ev := out[it.evIdx]
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 		if !ok {
 			continue
 		}
-		pl = applyGraphQL(pl, mr, p.handle)
+		if mr, enriched := gqlResults[it.evIdx]; enriched {
+			pl = applyGraphQL(pl, mr, p.handle)
+		} else if snap, ok := p.openSnapshots[ev.NativeID]; ok {
+			// Batch for this item degraded: carry forward the last-known GraphQL-
+			// enriched fields so a transient failure never downgrades good data.
+			pl = carryForwardEnrichment(pl, snap)
+		}
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
-		out[evIdx] = ev
+		out[it.evIdx] = ev
 	}
-	return out
+	return out, degraded
+}
+
+// carryForwardEnrichment merges the GraphQL-sourced fields from a prior snapshot
+// onto pl so a failed batch does not zero out previously-known approval state.
+// Boolean flags use OR so a known-bad state is never cleared by a stale snapshot.
+func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPayload) sdk.ItemObservedPayload {
+	pl.ApprovalsCount = snap.ApprovalsCount
+	pl.MyReviewState = snap.MyReviewState
+	pl.NeedsApproval = pl.NeedsApproval || snap.NeedsApproval
+	pl.FailingChecks = pl.FailingChecks || snap.FailingChecks
+	pl.ChecksRunning = pl.ChecksRunning || snap.ChecksRunning
+	pl.NeedsRebase = pl.NeedsRebase || snap.NeedsRebase
+	return pl
 }
 
 // applyGraphQL merges the GraphQL-derived booleans onto a payload.
@@ -185,11 +235,11 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 	return pl
 }
 
-// openSetRefresh queries the three volatile GraphQL booleans for cached open
-// items not already covered by todo-driven events, merges onto the cached
-// payload, and appends item.observed events to events. On GraphQL failure it
-// logs to sync_log and skips the batch — the cycle still succeeds.
-func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, covered map[string]bool) []sdk.Event {
+// openSetRefresh queries the volatile GraphQL fields for cached open items not
+// already covered by todo-driven events, merges onto the cached payload, and
+// appends item.observed events. On GraphQL failure it logs and skips the batch
+// — the cycle still succeeds. Returns events and a degraded flag.
+func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, covered map[string]bool) ([]sdk.Event, bool) {
 	type openItem struct {
 		nativeID string
 		fullPath string
@@ -209,12 +259,12 @@ func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, cover
 		openItems = append(openItems, openItem{nid, fp, iid, pl})
 	}
 	if len(openItems) == 0 {
-		return events
+		return events, false
 	}
 
-	const batchSize = 30
-	for start := 0; start < len(openItems); start += batchSize {
-		batch := openItems[start:min(start+batchSize, len(openItems))]
+	var degraded bool
+	for start := 0; start < len(openItems); start += graphQLBatchSize {
+		batch := openItems[start:min(start+graphQLBatchSize, len(openItems))]
 
 		var q strings.Builder
 		q.WriteString("query{")
@@ -226,6 +276,7 @@ func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, cover
 		data, err := p.doGraphQL(ctx, q.String())
 		if err != nil {
 			log.Printf("devpit: gitlab graphql open-set refresh degraded: %v", err)
+			degraded = true
 			continue
 		}
 
@@ -252,7 +303,7 @@ func (p *Provider) openSetRefresh(ctx context.Context, events []sdk.Event, cover
 			})
 		}
 	}
-	return events
+	return events, degraded
 }
 
 // isPipelineRed reports whether the pipeline status represents a failure.

@@ -40,7 +40,8 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 	var events []sdk.Event
 	var rate *int
 
-	for _, q := range p.reconcileQueries() {
+	queries := p.reconcileQueries()
+	for _, q := range queries {
 		updatedAfter := state[cursorRecQuery(q)]
 		base := p.apiBase + "/merge_requests?" + q + "&state=opened&per_page=100"
 		if updatedAfter != "" {
@@ -73,10 +74,22 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 			}
 			u = base + "&page=" + next
 		}
-		out[cursorRecQuery(q)] = now
 	}
 
-	events = p.graphqlJoin(ctx, events)
+	var degraded bool
+	events, degraded = p.graphqlJoin(ctx, events)
+
+	// Advance the per-scope cursors only when this cycle's enrichment succeeded.
+	// graphqlJoin is a single cross-scope batch, so a degraded join means no
+	// scope's items were reliably enriched — hold every cursor at its prior value
+	// (out starts as a copy of state) so the next reconcile re-fetches and retries.
+	// Advancing here would assert those items are current when they were never
+	// enriched, locking in stale approval/pipeline/rebase state.
+	if !degraded {
+		for _, q := range queries {
+			out[cursorRecQuery(q)] = now
+		}
+	}
 
 	// Merge the freshly-joined snapshots into the open-set cache so FastPoll's
 	// open-set refresh always starts from a full REST+GraphQL payload.
@@ -93,5 +106,6 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 		State:         out,
 		RateRemaining: rate,
 		ItemsChanged:  len(events),
+		Degraded:      degraded,
 	}, nil
 }

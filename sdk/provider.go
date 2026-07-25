@@ -13,7 +13,7 @@ import (
 // ConnectionConfig is the resolved, validated config for one connection.
 type ConnectionConfig struct {
 	ID      string // opaque stable ID; matches connection_id in the DB
-	Type    string // "github" | "gitlab"
+	Type    string // "github" | "gitlab" | "forgejo" | "gitea" | "codeberg"
 	BaseURL string // e.g. "https://github.com"; pre-filled for hosted
 	Token   string // plaintext PAT
 	Label   string // user-visible: "Personal", "Acme"

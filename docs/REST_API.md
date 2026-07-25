@@ -91,6 +91,12 @@ Each item carries:
 - `since` — map from tag wire name to RFC 3339 onset time; only active tags
   appear. Onset = start of latest contiguous run of snapshots where the
   condition holds. `mentioned` onset = earliest mention signal time.
+- `jira` — optional; present when the item's first recognized Jira ticket key
+  has a cached row with a non-empty status. Shape:
+  `{ key: string, status: string, url: string }`.
+  Omitted when no Jira config is present, no ticket key was found, or the ticket
+  hasn't been fetched yet. The UI renders `[<status>]` as a link prefix on the
+  title (ADR-0022).
 
 ## `GET /connections`
 

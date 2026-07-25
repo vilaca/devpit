@@ -27,6 +27,7 @@ components:
   storage: { in: internal/storage }
   api: { in: internal/api }
   attention: { in: internal/attention }
+  jira: { in: internal/jira }
   web: { in: internal/web }
   providerGithub: { in: provider/github }
   providerGitlab: { in: provider/gitlab }
@@ -44,6 +45,8 @@ deps:
     mayDependOn: [sdk, storage, attention, web]
   engine:
     mayDependOn: [sdk, storage]
+  jira:
+    mayDependOn: [storage]
   # Providers depend on sdk only — not each other, and not any shared provider/*
   # helper. Shared-looking code is duplicated per provider by design so a change
   # to one cannot regress another (ADR-0003); any provider/shared package would
@@ -53,4 +56,4 @@ deps:
   providerGitlab:
     mayDependOn: [sdk]
   cmd:
-    mayDependOn: [sdk, config, engine, storage, api, attention, web, providerGithub, providerGitlab]
+    mayDependOn: [sdk, config, engine, storage, api, attention, jira, web, providerGithub, providerGitlab]

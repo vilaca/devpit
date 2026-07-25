@@ -136,6 +136,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		PolicyDenied:          isPolicyDenied(mr.DetailedMergeStatus),
 		AutoMergeArmed:        mr.MergeWhenPipelineSucceeds, // REST list field; ChecksRunning is refined by the GraphQL join
 		ProviderUpdatedAt:     mr.UpdatedAt,
+		TicketKeys:            sdk.ExtractTicketKeys(mr.Title, mr.SourceBranch, mr.Description),
 	}
 
 	return sdk.Event{

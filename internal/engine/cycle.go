@@ -35,6 +35,7 @@ func (o operation) String() string {
 // extending the set needs no migration.
 const (
 	outcomeOK          = "ok"
+	outcomeDegraded    = "degraded" // cycle succeeded but enrichment partially failed
 	outcomeAuth        = "auth"
 	outcomeRateLimited = "rate_limited"
 	outcomeNetwork     = "network"
@@ -116,11 +117,15 @@ func (c *conn) cycle(ctx context.Context, op operation, startup bool) {
 	}
 
 	c.bo.reset()
+	outcome := outcomeOK
+	if result.Degraded {
+		outcome = outcomeDegraded
+	}
 	c.writeLog(storage.SyncLogEntry{
 		Ts:            time.Now(),
 		ConnectionID:  c.cfg.ID,
 		Operation:     op.String(),
-		Outcome:       outcomeOK,
+		Outcome:       outcome,
 		ItemsChanged:  inserted,
 		RateRemaining: result.RateRemaining,
 	})

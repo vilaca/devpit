@@ -75,7 +75,8 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		}
 	}
 
-	events = p.graphqlJoin(ctx, events)
+	var degraded bool
+	events, degraded = p.graphqlJoin(ctx, events)
 
 	// Open-set refresh: for cached open items not covered by a todo this cycle,
 	// query the three volatile GraphQL booleans and merge onto the cached payload.
@@ -86,7 +87,9 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 				covered[ev.NativeID] = true
 			}
 		}
-		events = p.openSetRefresh(ctx, events, covered)
+		var refreshDegraded bool
+		events, refreshDegraded = p.openSetRefresh(ctx, events, covered)
+		degraded = degraded || refreshDegraded
 	}
 
 	out[cursorFastUpdatedAfter] = now
@@ -95,6 +98,7 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		State:         out,
 		RateRemaining: rate,
 		ItemsChanged:  len(events),
+		Degraded:      degraded,
 	}, nil
 }
 

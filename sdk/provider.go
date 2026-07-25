@@ -58,6 +58,7 @@ type PollResult struct {
 	State         PollState // updated cursors; engine writes to sync_cursors
 	RateRemaining *int      // from provider rate-limit headers; nil if unknown
 	ItemsChanged  int       // for sync_log
+	Degraded      bool      // true when enrichment partially failed (e.g. GraphQL complexity ceiling)
 }
 
 // Sentinel errors mapped by the engine to sync_log outcome and plain-language

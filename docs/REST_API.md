@@ -41,16 +41,18 @@ unmatched path so a browser refresh on any client route works.
 ## `GET /attention`
 
 The full ranked list. Pinned items (`flagged: true`) come first in flag order;
-auto-ranked items follow, sorted by reviewed-done last (`muted` sinks to the
-bottom), then age band (fresh < stale < old), then state precedence, then
-newest-signal-first (`docs/Attention_Engine.md`).
+auto-ranked items follow, sorted by age band (fresh < stale < old) then by
+most-recent update first (newest signal, else latest snapshot's provider-updated
+time), with item ID as the stable tiebreak. Signal precedence and the
+reviewed-done mute do not affect order (`docs/Attention_Engine.md`).
 
 Each item carries:
 - Connection provenance: `connection_id`, `connection_label`, `connection_type`.
 - Item identity: `id`, `object_type`, `native_id`, `title`, `url`, `repo`,
   `author`, `draft`.
-- `states` — array of provider signals in precedence order; `states[0]` ranks
-  the item. An authored MR is never bare: worst case `["checking"]` (gate
+- `states` — array of provider signals in precedence order; `states[0]` is the
+  leading chip (precedence orders chips, not item ranking). An authored MR is
+  never bare: worst case `["checking"]` (gate
   `unknown`, including drafts). A non-authored involved item (assignee, etc.)
   with a known gate and no reviewer/mention signal may still have `states: []`
   (marker-only row). The array is never `null`. Nine wire values in precedence
@@ -58,8 +60,9 @@ Each item carries:
   `ready_to_merge`, `auto_merge_armed`, `checks_running`, `checking`,
   `review_submitted`.
 - `muted` — true when the item is reviewed-done for you (you are a reviewer, not
-  the author, and your review is submitted). Muted items sort to the very bottom
-  (below `old`), render de-emphasized, and suppress their signal chips. Omitted
+  the author, and your review is submitted). Muted is a display cue only: the row
+  renders de-emphasized and suppresses its signal chips, but muting does not
+  affect ranking (the item sorts by age band + recency like any other). Omitted
   when false.
 - `my_review_state` — your own review verdict when known: `approved`,
   `changes_requested`, or `reviewed` (comment-only). Omitted when empty/unknown.

@@ -3,7 +3,8 @@
 // authoritative (docs/REST_API.md). Keep field names in sync with the JSON tags.
 
 // Nine provider signals in precedence order (internal/attention/states.go,
-// ADR/ADR-0016_Presentation_And_Ranking.md). states[0] ranks the item.
+// ADR/ADR-0016_Presentation_And_Ranking.md). states[0] is the leading chip
+// (precedence orders chips, not item ranking — items rank by age band + recency).
 // An authored MR is never bare; worst case ["checking"] (gate unknown).
 export type State =
   | "changes_requested"
@@ -43,7 +44,7 @@ export interface AttentionItem {
   author: string;
   draft: boolean;
   states: State[];
-  muted?: boolean; // reviewed-done: nothing left for me; demoted + de-emphasized
+  muted?: boolean; // reviewed-done: nothing left for me; de-emphasized only (does not affect ranking)
   flagged: boolean;
   stale: boolean;
   old: boolean;

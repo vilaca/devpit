@@ -168,7 +168,12 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
 ## Presentation (Implemented, v0.1.1–v0.1.4)
 
 - A **single ranked list**, one row per item, states as tags; buckets are
-  optional client-side filters, not the primary layout.
+  optional client-side filters, not the primary layout. Two filters diverge from
+  the one-signal-per-bucket mapping (`ADR/ADR-0016_Presentation_And_Ranking.md`):
+  a `mine` filter (first chip, also `?bucket=mine`) narrows to items you authored,
+  and `mentioned` also gathers items where you are a reviewer (via the `my_roles`
+  wire field). The fold is unchanged — `my_roles` is a projection of an existing
+  fact.
 - A **pinned "Handle next" zone** at the top holds user-flagged items in flag
   order, lifted out of the auto-ranked list (never shown twice). The flag is
   local-only (`ADR/ADR-0017_Read_Only_Action_Model.md`).

@@ -167,6 +167,21 @@ func TestFoldMentionedFromSignal(t *testing.T) {
 	}
 }
 
+func TestFoldExposesMyRoles(t *testing.T) {
+	// my_roles is projected onto the WorkItem so the client can fold reviewer
+	// items into the "mentioned" filter even before a review is submitted (the
+	// requested-but-not-reviewed case, where my_review_state is still empty).
+	f := openFacts()
+	f.MyRoles = []string{"reviewer"}
+	items := fold([]storage.StoredEvent{obs(1, "c", "acme/api#1", f)})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if len(items[0].MyRoles) != 1 || items[0].MyRoles[0] != "reviewer" {
+		t.Errorf("my_roles = %v, want [reviewer]", items[0].MyRoles)
+	}
+}
+
 func TestFoldMultipleStatesInPrecedenceOrder(t *testing.T) {
 	f := openFacts()
 	f.MyRoles = []string{"author"}

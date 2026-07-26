@@ -143,6 +143,20 @@ func TestFastPoll(t *testing.T) {
 	}
 }
 
+func TestFastPollDropsWatchedNoRole(t *testing.T) {
+	// A "subscribed" notification for a PR we merely watch: no signal from the
+	// reason and no role on the PR. It must not be snapshotted, or the fold
+	// would surface it as a bare row.
+	p := newTestProvider(t, "fastpoll_watch", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	if len(res.Events) != 0 {
+		t.Errorf("events = %d, want 0 for watched no-role PR", len(res.Events))
+	}
+}
+
 func TestFastPollNotModified(t *testing.T) {
 	p := newTestProvider(t, "fastpoll_304", "octocat")
 	state := sdk.PollState{

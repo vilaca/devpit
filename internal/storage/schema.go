@@ -55,4 +55,12 @@ var migrations = []string{
 		fetched_at  TEXT NOT NULL,
 		fetch_error TEXT
 	);`,
+
+	`CREATE TABLE repo_approvers (
+		connection_id    TEXT NOT NULL,
+		repo             TEXT NOT NULL,
+		is_sole_approver INTEGER NOT NULL,
+		fetched_at       TEXT NOT NULL,
+		PRIMARY KEY (connection_id, repo)
+	);`,
 }

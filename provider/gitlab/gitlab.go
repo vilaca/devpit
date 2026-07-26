@@ -31,6 +31,7 @@ type Provider struct {
 	// keyed by native ID. Populated by Reconcile; read by FastPoll's open-set
 	// refresh. No lock needed — FastPoll and Reconcile are serialised per connection.
 	openSnapshots map[string]sdk.ItemObservedPayload
+	approverCache map[string]approverEntry // key: "group/project"; serialised per connection
 }
 
 // New builds a GitLab provider. BaseURL is the instance host (e.g.
@@ -46,6 +47,7 @@ func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 		graphqlEndpoint: base + "/api/graphql",
 		http:            &http.Client{Timeout: 30 * time.Second},
 		openSnapshots:   map[string]sdk.ItemObservedPayload{},
+		approverCache:   make(map[string]approverEntry),
 	}, nil
 }
 

@@ -170,6 +170,34 @@ reviews, so only approval is detected); **GitHub** maps the user's entry in
 `MyReviewState == "requested"` and is still not populated — a known gap, not in
 scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
 
+#### Sole-approver role and state mappings (2026-07-14)
+
+A new role `sole_approver` is added for items where the authenticated user is the
+**only account that can merge** — the true "blocked on me, nobody else can unblock
+it" signal. It is always-on (no configuration flag) and self-limiting (fires only
+on repos where the user has sole merge-capable permission).
+
+**Mute exemption:** `sole_approver` is **never muted**, even when the user's review
+is done — they still need to approve and merge. The mute predicate becomes:
+```
+muted = roles[reviewer] && !roles[author] && !roles[sole_approver] && reviewIsDone(MyReviewState)
+```
+
+**State mappings for `sole_approver` (in addition to the standard role mappings):**
+
+| State | Condition |
+|-------|-----------|
+| `review_requested` | `sole_approver && !draft && !reviewIsDone(MyReviewState)` |
+| `blocked` | `sole_approver && !draft && gate == blocked` |
+| `ready_to_merge` | `sole_approver && !draft && gate == ready` |
+| `auto_merge_armed` | `sole_approver && !draft && autoMergeArmed` |
+| `checks_running` | `sole_approver && !draft && checksRunning` |
+
+Rationale: a sole-approver item has the same urgency as an authored item — it
+cannot progress without this user's action — so it inherits the full gate/verdict
+signal set. `review_requested` fires without an explicit review request because the
+user has an implicit review obligation as the only merge path.
+
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 
 - **A single ranked list**, one row per WorkItem, with signals shown as tags.

@@ -40,12 +40,12 @@ not item ranking — see Ranking):
 | # | wire value | label | condition |
 |---|---|---|---|
 | 1 | `changes_requested` | Changes Requested | `roles[author] && ReviewDecision == "changes_requested"` |
-| 2 | `review_requested`  | Review Requested  | `roles[reviewer] && MyReviewState == "requested"` |
-| 3 | `blocked`           | Blocked           | `roles[author] && !Draft && Gate == "blocked"` |
+| 2 | `review_requested`  | Review Requested  | `(roles[reviewer] && MyReviewState == "requested") \|\| (roles[sole_approver] && !Draft && !reviewIsDone(MyReviewState))` |
+| 3 | `blocked`           | Blocked           | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "blocked"` |
 | 4 | `mentioned`         | Mentioned         | `hasMention` |
-| 5 | `ready_to_merge`    | Ready to Merge    | `roles[author] && !Draft && Gate == "ready"` |
-| 6 | `auto_merge_armed`  | Auto-merge Armed  | `roles[author] && !Draft && AutoMergeArmed` |
-| 7 | `checks_running`    | Checks Running    | `roles[author] && !Draft && ChecksRunning` |
+| 5 | `ready_to_merge`    | Ready to Merge    | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "ready"` |
+| 6 | `auto_merge_armed`  | Auto-merge Armed  | `(roles[author] \|\| roles[sole_approver]) && !Draft && AutoMergeArmed` |
+| 7 | `checks_running`    | Checks Running    | `(roles[author] \|\| roles[sole_approver]) && !Draft && ChecksRunning` |
 | 8 | `checking`          | Checking          | `Gate == "unknown"` (role-neutral — the backstop) |
 | 9 | `review_submitted`  | Review Submitted  | `roles[reviewer] && reviewIsDone(MyReviewState)` |
 
@@ -55,10 +55,14 @@ conditions are direct code (`internal/attention/states.go`).
 
 ### Role scope
 
-The gate/verdict signals (Changes Requested, Blocked, Ready to Merge,
-Auto-merge Armed, Checks Running) describe an MR **you authored** — they keep
-their `roles[author]` guard. Review Requested and Review Submitted are
-reviewer-relative. Mentioned is any-role. **Checking (#8) is role-neutral**: it
+The gate signals (Blocked, Ready to Merge, Auto-merge Armed, Checks Running)
+describe an MR that **cannot progress without you** — you authored it, or you
+are its `sole_approver` (the only account that can merge; always-on, never
+muted — `ADR/ADR-0016_Presentation_And_Ranking.md`). Changes Requested stays
+author-only. Review Requested is reviewer-relative and also fires for a sole
+approver whose review isn't done — an implicit review obligation, no explicit
+request needed. Review Submitted is reviewer-relative. Mentioned is any-role.
+**Checking (#8) is role-neutral**: it
 fires on any involved item whose gate is `unknown`, including a draft you only
 review, so it can backstop a row that would otherwise be bare.
 

@@ -2,8 +2,8 @@ package attention
 
 import "github.com/vilaca/devpit/sdk"
 
-// State is a provider signal (ADR/ADR-0021_Signal_Based_Presentation.md, folded
-// into ADR/ADR-0016_Presentation_And_Ranking.md). A WorkItem may carry several
+// State is a provider signal (ADR/ADR-0016_Presentation_And_Ranking.md, which
+// absorbed the former ADR-0021 signal design). A WorkItem may carry several
 // at once; they render as chips in precedence order.
 type State string
 

@@ -66,3 +66,19 @@ free. GraphQL failure degrades gracefully: logged, skipped, cycle succeeds.
 No lock is needed: FastPoll and Reconcile are serialised on the same goroutine
 per connection (`internal/engine/connection.go`). Cache is populated by the
 startup reconcile before any FastPoll runs.
+
+## Amendment — v0.1.5: FastPoll drops watched-only notifications (2026-07-14)
+
+The GitHub notifications feed is not identity-scoped: watching a repo delivers
+notifications for *any* PR activity in it (reason `subscribed`/`state_change`),
+not just work you're involved in. FastPoll was snapshotting every PR
+notification, so watched-repo PRs entered the event log with no role and no
+signal — and the fold surfaces any open item it holds (`internal/attention/fold.go`,
+ADR-0016), so they appeared as bare rows. This violated the O(your work) scoping
+principle above (it became O(repos you watch)).
+
+Fix: FastPoll now drops a notification whose reason produces no signal *and*
+whose PR carries none of my roles (author/reviewer/assignee) — the item is
+neither actionable nor mine, so it is never snapshotted
+(`provider/github/fastpoll.go`). Notifications that do carry a signal (mention,
+review_requested, assign, ci_activity) or a role are unaffected.

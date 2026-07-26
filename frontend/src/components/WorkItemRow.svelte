@@ -4,6 +4,7 @@
   import { dashboard } from "../lib/dashboard.svelte";
   import { isMine } from "../lib/buckets";
   import StateTags from "./StateTags.svelte";
+  import Labels from "./Labels.svelte";
 
   const {
     item,
@@ -104,6 +105,9 @@
         <span class="approvals">{approvalsLabel}</span>
       {/if}
     </div>
+    {#if item.labels && item.labels.length > 0}
+      <Labels labels={item.labels} />
+    {/if}
   </div>
 </div>
 

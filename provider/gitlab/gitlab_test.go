@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -212,6 +213,28 @@ func TestFastPollPagination(t *testing.T) {
 func TestRegistered(t *testing.T) {
 	if _, ok := sdk.Registry["gitlab"]; !ok {
 		t.Fatal("gitlab not registered")
+	}
+}
+
+// TestLabelsPassthrough verifies GitLab's label names flow into the payload
+// unchanged, and no labels yields nil.
+func TestLabelsPassthrough(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+
+	mr := makeMR("mergeable")
+	mr.Labels = []string{"backend"}
+	pl, ok := p.observedFromMR(mr).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
+	want := []string{"backend"}
+	if !reflect.DeepEqual(pl.Labels, want) {
+		t.Errorf("labels = %+v, want %+v", pl.Labels, want)
+	}
+
+	bare, _ := p.observedFromMR(makeMR("mergeable")).Payload.(sdk.ItemObservedPayload)
+	if bare.Labels != nil {
+		t.Errorf("labels = %+v, want nil for no labels", bare.Labels)
 	}
 }
 

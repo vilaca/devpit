@@ -32,6 +32,14 @@ Three kinds of tags, three visual weights:
 [age tag]      muted              — how long it has sat (bands the list)
 ```
 
+Below these, a separate class: **provider labels**. The labels an MR/PR carries
+on the provider (GitLab MR labels, GitHub PR labels) render as **plain text
+label names, `#`-prefixed and muted** — on a dedicated row below the meta-row.
+These are the team's own taxonomy, not a DevPit verdict, so they are
+deliberately distinct from the signal chips above. They refresh on reconcile
+only and show even on muted rows. See
+`ADR/ADR-0016_Presentation_And_Ranking.md`.
+
 ## Signals (v0.1.5 — drive ranking, fixed precedence)
 
 Precedence highest → lowest; an item may carry several, the highest ranks it.

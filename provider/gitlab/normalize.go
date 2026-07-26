@@ -137,6 +137,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		AutoMergeArmed:        mr.MergeWhenPipelineSucceeds, // REST list field; ChecksRunning is refined by the GraphQL join
 		ProviderUpdatedAt:     mr.UpdatedAt,
 		TicketKeys:            sdk.ExtractTicketKeys(mr.Title, mr.SourceBranch, mr.Description),
+		Labels:                mr.Labels,
 	}
 
 	return sdk.Event{
@@ -155,7 +156,7 @@ func isPolicyDenied(dms string) bool {
 }
 
 func observedDedupeKey(p sdk.ItemObservedPayload) string {
-	b, _ := json.Marshal(p) //nolint:errchkjson // payload is JSON-safe (scalar fields only); Marshal cannot fail here
+	b, _ := json.Marshal(p) //nolint:errchkjson // payload has no unmarshalable fields; Marshal cannot fail here
 	sum := sha256.Sum256(b)
 	return "item.observed:" + hex.EncodeToString(sum[:])
 }

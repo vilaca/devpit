@@ -54,6 +54,7 @@ type attentionItem struct {
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"`
+	Labels                []string             `json:"labels,omitempty"`
 	Jira                  *jiraRef             `json:"jira,omitempty"`
 }
 
@@ -146,6 +147,7 @@ func toAttentionItem(
 		GateDetail:            it.GateDetail,
 		FlaggedAt:             it.FlaggedAt,
 		Since:                 it.Since,
+		Labels:                it.Labels,
 	}
 	// Decorate with the first ticket key that has a cached row with a non-empty status.
 	for _, key := range it.TicketKeys {

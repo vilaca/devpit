@@ -46,7 +46,11 @@ deps:
   engine:
     mayDependOn: [sdk, storage]
   jira:
-    mayDependOn: [storage]
+    # sdk is used only by the refresher tests, which seed the storage event log
+    # via WriteEvents([]sdk.Event{…}); the production refresher depends on storage
+    # alone. sdk is the leaf contract, so this matches every other event-touching
+    # component (attention/engine/api).
+    mayDependOn: [storage, sdk]
   # Providers depend on sdk only — not each other, and not any shared provider/*
   # helper. Shared-looking code is duplicated per provider by design so a change
   # to one cannot regress another (ADR-0003); any provider/shared package would

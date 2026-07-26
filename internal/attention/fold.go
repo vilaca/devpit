@@ -66,6 +66,7 @@ type WorkItem struct {
 	PolicyDenied          bool                 `json:"policy_denied"`
 	ApprovalsCount        int                  `json:"approvals_count,omitempty"`
 	MyReviewState         string               `json:"my_review_state,omitempty"` // approved|changes_requested|reviewed|""
+	MyRoles               []string             `json:"my_roles,omitempty"`        // author|reviewer|assignee
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"` // onset of each active tag
@@ -238,6 +239,7 @@ func foldItem(
 		PolicyDenied:          facts.PolicyDenied,
 		ApprovalsCount:        facts.ApprovalsCount,
 		MyReviewState:         facts.MyReviewState,
+		MyRoles:               facts.MyRoles,
 		GateDetail:            facts.GateDetail,
 		Since:                 computeSince(allObserved, states, facts, hasMention, mentionSigs),
 		TicketKeys:            facts.TicketKeys,

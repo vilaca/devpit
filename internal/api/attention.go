@@ -50,6 +50,7 @@ type attentionItem struct {
 	PolicyDenied          bool                 `json:"policy_denied"`
 	ApprovalsCount        int                  `json:"approvals_count,omitempty"`
 	MyReviewState         string               `json:"my_review_state,omitempty"`
+	MyRoles               []string             `json:"my_roles,omitempty"`
 	GateDetail            string               `json:"gate_detail,omitempty"`
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"`
@@ -141,6 +142,7 @@ func toAttentionItem(
 		PolicyDenied:          it.PolicyDenied,
 		ApprovalsCount:        it.ApprovalsCount,
 		MyReviewState:         it.MyReviewState,
+		MyRoles:               it.MyRoles,
 		GateDetail:            it.GateDetail,
 		FlaggedAt:             it.FlaggedAt,
 		Since:                 it.Since,

@@ -1,17 +1,20 @@
 <script lang="ts">
-  import type { AttentionItem, State } from "../lib/types";
+  import type { AttentionItem, Connection, Filter } from "../lib/types";
+  import { matchesFilter } from "../lib/buckets";
   import PinnedZone from "./PinnedZone.svelte";
   import WorkItemRow from "./WorkItemRow.svelte";
 
   const {
     items,
-    activeState,
+    connections,
+    activeFilter,
     focusedId,
     onToggleFlag,
     onFocus,
   }: {
     items: AttentionItem[];
-    activeState: State | null;
+    connections: Connection[];
+    activeFilter: Filter | null;
     focusedId: string | null;
     onToggleFlag: (item: AttentionItem) => void;
     onFocus: (id: string) => void;
@@ -21,11 +24,7 @@
   // by bucket — they're the user's explicit priority regardless of state.
   const pinned = $derived(items.filter((i) => i.flagged));
   const ranked = $derived(
-    items.filter((i) => {
-      if (i.flagged) return false;
-      if (!activeState) return true;
-      return i.states.includes(activeState);
-    }),
+    items.filter((i) => !i.flagged && matchesFilter(i, activeFilter, connections)),
   );
 </script>
 
@@ -35,7 +34,7 @@
   {#if ranked.length > 0}
     <section>
       <h2>
-        {#if activeState}
+        {#if activeFilter}
           Filtered
         {:else}
           Attention

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { dashboard } from "./lib/dashboard.svelte";
-  import type { State, AttentionItem } from "./lib/types";
-  import { BUCKETS, countByState } from "./lib/buckets";
+  import type { Filter, AttentionItem } from "./lib/types";
+  import { matchesFilter, visibleBuckets } from "./lib/buckets";
   import TopBar from "./components/TopBar.svelte";
   import FailureBanner from "./components/FailureBanner.svelte";
   import BucketFilter from "./components/BucketFilter.svelte";
@@ -14,16 +14,16 @@
   // Bucket filter + sync-log open state live in the URL so a browser refresh
   // restores the view. No router needed — one query string, history.replaceState.
 
-  function readUrl(): { bucket: State | null; log: boolean; logConn: string | null } {
+  function readUrl(): { bucket: Filter | null; log: boolean; logConn: string | null } {
     const p = new URLSearchParams(location.search);
     return {
-      bucket: (p.get("bucket") as State | null) ?? null,
+      bucket: (p.get("bucket") as Filter | null) ?? null,
       log: p.has("log"),
       logConn: p.get("logconn") ?? null,
     };
   }
 
-  function writeUrl(state: { bucket: State | null; log: boolean; logConn: string | null }) {
+  function writeUrl(state: { bucket: Filter | null; log: boolean; logConn: string | null }) {
     const p = new URLSearchParams();
     if (state.bucket) p.set("bucket", state.bucket);
     if (state.log) p.set("log", "1");
@@ -33,7 +33,7 @@
   }
 
   const initial = readUrl();
-  let activeBucket = $state<State | null>(initial.bucket);
+  let activeBucket = $state<Filter | null>(initial.bucket);
   let logOpen = $state(initial.log);
   let logConnFilter = $state<string | null>(initial.logConn);
 
@@ -42,7 +42,7 @@
     writeUrl({ bucket: activeBucket, log: logOpen, logConn: logConnFilter });
   });
 
-  function setBucket(s: State | null) {
+  function setBucket(s: Filter | null) {
     activeBucket = s;
   }
 
@@ -66,11 +66,9 @@
   // Keyboard nav steps through this list.
   const visibleItems = $derived.by<AttentionItem[]>(() => {
     const pinned = dashboard.items.filter((i) => i.flagged);
-    const ranked = dashboard.items.filter((i: AttentionItem) => {
-      if (i.flagged) return false;
-      if (!activeBucket) return true;
-      return i.states.includes(activeBucket!);
-    });
+    const ranked = dashboard.items.filter(
+      (i: AttentionItem) => !i.flagged && matchesFilter(i, activeBucket, dashboard.connections),
+    );
     return [...pinned, ...ranked];
   });
 
@@ -119,11 +117,10 @@
         // Cycle through visible buckets: null → first → … → last → null.
         e.preventDefault();
         {
-          const counts = countByState(dashboard.items);
-          const visible = BUCKETS.filter((b) => (counts.get(b.state) ?? 0) > 0);
+          const visible = visibleBuckets(dashboard.items, dashboard.connections);
           if (visible.length === 0) break;
-          const idx = visible.findIndex((b) => b.state === activeBucket);
-          activeBucket = idx === -1 ? visible[0].state : (visible[(idx + 1) % visible.length]?.state ?? null);
+          const idx = visible.findIndex((b) => b.key === activeBucket);
+          activeBucket = idx === -1 ? visible[0].key : (visible[(idx + 1) % visible.length]?.key ?? null);
         }
         break;
       case "Escape":
@@ -176,12 +173,14 @@
     {:else}
       <BucketFilter
         items={dashboard.items}
+        connections={dashboard.connections}
         active={activeBucket}
         onSelect={setBucket}
       />
       <AttentionList
         items={dashboard.items}
-        activeState={activeBucket}
+        connections={dashboard.connections}
+        activeFilter={activeBucket}
         {focusedId}
         onToggleFlag={(item) => void dashboard.toggleFlag(item)}
         onFocus={(id) => { focusedId = id; }}

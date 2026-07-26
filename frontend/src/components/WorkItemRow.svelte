@@ -2,6 +2,7 @@
   import type { AttentionItem } from "../lib/types";
   import { relativeTime } from "../lib/format";
   import { dashboard } from "../lib/dashboard.svelte";
+  import { isMine } from "../lib/buckets";
   import StateTags from "./StateTags.svelte";
 
   const {
@@ -16,10 +17,7 @@
     onFocus: (id: string) => void;
   } = $props();
 
-  const mine = $derived(
-    !!item.author &&
-    dashboard.connections.find((c) => c.id === item.connection_id)?.identity === item.author,
-  );
+  const mine = $derived(isMine(item, dashboard.connections));
 
   // Approval count, phrased to surface that *you* approved when you did.
   const approvalsLabel = $derived.by(() => {

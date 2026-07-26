@@ -151,7 +151,7 @@ type ItemObservedPayload struct {
 	State                 string   `json:"state"` // open | merged | closed
 	Draft                 bool     `json:"draft"`
 	Author                string   `json:"author"`
-	MyRoles               []string `json:"my_roles"` // author | reviewer | assignee | mentioned
+	MyRoles               []string `json:"my_roles"` // author | reviewer | assignee | sole_approver
 	ReviewDecision        string   `json:"review_decision,omitempty"`
 	MyReviewState         string   `json:"my_review_state,omitempty"`
 	Gate                  string   `json:"gate"` // ready | blocked | unknown

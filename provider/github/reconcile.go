@@ -12,7 +12,10 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
-const cursorRecUpdatedAfter = "gh.rec.updated_after"
+const (
+	cursorRecUpdatedAfter = "gh.rec.updated_after"
+	roleSoleApprover      = "sole_approver"
+)
 
 // searchScope pairs a query qualifier with the role it implies for me.
 type searchScope struct {
@@ -40,8 +43,8 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 		updatedFilter = " updated:>" + ua
 	}
 
-	// Accumulate roles per PR URL across the three scoped queries, then emit
-	// one deduplicated item.observed carrying every role that matched.
+	// Accumulate roles per PR URL across all scoped queries, then emit one
+	// deduplicated item.observed carrying every role that matched.
 	type agg struct {
 		item  ghSearchItem
 		repo  string
@@ -52,7 +55,9 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 	var events []sdk.Event
 	var rate *int
 
-	for _, sc := range reconcileScopes {
+	scopes := append(append([]searchScope{}, reconcileScopes...), searchScope{"user", roleSoleApprover})
+
+	for _, sc := range scopes {
 		q := fmt.Sprintf("is:pr is:open %s:%s%s", sc.qualifier, p.handle, updatedFilter)
 		res, r, err := p.search(ctx, q)
 		if err != nil {
@@ -65,9 +70,19 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 			if it.PullRequest == nil {
 				continue
 			}
+
+			repo := repoFromSearchItem(it)
+
+			if sc.role == roleSoleApprover {
+				keep, kErr := p.keepAsSoleApprover(ctx, it, repo)
+				if kErr != nil || !keep {
+					continue
+				}
+			}
+
 			a, ok := seen[it.HTMLURL]
 			if !ok {
-				a = &agg{item: it, repo: repoFromSearchItem(it)}
+				a = &agg{item: it, repo: repo}
 				seen[it.HTMLURL] = a
 				order = append(order, it.HTMLURL)
 			}

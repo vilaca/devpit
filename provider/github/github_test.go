@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -552,5 +553,61 @@ func TestDirtyPRIsBlockedWithConflict(t *testing.T) {
 	}
 	if pl.FailingChecks {
 		t.Error("failing_checks should be false for dirty (not unstable)")
+	}
+}
+
+// TestReconcileSoleApprover verifies that:
+//   - a non-draft PR by another user on a repo where octocat is sole approver
+//     gets the "sole_approver" role;
+//   - a PR on a repo with two collaborators does NOT get the role;
+//   - a draft PR and a self-authored PR are both filtered out.
+type observedItem struct {
+	nativeID string
+	roles    []string
+}
+
+func itemHasRole(items []observedItem, nativeID, role string) bool {
+	for _, it := range items {
+		if it.nativeID == nativeID && slices.Contains(it.roles, role) {
+			return true
+		}
+	}
+	return false
+}
+
+func collectObserved(events []sdk.Event) []observedItem {
+	var out []observedItem
+	for _, ev := range events {
+		if ev.EventType != "item.observed" {
+			continue
+		}
+		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			continue
+		}
+		out = append(out, observedItem{ev.NativeID, pl.MyRoles})
+	}
+	return out
+}
+
+func TestReconcileSoleApprover(t *testing.T) {
+	p := newTestProvider(t, "sole_approver", "octocat")
+	result, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	observed := collectObserved(result.Events)
+
+	if !itemHasRole(observed, "octocat/myrepo#100", roleSoleApprover) {
+		t.Error("PR#100 on sole-approver repo should have role sole_approver")
+	}
+	if itemHasRole(observed, "octocat/sharedrepo#101", roleSoleApprover) {
+		t.Error("PR#101 on shared repo must not have role sole_approver")
+	}
+	for _, nid := range []string{"octocat/myrepo#102", "octocat/myrepo#103"} {
+		if itemHasRole(observed, nid, roleSoleApprover) {
+			t.Errorf("%s must not have role sole_approver", nid)
+		}
 	}
 }

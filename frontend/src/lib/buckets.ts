@@ -5,7 +5,9 @@ export interface Bucket {
   label: string;
 }
 
-// Nine buckets in precedence order (ADR-0016 / internal/attention/states.go).
+// Filter buckets in precedence order (ADR-0016 / internal/attention/states.go).
+// checks_running and checking are intentionally absent: they stay valid states
+// (still rendered as per-item tags) but don't get their own filter chip.
 export const BUCKETS: Bucket[] = [
   { state: "changes_requested", label: "Changes Requested" },
   { state: "review_requested", label: "Review Requested" },
@@ -13,8 +15,6 @@ export const BUCKETS: Bucket[] = [
   { state: "mentioned", label: "Mentioned" },
   { state: "ready_to_merge", label: "Ready to Merge" },
   { state: "auto_merge_armed", label: "Auto-merge Armed" },
-  { state: "checks_running", label: "Checks Running" },
-  { state: "checking", label: "Checking" },
   { state: "review_submitted", label: "Review Submitted" },
 ];
 

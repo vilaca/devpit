@@ -27,6 +27,7 @@ type Provider struct {
 	graphqlEndpoint string
 	handle          string
 	http            *http.Client
+	approverCache   map[string]approverEntry // key: "owner/repo"; no lock needed (serialised per connection)
 }
 
 // New builds a GitHub provider. BaseURL is the web host (e.g.
@@ -39,6 +40,7 @@ func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 		apiBase:         base,
 		graphqlEndpoint: strings.TrimSuffix(base, "/v3") + "/graphql",
 		http:            &http.Client{Timeout: 30 * time.Second},
+		approverCache:   make(map[string]approverEntry),
 	}, nil
 }
 

@@ -209,7 +209,7 @@ func foldItem(
 	// cue only (the row dims and suppresses its chips); muting no longer affects
 	// ranking, which is pure age band + recency (ADR-0016).
 	roles := rolesSet(facts.MyRoles)
-	muted := roles[roleReviewer] && !roles[roleAuthor] && reviewIsDone(facts.MyReviewState)
+	muted := roles[roleReviewer] && !roles[roleAuthor] && !roles[roleSoleApprover] && reviewIsDone(facts.MyReviewState)
 
 	// Sort observed events newest-first for onset computation.
 	sort.Slice(allObserved, func(i, j int) bool { return allObserved[i].ID > allObserved[j].ID })

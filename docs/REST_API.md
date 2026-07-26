@@ -98,6 +98,10 @@ Each item carries:
 - `since` — map from tag wire name to RFC 3339 onset time; only active tags
   appear. Onset = start of latest contiguous run of snapshots where the
   condition holds. `mentioned` onset = earliest mention signal time.
+- `labels` — optional; the provider label names the item carries (GitLab MR
+  labels, GitHub PR labels). Array of strings. Refreshed on reconcile only. The
+  UI renders these as plain text on a dedicated row — provider metadata, distinct
+  from the outline signal chips (ADR-0016).
 - `jira` — optional; present when the item's first recognized Jira ticket key
   has a cached row with a non-empty status. Shape:
   `{ key: string, status: string, url: string }`.

@@ -5,6 +5,11 @@ type ghUser struct {
 	Name  string `json:"name"`
 }
 
+// ghLabel is a PR/issue label. Only the name is carried through to the UI.
+type ghLabel struct {
+	Name string `json:"name"`
+}
+
 type ghNotification struct {
 	ID      string `json:"id"`
 	Reason  string `json:"reason"`
@@ -40,6 +45,7 @@ type ghPull struct {
 	Head struct {
 		Ref string `json:"ref"`
 	} `json:"head"`
+	Labels []ghLabel `json:"labels"`
 }
 
 // ghSearchItem is one row of GET /search/issues; PRs carry pull_request.
@@ -54,7 +60,8 @@ type ghSearchItem struct {
 	PullRequest *struct {
 		URL string `json:"url"`
 	} `json:"pull_request"`
-	RepositoryURL string `json:"repository_url"`
+	RepositoryURL string    `json:"repository_url"`
+	Labels        []ghLabel `json:"labels"`
 }
 
 type ghSearchResult struct {

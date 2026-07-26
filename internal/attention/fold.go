@@ -71,6 +71,7 @@ type WorkItem struct {
 	FlaggedAt             *time.Time           `json:"flagged_at,omitempty"`
 	Since                 map[string]time.Time `json:"since,omitempty"` // onset of each active tag
 	TicketKeys            []string             `json:"ticket_keys,omitempty"`
+	Labels                []string             `json:"labels,omitempty"` // provider label names
 }
 
 // itemKey is the identity triple that groups events into one WorkItem.
@@ -243,6 +244,7 @@ func foldItem(
 		GateDetail:            facts.GateDetail,
 		Since:                 computeSince(allObserved, states, facts, hasMention, mentionSigs),
 		TicketKeys:            facts.TicketKeys,
+		Labels:                facts.Labels,
 	}, true
 }
 

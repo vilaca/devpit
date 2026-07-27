@@ -2,7 +2,14 @@
 
 ## Status
 
-Accepted (Planned)
+Accepted
+
+## Scope
+
+Implemented (v0.1.5) — `sdk.ExtractTicketKeys` (both providers), the
+`internal/jira` enricher (Client + Refresher, 15-minute sweep), the
+`jira_tickets` cache table, and read-time decoration in `internal/api`. See
+`docs/Roadmap.md`.
 
 ## Context
 

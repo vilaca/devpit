@@ -174,7 +174,7 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
 - A **single ranked list**, one row per item, states as tags; buckets are
   optional client-side filters, not the primary layout. Two filters diverge from
   the one-signal-per-bucket mapping (`ADR/ADR-0016_Presentation_And_Ranking.md`):
-  a `mine` filter (first chip, also `?bucket=mine`) narrows to items you authored,
+  a `mine` filter (first chip) narrows to items you authored,
   and `mentioned` also gathers items where you are a reviewer (via the `my_roles`
   wire field). The fold is unchanged — `my_roles` is a projection of an existing
   fact.

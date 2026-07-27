@@ -1,9 +1,5 @@
 # Multi-Account Connections
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented (v0.1) — `sdk.ConnectionConfig`, `internal/config`, and the

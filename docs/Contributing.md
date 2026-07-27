@@ -17,8 +17,9 @@ second decision log — the ADRs are it.
 ## ADR process
 
 - One decision per ADR; number sequentially (`ADR-NNNN_Title.md`).
-- Every ADR carries `Status` (`Accepted` / `Proposed`) and
-  `Scope` (`Implemented (vX)` / `Planned` / `Deferred` / `Uncommitted`).
+- Every ADR carries `Scope` (`Implemented (vX)` / `Planned` / `Deferred` /
+  `Uncommitted`); there is no `Status` field — being in the log is what makes
+  it the accepted decision.
 - `docs/Roadmap.md` is the single source of truth for *timing*; link to it
   rather than restating milestones.
 - When a decision has a known future trigger, record a forward-dependency note

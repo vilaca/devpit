@@ -1,9 +1,5 @@
 # Secret Storage
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented (v0.1) — the 0600 permission warning lives in `internal/config`.

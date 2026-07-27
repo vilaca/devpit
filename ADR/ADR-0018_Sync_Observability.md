@@ -1,9 +1,5 @@
 # Sync Observability
 
-## Status
-
-Accepted
-
 ## Scope
 
 Sync-log persistence and per-cycle rows **Implemented (v0.1)**

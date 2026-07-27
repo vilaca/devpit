@@ -1,9 +1,5 @@
 # Event-based Attention Engine
 
-## Status
-
-Accepted
-
 ## Scope
 
 Event log and read-time fold **Implemented (v0.1)** (`internal/attention`,

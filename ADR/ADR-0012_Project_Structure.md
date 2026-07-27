@@ -1,9 +1,5 @@
 # Project Structure
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented (v0.1) — `cmd/`, `internal/*`, `provider/*`, `sdk`, and the

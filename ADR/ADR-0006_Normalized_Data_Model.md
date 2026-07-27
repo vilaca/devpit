@@ -1,9 +1,5 @@
 # Normalized Data Model
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented (v0.1) for two object types — `merge_request` (covers GitHub PRs)

@@ -1,9 +1,5 @@
 # Local-first Web Application
 
-## Status
-
-Accepted
-
 ## Scope
 
 Single-user localhost core **Implemented (v0.1)**. Team visibility (own-token

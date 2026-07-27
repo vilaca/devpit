@@ -124,6 +124,16 @@ inferred workflow. Supersedes the attention-state set of ADR-0016.
 - Wire renames: `needs_review` → `review_requested`;
   `waiting_on_author` → `review_submitted`.
 
+## v0.1.5 — Jira ticket enrichment ✓ Built
+
+Decided 2026-07-13 (ADR-0022), shipped alongside the signal work. Providers
+extract Jira keys at normalize time (`sdk.ExtractTicketKeys`: title → source
+branch → description, first source wins); a config-gated `internal/jira`
+enricher refreshes the persisted `jira_tickets` cache on a 15-minute sweep (a
+decorator, not a provider — it never emits events); attention items carry an
+optional `jira` ref (key, status, URL) rendered as a status link on the title
+row. Off unless the optional `jira:` config block is present.
+
 ## First public release — packaging & distribution gate
 
 Version-agnostic release-readiness gate: whichever version first ships publicly
@@ -176,7 +186,9 @@ Version-agnostic release-readiness gate: whichever version first ships publicly
 
 - Stable Provider SDK for third-party providers.
 - Broaden beyond code forges: Jira, Slack, CI/CD, Sentry, PagerDuty
-  (see `docs/Why.md`).
+  (see `docs/Why.md`). Jira here means a full work-item provider —
+  ticket-status enrichment already shipped in v0.1.5
+  (`ADR/ADR-0022_Jira_Ticket_Enrichment.md`).
 
 ## Unversioned ideas
 

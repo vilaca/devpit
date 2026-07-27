@@ -1,9 +1,5 @@
 # Deployment Model
 
-## Status
-
-Accepted
-
 ## Scope
 
 Single-binary build **Implemented (v0.1)**; the Docker image is **Planned** —

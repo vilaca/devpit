@@ -51,8 +51,7 @@ are not allowed.
 
 A decision can be *made* without being *built*. Keep the axes separate:
 
-- **`Status`** — the decision's standing: `Accepted`, `Proposed`,
-  `Superseded by ADR-XXXX`.
+- **`Status`** — the decision's standing: `Accepted` or `Proposed`.
 - **`Scope`** — reality: `Implemented (vX)`, `Planned`, `Deferred`,
   `Uncommitted`. Links to `docs/Roadmap.md`, which is the single source of
   truth for *timing*; ADRs and specs carry only the coarse tag, never a
@@ -73,9 +72,10 @@ genuinely distinct decision, or a shift large enough to deserve its own record
 and rationale. When you do, you still **mutate the affected existing ADR(s)** —
 move content to its new home, drop what no longer holds, cross-link — rather than
 leaving a stale copy behind. Supersession is *update-old-and-add-new*, not
-*freeze-old*. `Superseded by ADR-XXXX` is reserved for an ADR whose decision is
-**wholly** replaced; one only *partly* affected is edited down to what still
-stands, not stamped superseded.
+*freeze-old*: an ADR whose decision is **wholly** replaced is folded into its
+successor and the file deleted (git history keeps it — as with ADR-0021); one
+only *partly* affected is edited down to what still stands. There is no
+tombstone status — nothing stale survives to carry one.
 
 ### README and Contributing (2026-07-15)
 

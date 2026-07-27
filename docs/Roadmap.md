@@ -161,7 +161,8 @@ Version-agnostic release-readiness gate: whichever version first ships publicly
   start scripts to know when the app is ready.
 - README updated: install (brew), Docker run, start-script, and update
   instructions documented; the README reflects the actual first-public-release
-  surface.
+  surface. Includes the hero screenshot — captured from seeded demo data,
+  never from a real instance.
 
 ## v0.2 — More forges + sync hardening
 

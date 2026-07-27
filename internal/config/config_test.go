@@ -63,6 +63,9 @@ connections:
 	if gl.BaseURL != "https://gitlab.acme.com" || gl.Handle != "bot-user" {
 		t.Errorf("gl mismatch: %+v", gl)
 	}
+	if gl.Label != "gl-acme" {
+		t.Errorf("gl.Label = %q, want fallback to id", gl.Label)
+	}
 	if len(cfg.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", cfg.Warnings)
 	}

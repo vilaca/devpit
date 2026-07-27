@@ -16,7 +16,7 @@ type ConnectionConfig struct {
 	Type    string // "github" | "gitlab" | "forgejo" | "gitea" | "codeberg"
 	BaseURL string // e.g. "https://github.com"; pre-filled for hosted
 	Token   string // plaintext PAT
-	Label   string // user-visible: "Personal", "Acme"
+	Label   string // user-visible: "Personal", "Acme"; config defaults it to ID
 	Handle  string // manual identity override for bot/deploy tokens
 }
 

@@ -1,9 +1,5 @@
 # Provider Plugin Model
 
-## Status
-
-Accepted
-
 ## Scope
 
 Implemented (v0.1) for GitHub and GitLab (`provider/github`, `provider/gitlab`,

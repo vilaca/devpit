@@ -142,6 +142,12 @@ func validate(raw fileConfig) (Config, error) {
 		}
 		seen[c.ID] = true
 
+		if c.Label == "" {
+			// Label is user-visible on every row; default it here so no
+			// consumer ever renders a blank connection tag.
+			c.Label = c.ID
+		}
+
 		conns = append(conns, sdk.ConnectionConfig{
 			ID:      c.ID,
 			Type:    c.Type,

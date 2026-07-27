@@ -112,7 +112,8 @@ Each item carries:
 
 ## `GET /connections`
 
-Each connection reports id, type, base_url, label, resolved `identity` (`null`
+Each connection reports id, type, base_url, label (never empty — config
+defaults it to the id), resolved `identity` (`null`
 while pending/failed), and a `health` object: `status`
 (`ok` | `degraded` | `failing`), `last_synced_at`, `failure_count`, and the
 fixed `failure_window_minutes` (60). The token is never returned. Drives the

@@ -71,11 +71,12 @@ connections:
   - id: github-personal
     type: github
     token: ghp_…            # read scopes suffice
+    label: Personal         # optional — shown on each row; defaults to the id
   - id: work-gitlab
     type: gitlab
     base_url: https://gitlab.example.com
     token: glpat-…          # read_api scope suffices
-    label: Work
+    label: Work             # optional — defaults to the id
 jira:                       # optional — Jira status enrichment
   base_url: https://example.atlassian.net
   email: you@example.com

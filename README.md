@@ -8,52 +8,51 @@ ranked list of actionable work — scoped to you, not to repositories.
 
 The shift: repositories become context. You are the center of the workflow.
 
+<!-- Hero screenshot goes here: capture from seeded demo data at the
+     first-public-release gate (docs/Roadmap.md) — never from a real instance. -->
+
+## What you get
+
+- **One ranked list across forges.** Every open MR/PR you're involved in —
+  authored, reviewing, assigned, mentioned — in a single list, freshest
+  actionable work first.
+- **Neutral signals, not an inferred workflow.** Rows carry the provider's own
+  facts as chips — Changes Requested, Review Requested, Blocked, Ready to
+  Merge, … — plus diagnostic badges (failing checks, merge conflict, unresolved
+  discussions) and age tints. The current vocabulary lives in
+  [`docs/Attention_Engine.md`](docs/Attention_Engine.md).
+- **Knows when only you can merge.** Repos where you are the sole
+  merge-capable account get an always-on attention axis: those MRs surface as
+  blocked on you even without an explicit review request.
+- **Sees the ticket behind the MR.** With a Jira connection configured, items
+  link to their Jira issue and show its workflow status inline.
+- **A "Handle next" zone.** Pin the items you've decided to act on; pins are
+  local-only and exempt from auto-ranking.
+- **Private and read-only.** Runs on your machine, with your tokens, and talks
+  only to your forges. DevPit never acts on your behalf — every action is a
+  deep link out to the provider
+  ([`ADR/ADR-0017_Read_Only_Action_Model.md`](ADR/ADR-0017_Read_Only_Action_Model.md)).
+
 ## Status
 
-v0.1.1 complete. Storage, provider SDK (GitHub + GitLab), sync engine, attention
-fold, REST + SSE API, and the Svelte SPA are all built and embedded into a
-single binary. v0.1.1 adds diagnostic markers (`failing_checks`, `merge_conflict`,
-`needs_rebase`), age bands (`stale` / `old`), onset hover text, and pin age.
+Pre-release, v0.1.5 — GitHub + GitLab, single-user, localhost. Milestones and
+timing: [`docs/Roadmap.md`](docs/Roadmap.md).
 
-## How it works
+## Under the hood
 
 - **Polling-first, no webhooks.** Uses your own token; no server-side setup,
   no callback URLs required.
 - **Event log + fold-on-read.** Each poll diff appends events to a durable
-  SQLite log. Attention states and item facts are computed at read time
-  (pure event sourcing — no separate materialized state table).
-- **Attention states as tags.** Each work item carries one or more state
-  tags; items are ranked by state precedence then recency.
-- **SSE live updates.** The local web UI subscribes to a Server-Sent Events
-  stream and re-fetches on `attention.changed` — no page refresh needed.
-- **Single binary, single SQLite file.** Runs on your machine; WAL mode
-  ensures reads never block while the sync writer appends.
+  SQLite log; item facts and signals are computed at read time (pure event
+  sourcing — no materialized state table).
+- **SSE live updates.** The web UI subscribes to a Server-Sent Events stream
+  and re-fetches on `attention.changed` — no page refresh.
+- **Single binary, single SQLite file.** The SPA embeds via `go:embed`; WAL
+  mode keeps reads unblocked while the sync writer appends.
 
-## Attention states
+## Quickstart
 
-Six states in v0.1, shown as tags on each item:
-
-| State | Meaning |
-|---|---|
-| **Needs Review** | A review was requested from you |
-| **Changes Requested** | Your PR; a reviewer asked for changes |
-| **Blocked** | Your PR; merge gate reports not mergeable |
-| **Ready to Merge** | Your PR; provider merge gate reports mergeable |
-| **Mentioned** | You were mentioned |
-| **Waiting on Author** | You reviewed; ball is back with the author |
-
-Precedence (highest first): Needs Review → Changes Requested → Blocked →
-Ready to Merge → Mentioned → Waiting on Author.
-
-## Configuration
-
-A single YAML file with a list of named connections (type, base URL, token).
-See [`ADR/ADR-0015_Multi_Account_Connections.md`](ADR/ADR-0015_Multi_Account_Connections.md) and [`internal/config/config.go`](internal/config/config.go).
-
-## Running
-
-Build the SPA once (it embeds into the binary via `go:embed`), then build and
-run the binary:
+Build the SPA once (it embeds into the binary), then build and run:
 
 ```sh
 npm --prefix frontend ci && npm --prefix frontend run build
@@ -61,18 +60,37 @@ go build -o devpit ./cmd/devpit
 ./devpit --config ~/.config/devpit/config.yaml
 ```
 
-The dashboard and the API are served together at `http://localhost:7474`. The
-Go build works without the frontend step (a committed placeholder page is
-embedded), but you get the real UI only after `npm run build`. For UI
-development, `npm --prefix frontend run dev` runs Vite on `:5173` and proxies
-the API through to a running `devpit`.
+The dashboard and the API are served together at `http://localhost:7474`.
 
-Prefer this over `go run ./cmd/devpit`. DevPit depends on `modernc.org/sqlite`,
-a pure-Go SQLite that is large and slow to compile; a cold build takes ~15–20 s
-and pegs all cores (enough to spin up laptop fans). `go run` recompiles whenever
-the build cache is cold — e.g. after a dependency upgrade — so a start/stop loop
-pays that cost repeatedly. The running binary itself is idle (~0 % CPU between
-poll cycles).
+Configuration is one YAML file (default `~/.config/devpit/config.yaml`;
+`chmod 600` it — it holds plaintext tokens):
+
+```yaml
+db_path: /path/to/devpit.db
+connections:
+  - id: github-personal
+    type: github
+    token: ghp_…            # read scopes suffice
+  - id: work-gitlab
+    type: gitlab
+    base_url: https://gitlab.example.com
+    token: glpat-…          # read_api scope suffices
+    label: Work
+jira:                       # optional — Jira status enrichment
+  base_url: https://example.atlassian.net
+  email: you@example.com
+  api_token: …
+```
+
+Per connection only `id`, `type`, and `token` are required; the full schema and
+validation rules live in [`internal/config/config.go`](internal/config/config.go).
+
+## Design docs
+
+`docs/` holds the specs; `ADR/` holds every decision with its rationale
+([`ADR/ADR-0014_Documentation_As_Design_Record.md`](ADR/ADR-0014_Documentation_As_Design_Record.md)).
+Start with [`docs/Why.md`](docs/Why.md) and
+[`docs/High_Level_Architecture.md`](docs/High_Level_Architecture.md).
 
 ## Contributing
 

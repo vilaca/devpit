@@ -5,8 +5,9 @@ description: >
   breaks against the actual implementation. Enforces "one home per fact"
   (docs/Contributing.md, ADR-0014): finds prose that restates a code shape
   instead of linking it, doc claims whose referenced code has changed, stale
-  version/Scope tags, duplicated facts, dead internal links, and ADR convention
-  violations. Use in the DevPit repo when the user says "check the docs",
+  version/Scope tags, duplicated facts, dead internal links, ADR convention
+  violations, and stale agent instructions (CLAUDE.md and the committed
+  skills). Use in the DevPit repo when the user says "check the docs",
   "are the docs stale", "doc-check", "audit ADRs", "docs consistency", or before
   a release. Reports findings; only edits when asked.
 allowed-tools: Bash, Read, Grep, Glob, Edit
@@ -26,10 +27,12 @@ fix`. Do **not** edit unless the user asks; if they do, fix and re-run.
 
 ## 0. Scope
 
-Targets: `README.md`, `docs/*.md`, `ADR/*.md`. Ignore `docs/plans/` (gitignored
-working notes, not the design record). Read `docs/Contributing.md` first — it is
-the authority for the rules below; if it has changed, defer to it over this
-skill.
+Targets: `README.md`, `docs/*.md` (including `docs/Contributing.md` itself),
+`ADR/*.md`, and the agent instructions — `CLAUDE.md` (and its `AGENTS.md`
+symlink) plus `.claude/skills/*/SKILL.md`. Ignore `docs/plans/` (gitignored
+working notes, not the design record). Read `docs/Contributing.md` first — it
+is the authority for the rules below; if it has changed, defer to it over this
+skill — but its own claims are audited like any doc's.
 
 ## 1. Prose that restates a code shape (should link instead)
 
@@ -86,7 +89,18 @@ log). The ADRs are the only decision log.
 Extract every relative markdown link (`](docs/…`, `](ADR/…`, `](internal/…`) and
 confirm the target exists.
 
-## 6. Report
+## 6. Agent instructions (CLAUDE.md, AGENTS.md, skills)
+
+- `CLAUDE.md` is a router (`ADR/ADR-0022`): flag any fact it *carries* whose
+  home is elsewhere, and any pointer whose target moved (linked docs, skill
+  names, script names and flags).
+- `AGENTS.md` must remain a symlink to `CLAUDE.md`.
+- Each `.claude/skills/*/SKILL.md` names files, symbols, scripts, and
+  conventions — verify every one still resolves and matches (the skills promise
+  to read live source; a stale pointer breaks that), and check each rule they
+  state against its home (`docs/Contributing.md`, the ADRs).
+
+## 7. Report
 
 Group by the sections above. Lead with drift and dead links (correctness), then
 redundancy and convention. End with a one-line count. If asked to fix, prefer

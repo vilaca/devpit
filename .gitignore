@@ -38,6 +38,6 @@ go.work.sum
 docs/plans/
 
 # Agent-local state: everything under .claude/ is ignored except the committed
-# project skills (ADR-0023). A new shared artifact needs an explicit un-ignore.
+# project skills (ADR-0022). A new shared artifact needs an explicit un-ignore.
 .claude/*
 !.claude/skills/

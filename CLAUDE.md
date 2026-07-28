@@ -48,7 +48,7 @@ isn't done until `check.sh` is green.
 
 ## Repo skills (`.claude/skills/`)
 
-Committed, so every contributor gets them ([`ADR/ADR-0023`](ADR/ADR-0023_Agent_Contributor_Tooling.md)):
+Committed, so every contributor gets them ([`ADR/ADR-0022`](ADR/ADR-0022_Agent_Contributor_Tooling.md)):
 `/doc-check` (audit docs vs. code), `/add-provider`, `/new-adr`, `/signal-add`.
 Prefer them for those tasks. (Skills *not* committed here are personal — don't
 reference them in committed files; other contributors don't have them.)

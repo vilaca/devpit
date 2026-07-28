@@ -126,7 +126,7 @@ inferred workflow. Supersedes the attention-state set of ADR-0016.
 
 ## v0.1.5 — Jira ticket enrichment ✓ Built
 
-Decided 2026-07-13 (ADR-0022), shipped alongside the signal work. Providers
+Decided 2026-07-13 (ADR-0021), shipped alongside the signal work. Providers
 extract Jira keys at normalize time (`sdk.ExtractTicketKeys`: title → source
 branch → description, first source wins); a config-gated `internal/jira`
 enricher refreshes the persisted `jira_tickets` cache on a 15-minute sweep (a
@@ -189,7 +189,7 @@ Version-agnostic release-readiness gate: whichever version first ships publicly
 - Broaden beyond code forges: Jira, Slack, CI/CD, Sentry, PagerDuty
   (see `docs/Why.md`). Jira here means a full work-item provider —
   ticket-status enrichment already shipped in v0.1.5
-  (`ADR/ADR-0022_Jira_Ticket_Enrichment.md`).
+  (`ADR/ADR-0021_Jira_Ticket_Enrichment.md`).
 
 ## Unversioned ideas
 

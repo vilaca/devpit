@@ -108,7 +108,7 @@ Each item carries:
   `{ key: string, status: string, url: string }`.
   Omitted when no Jira config is present, no ticket key was found, or the ticket
   hasn't been fetched yet. The UI renders `[<status>]` as a link prefix on the
-  title (ADR-0022).
+  title (ADR-0021).
 
 ## `GET /connections`
 

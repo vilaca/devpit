@@ -14,6 +14,8 @@ management tool. It answers one question: **what requires my attention now?**
 - **Read-only by default** — aggregate; actions stay in the source systems.
 - **Extensible** — a plugin architecture for new providers.
 - **Fast and keyboard-first** — the UI is operated at speed.
+- **Progressive disclosure** — the list shows the minimum to act on; detail
+  appears on demand (hover text).
 
-This is the canonical list; other docs (e.g. `docs/Why.md`,
-`docs/Competitive_Analysis.md`) link here rather than restating it.
+This is the canonical list; other docs (e.g. `docs/Why.md`) link here rather
+than restating it.

@@ -31,7 +31,7 @@ type Config struct {
 	Warnings []string
 }
 
-// JiraConfig holds the credentials for the Jira Cloud enricher (ADR-0022).
+// JiraConfig holds the credentials for the Jira Cloud enricher (ADR-0021).
 type JiraConfig struct {
 	BaseURL  string
 	Email    string

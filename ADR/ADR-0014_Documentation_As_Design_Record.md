@@ -96,7 +96,7 @@ decision log.
 **`CLAUDE.md` is the agent entry point** — a router carrying no fact of its own,
 subject to the one-home rule like any doc. It and the committed project skills
 under `.claude/skills/` are governed by their own record
-(`ADR/ADR-0023_Agent_Contributor_Tooling.md`).
+(`ADR/ADR-0022_Agent_Contributor_Tooling.md`).
 
 ## Rationale
 

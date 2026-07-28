@@ -2,7 +2,8 @@
 
 The one-page visual reference for everything a row in the attention list can
 show. Seed for future user documentation. Decision record:
-`ADR/ADR-0016_Presentation_And_Ranking.md`; wire shapes: `docs/REST_API.md`.
+`ADR/ADR-0016_Presentation_And_Ranking.md`; exact signal conditions and
+ranking semantics: `docs/Attention_Engine.md`; wire shapes: `docs/REST_API.md`.
 
 **Status:** all items below are live (v0.1.1–v0.1.5).
 
@@ -49,12 +50,12 @@ role-aware where the fact is inherently about a role (see role scope notes).
 | chip | role scope | it means | hover |
 |---|---|---|---|
 | `changes_requested` | author | a reviewer requested changes | {N} |
-| `review_requested`  | reviewer | your review was requested, not submitted | {N} |
-| `blocked`           | author | provider merge gate not satisfied | {N} · provider says: {gate_detail} |
+| `review_requested`  | reviewer / sole approver | your review was requested (or implied — you are the only merge path), not submitted | {N} |
+| `blocked`           | author / sole approver | provider merge gate not satisfied | {N} · provider says: {gate_detail} |
 | `mentioned`         | anyone | you were @-mentioned (shows ×N if repeated) | {N} · clears when the item closes |
-| `ready_to_merge`    | author | gate satisfied, mergeable now | {N}; with red checks: · a non-required check is red |
-| `auto_merge_armed`  | author | provider auto-merge / merge-when-pipeline-succeeds is armed | {N} |
-| `checks_running`    | author | a pipeline is in progress | {N} |
+| `ready_to_merge`    | author / sole approver | gate satisfied, mergeable now | {N}; with red checks: · a non-required check is red |
+| `auto_merge_armed`  | author / sole approver | provider auto-merge / merge-when-pipeline-succeeds is armed | {N} |
+| `checks_running`    | author / sole approver | a pipeline is in progress | {N} |
 | `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; replaces the bare row | {N} |
 | `review_submitted`  | reviewer | you already reviewed; ball with author | {N} |
 
@@ -115,7 +116,7 @@ Facts a row carries without a tag:
 |---|---|---|
 | blue row tint | whole row | you authored the item (the connection's identity matches the author) — the only mark of authorship; the tag vocabulary is the same whatever your role |
 | amber row tint | whole row | the `old` age tier (idle > 30 days) — see Age tags above |
-| de-emphasized row | whole row | reviewed-done (`muted`): you are a reviewer who has submitted your review, so nothing is left for you — the row dims and suppresses its chips (a display cue only; muting does not change its position, which is age band + recency); full opacity on hover |
+| de-emphasized row | whole row | reviewed-done (`muted`): you are a reviewer — not the author or sole approver — who has submitted your review, so nothing is left for you — the row dims and suppresses its chips (a display cue only; muting does not change its position, which is age band + recency); full opacity on hover |
 | "N approved" / "you + N approved" | meta-row (last field) | count of reviewers who approved; informational only (never moves the item), shown when N > 0, hidden on drafts. When you are an approver (`my_review_state == "approved"`) it reads "you approved" or "you + N approved" |
 
 ## Hover-text rule

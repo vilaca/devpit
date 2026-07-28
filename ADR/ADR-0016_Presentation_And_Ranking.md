@@ -59,12 +59,12 @@ are the `State` constants and their wire strings
 | # | wire value | label | condition |
 |---|---|---|---|
 | 1 | `changes_requested` | Changes Requested | `roles[author] && ReviewDecision == "changes_requested"` |
-| 2 | `review_requested`  | Review Requested  | `roles[reviewer] && MyReviewState == "requested"` |
-| 3 | `blocked`           | Blocked           | `roles[author] && !Draft && Gate == "blocked"` |
+| 2 | `review_requested`  | Review Requested  | `(roles[reviewer] && MyReviewState == "requested") \|\| (roles[sole_approver] && !Draft && !reviewIsDone(MyReviewState))` |
+| 3 | `blocked`           | Blocked           | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "blocked"` |
 | 4 | `mentioned`         | Mentioned         | `hasMention` |
-| 5 | `ready_to_merge`    | Ready to Merge    | `roles[author] && !Draft && Gate == "ready"` |
-| 6 | `auto_merge_armed`  | Auto-merge Armed  | `roles[author] && !Draft && AutoMergeArmed` |
-| 7 | `checks_running`    | Checks Running    | `roles[author] && !Draft && ChecksRunning` |
+| 5 | `ready_to_merge`    | Ready to Merge    | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "ready"` |
+| 6 | `auto_merge_armed`  | Auto-merge Armed  | `(roles[author] \|\| roles[sole_approver]) && !Draft && AutoMergeArmed` |
+| 7 | `checks_running`    | Checks Running    | `(roles[author] \|\| roles[sole_approver]) && !Draft && ChecksRunning` |
 | 8 | `checking`          | Checking          | `Gate == "unknown"` (role-neutral — the backstop) |
 | 9 | `review_submitted`  | Review Submitted  | `roles[reviewer] && reviewIsDone(MyReviewState)` |
 
@@ -78,10 +78,13 @@ The signal *vocabulary* is one word-set — no separate author/reviewer labels,
 no authorship tag (the blue tint carries authorship). The *conditions* stay
 role-aware where the fact is inherently about a role:
 
-- The gate/verdict signals (Changes Requested, Blocked, Ready to Merge,
-  Auto-merge Armed, Checks Running) describe an MR **you authored** — they
-  keep their `roles[author]` guard.
-- Review Requested and Review Submitted are reviewer-relative.
+- The gate signals (Blocked, Ready to Merge, Auto-merge Armed, Checks Running)
+  describe an MR that cannot progress without you — `roles[author]` or
+  `roles[sole_approver]` (see Sole-approver role below). Changes Requested
+  stays author-only.
+- Review Requested and Review Submitted are reviewer-relative; Review
+  Requested also fires for a sole approver whose review isn't done (an
+  implicit obligation, no explicit request needed).
 - Mentioned is any-role.
 - **Checking (#8) is role-neutral**: it fires on any involved item whose gate
   is `unknown`, including a draft you only review, so it can backstop a row
@@ -179,20 +182,12 @@ is done — they still need to approve and merge. The mute predicate becomes:
 muted = roles[reviewer] && !roles[author] && !roles[sole_approver] && reviewIsDone(MyReviewState)
 ```
 
-**State mappings for `sole_approver` (in addition to the standard role mappings):**
-
-| State | Condition |
-|-------|-----------|
-| `review_requested` | `sole_approver && !draft && !reviewIsDone(MyReviewState)` |
-| `blocked` | `sole_approver && !draft && gate == blocked` |
-| `ready_to_merge` | `sole_approver && !draft && gate == ready` |
-| `auto_merge_armed` | `sole_approver && !draft && autoMergeArmed` |
-| `checks_running` | `sole_approver && !draft && checksRunning` |
-
-Rationale: a sole-approver item has the same urgency as an authored item — it
-cannot progress without this user's action — so it inherits the full gate/verdict
-signal set. `review_requested` fires without an explicit review request because the
-user has an implicit review obligation as the only merge path.
+**State mappings:** folded into the signal-set table above — `sole_approver`
+joins the author guard on the gate signals and adds the implicit-obligation arm
+of `review_requested`. Rationale: a sole-approver item has the same urgency as
+an authored item — it cannot progress without this user's action — so it
+inherits the full gate signal set, and `review_requested` fires without an
+explicit review request because the user is the only merge path.
 
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 
@@ -207,7 +202,8 @@ user has an implicit review obligation as the only merge path.
   tiers (fresh, stale, old); within a tier, most-recent-update-first. The "stale"
   and "old" badges are the anti-rot safety net that pushes idle work down.
 - **Repeated same-type signals collapse** to one tag with a count
-  ("Mentioned ×3"); the individual signals remain in the detail view.
+  ("Mentioned ×3"); the individual signals remain only in the stored event
+  log — the UI shows the count, with hover adding the onset.
 - **Markers carry gate diagnostics; signals never do** (2026-07-10). The signal
   set is driven by the provider's merge gate, so Blocked stays trustworthy.
   Everything that explains *why* an item cannot merge is a marker:

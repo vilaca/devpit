@@ -2,7 +2,8 @@
 
 ## Scope
 
-Process decision — applies now to all documentation and code comments.
+Implemented — process decision; applies now to all documentation and code
+comments.
 
 ## Context
 
@@ -69,9 +70,11 @@ and rationale. When you do, you still **mutate the affected existing ADR(s)** �
 move content to its new home, drop what no longer holds, cross-link — rather than
 leaving a stale copy behind. Supersession is *update-old-and-add-new*, not
 *freeze-old*: an ADR whose decision is **wholly** replaced is folded into its
-successor and the file deleted (git history keeps it — as with ADR-0021); one
-only *partly* affected is edited down to what still stands. There is no
-tombstone status — nothing stale survives to carry one.
+successor and the file deleted (git history keeps it — as with the signal ADR
+folded into ADR-0016), and the later ADRs are renumbered in the same change so
+the log carries no gaps; one only *partly* affected is edited down to what
+still stands. There is no tombstone status — nothing stale survives to carry
+one.
 
 ### README and Contributing (2026-07-15)
 

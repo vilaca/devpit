@@ -27,6 +27,8 @@ contributor and CI-adjacent agent gets the same behaviour.
   the doc-freshness and layering rules; the provider-duplication and
   over-engineering stances). It is subject to the one-home rule like any doc
   (ADR-0014) — it carries no fact of its own, only pointers and imperatives.
+  An `AGENTS.md` symlink exposes the same file to agent tools that read that
+  name instead.
 - **Project skills live committed under `.claude/skills/`.** `doc-check`
   (audit docs vs. code), `add-provider`, `new-adr`, and `signal-add` encode the
   repo's recurring multi-step workflows. Each skill **reads the current source as
@@ -34,8 +36,8 @@ contributor and CI-adjacent agent gets the same behaviour.
   of sync with the code it scaffolds against.
 
 An individual's **personal** skills are not committed and are not referenced from
-committed files — other contributors do not have them. `.claude/settings.local.json`
-and agent worktrees under `.claude/worktrees/` stay uncommitted.
+committed files — other contributors do not have them. Everything else under
+`.claude/` (local settings, agent worktrees, harness state) stays uncommitted.
 
 ## Rationale
 
@@ -53,5 +55,6 @@ rotting into another stale copy.
 - New project skills go under `.claude/skills/` committed; a skill that embeds a
   code shape instead of reading it is a bug (it will drift) — `doc-check`'s own
   discipline applies to the skills too.
-- Because `.claude/` is not gitignored, committing skills means being deliberate
-  about what under `.claude/` is added — settings and worktrees are not.
+- `.gitignore` allowlists `.claude/`: everything under it is ignored except
+  `.claude/skills/`, so agent-local state can't be committed by accident and a
+  new shared artifact under `.claude/` requires an explicit un-ignore.

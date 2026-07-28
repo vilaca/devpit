@@ -16,7 +16,9 @@ second decision log — the ADRs are it.
 
 ## ADR process
 
-- One decision per ADR; number sequentially (`ADR-NNNN_Title.md`).
+- One decision per ADR; number sequentially (`ADR-NNNN_Title.md`), no gaps —
+  when an ADR is folded into another (mutate-by-default, `ADR/ADR-0014`),
+  renumber the later ADRs and update references in the same change.
 - Every ADR carries `Scope` (`Implemented (vX)` / `Planned` / `Deferred` /
   `Uncommitted`); there is no `Status` field — being in the log is what makes
   it the accepted decision.
@@ -40,6 +42,10 @@ second decision log — the ADRs are it.
   proxies the API through to a running `devpit`. The Go build works without
   the frontend build (a committed placeholder page is embedded); you get the
   real UI only after `npm --prefix frontend run build`.
+- Commit messages use conventional prefixes (`feat:`, `fix:`, `docs:`,
+  `build:`, `style:`, `refactor:`, `chore:`, `test:`), imperative mood.
+- Working implementation plans and agent handoffs live in the gitignored
+  `docs/plans/` — they are not part of the committed design record.
 
 ## Coding standards
 
@@ -51,6 +57,9 @@ second decision log — the ADRs are it.
 
 - Unit-test the fold, engine cycle, storage, and config against fakes/fixtures
   (see `testdata/fixtures/`); providers are tested against recorded fixtures.
+  Provider tests replay go-vcr cassettes (`ModeReplayOnly`); to re-record one,
+  flip the recorder mode in the provider's test helper, run against a real
+  token, then restore the mode before committing.
 - A change to a code shape that a spec links to should be reflected in that
   spec's prose in the same change.
 

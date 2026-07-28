@@ -67,7 +67,9 @@ Read a couple of recent ADRs to learn the current template, then check every
 
 - Carries a `Scope` (`Implemented (vX)` / `Planned` / `Deferred` /
   `Uncommitted`). There is **no `Status:` field** — flag any that has one.
-- Filenames are `ADR-NNNN_Title.md`, sequentially numbered; flag gaps or dupes.
+- Filenames are `ADR-NNNN_Title.md`, sequentially numbered with no gaps (a
+  fold renumbers the later ADRs — `docs/Contributing.md`); flag gaps, dupes,
+  and references to a number that has since been renumbered away.
 - Timing is **linked to `docs/Roadmap.md`, not restated**; flag milestone dates
   copied into an ADR.
 - One decision per ADR; a decision with a known future trigger has a

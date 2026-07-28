@@ -167,7 +167,8 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
   Pinned items still display their age tags and pin age so rot cannot hide at
   the top.
 - **Repeated same-type signals collapse** to one tag with a count
-  ("Mentioned ×3"); the individual signals remain in the detail view.
+  ("Mentioned ×3"); the individual signals remain only in the stored event
+  log — the UI shows the count, with hover adding the onset.
 
 ## Presentation (Implemented, v0.1.1–v0.1.4)
 

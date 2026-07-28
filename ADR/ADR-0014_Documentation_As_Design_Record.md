@@ -90,6 +90,11 @@ process facts (dev workflow, coding standards, testing, provider guidelines).
 It restates decisions briefly and links to their homes; it is not a second
 decision log.
 
+**`CLAUDE.md` is the agent entry point** — a router carrying no fact of its own,
+subject to the one-home rule like any doc. It and the committed project skills
+under `.claude/skills/` are governed by their own record
+(`ADR/ADR-0023_Agent_Contributor_Tooling.md`).
+
 ## Rationale
 
 Drift came from copies, so the fix is to forbid copies: one home per fact, at

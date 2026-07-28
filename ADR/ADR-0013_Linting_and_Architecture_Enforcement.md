@@ -2,7 +2,8 @@
 
 ## Scope
 
-Implemented — enforced in CI (`.github/workflows/ci.yml`). See `docs/Roadmap.md`.
+Implemented — every gate runs through `scripts/check.sh`, locally and in CI
+(`.github/workflows/ci.yml`, one job per gate). See `docs/Roadmap.md`.
 
 ## Context
 
@@ -14,8 +15,13 @@ time, and Go's default `go vet` catches only a narrow class of issues.
 
 ## Decision
 
-CI enforces two complementary gates (see `.golangci.yml`, `.go-arch-lint.yml`,
-and `.github/workflows/ci.yml`):
+`scripts/check.sh` is the single gate runner and the definition of "green": it
+runs `gofmt`, `go build`/`vet`/`test`, golangci-lint, go-arch-lint, and the
+frontend `svelte-check`. Contributors run it before a change is done; CI runs the
+same script, one job per gate, so a red check names the failing gate and local
+and CI cannot drift — the gate list and the pinned linter versions live only in
+the script, not in the workflow. The two gates that make ADR-0012's layered
+structure executable (see `.golangci.yml`, `.go-arch-lint.yml`):
 
 1. **golangci-lint (v2)** runs with `default: all` — every bundled linter is
    enabled — minus a curated set of exclusions (below). `depguard` is
@@ -84,3 +90,9 @@ the arch check will flag them as unmapped. The `deepScan` exclusion is pinned to
 `cmd/devpit/main.go`: if the `engine.WithNotifier` wiring moves to another file,
 or a second composition-root file is added, `excludeFiles` must be updated in the
 same change or `deepScan` will resurface the `api -> engine` false positive.
+
+Adding a gate or bumping a pinned linter version is a change to `scripts/check.sh`
+alone — the workflow only invokes it. `go-arch-lint` scans the filesystem, so
+local git worktrees under `.claude/` are excluded in `.go-arch-lint.yml`
+(`exclude:`); the gofmt gate checks tracked files only for the same reason. A
+fresh CI checkout has no worktrees.

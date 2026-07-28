@@ -5,40 +5,47 @@ on:
     branches: [main]
   pull_request:
 
+# Every job runs one gate through scripts/check.sh — the same runner developers
+# use locally. Separate jobs mean a red check names the gate that failed; the
+# gate's command, flags, and pinned linter versions all live in scripts/check.sh
+# so CI and local can't drift.
 jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with: { go-version: '1.26', cache: true }
+      - run: scripts/check.sh --ci gofmt
+
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: true
-      - run: go build ./...
-      - run: go vet ./...
-      - run: go test ./...
+        with: { go-version: '1.26', cache: true }
+      - run: scripts/check.sh --ci build vet test
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: true
-      - uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.12.2
+        with: { go-version: '1.26', cache: true }
+      - run: scripts/check.sh --ci lint
 
   arch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: true
-      # Enforce the layering rules in .go-arch-lint.yml (sdk is a leaf,
-      # providers depend only on sdk, cmd is the composition root).
-      - run: go install github.com/fe3dback/go-arch-lint@v1.16.0
-      - run: go-arch-lint check
+        with: { go-version: '1.26', cache: true }
+      - run: scripts/check.sh --ci arch
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: scripts/check.sh --ci frontend

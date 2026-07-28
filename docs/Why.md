@@ -95,8 +95,9 @@ Future:
 ## The Attention Engine
 
 Provider-specific events are normalized into common events — reviews requested,
-mentions, CI failures, assignment changes — then folded into actionable states
-like Needs Review, Blocked, Ready to Merge, and Waiting on Author.
+mentions, CI failures, assignment changes — then folded into neutral signals
+like Changes Requested, Review Requested, Blocked, and Ready to Merge
+(`docs/Attention_Engine.md`).
 
 ## User-centric Synchronization
 

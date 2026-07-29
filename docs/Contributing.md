@@ -73,3 +73,10 @@ second decision log — the ADRs are it.
 - Prefer duplicating helper code (JSON decode, time parse, status mapping) over
   a shared `provider/*` helper — providers evolve independently by design
   (`ADR/ADR-0003_Provider_Plugin_Model.md`).
+
+## Releasing
+
+Cutting a release is a maintainer task with its own procedure — pre-flight,
+tagging, verification, and the manual fallback — in
+[`docs/Releasing.md`](Releasing.md). The pipeline's design is
+[`ADR-0023`](../ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md).

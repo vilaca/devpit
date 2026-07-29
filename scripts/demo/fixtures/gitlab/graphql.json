@@ -1,0 +1,42 @@
+{
+  "platform/payments!143": {
+    "approved": true,
+    "shouldBeRebased": false,
+    "divergedFromTargetBranch": false,
+    "headPipeline": null,
+    "approvedBy": { "count": 2, "nodes": [{ "username": "omar-said" }, { "username": "theo-park" }] }
+  },
+  "platform/auth-service!88": {
+    "approved": true,
+    "shouldBeRebased": false,
+    "divergedFromTargetBranch": false,
+    "headPipeline": { "status": "RUNNING" },
+    "approvedBy": { "count": 0, "nodes": [] }
+  },
+  "platform/notifications!205": {
+    "approved": false,
+    "shouldBeRebased": true,
+    "divergedFromTargetBranch": false,
+    "headPipeline": null,
+    "approvedBy": { "count": 0, "nodes": [] },
+    "reviewers": {
+      "nodes": [
+        { "username": "omar-said", "mergeRequestInteraction": { "reviewState": "REQUESTED_CHANGES" } }
+      ]
+    }
+  },
+  "data/pipeline!57": {
+    "approved": true,
+    "shouldBeRebased": false,
+    "divergedFromTargetBranch": false,
+    "headPipeline": { "status": "FAILED" },
+    "approvedBy": { "count": 1, "nodes": [{ "username": "omar-said" }] }
+  },
+  "platform/auth-service!91": {
+    "approved": true,
+    "shouldBeRebased": false,
+    "divergedFromTargetBranch": false,
+    "headPipeline": null,
+    "approvedBy": { "count": 1, "nodes": [{ "username": "nadia-ellis" }] }
+  }
+}

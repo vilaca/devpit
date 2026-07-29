@@ -1,0 +1,17 @@
+{
+  "number": 482,
+  "title": "Fix flaky auth token refresh",
+  "html_url": "https://github.com/acme/checkout-api/pull/482",
+  "state": "open",
+  "draft": false,
+  "merged": false,
+  "mergeable_state": "blocked",
+  "updated_at": "{{now-12d}}",
+  "user": { "login": "nadia-ellis" },
+  "requested_reviewers": [],
+  "assignees": [],
+  "body": "Refresh tokens intermittently fail under sustained load.",
+  "head": { "ref": "fix/auth-token-refresh" },
+  "base": { "repo": { "full_name": "acme/checkout-api" } },
+  "labels": [{ "name": "auth" }, { "name": "flaky-test" }]
+}

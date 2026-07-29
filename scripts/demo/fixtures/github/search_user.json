@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "number": 77,
+      "title": "Adopt CSS logical properties across the design system",
+      "html_url": "https://github.com/acme/design-system/pull/77",
+      "state": "open",
+      "draft": false,
+      "updated_at": "{{now-6d}}",
+      "user": { "login": "theo-park" },
+      "pull_request": { "url": "https://api.github.com/repos/acme/design-system/pulls/77" },
+      "repository_url": "https://api.github.com/repos/acme/design-system",
+      "labels": [{ "name": "frontend" }]
+    }
+  ]
+}

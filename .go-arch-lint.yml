@@ -39,6 +39,10 @@ components:
   web: { in: internal/web }
   providerGithub: { in: provider/github }
   providerGitlab: { in: provider/gitlab }
+  # The demo mock forge (scripts/demo): speaks only HTTP + stdlib, imports no
+  # internal package, and never ships in the binary (ADR-0023 / handoff 4). The
+  # empty mayDependOn keeps that isolation enforced.
+  demo: { in: scripts/demo }
 
 # Dependency direction. sdk is the leaf contract; cmd is the composition root;
 # providers see only the sdk; storage/config/attention are leaves over sdk.
@@ -67,5 +71,7 @@ deps:
     mayDependOn: [sdk]
   providerGitlab:
     mayDependOn: [sdk]
+  # demo has no deps entry on purpose: like sdk, a component absent from deps may
+  # import nothing internal (stdlib only) — which is exactly the demo's contract.
   cmd:
     mayDependOn: [sdk, config, engine, storage, api, attention, jira, update, web, providerGithub, providerGitlab]

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "1001",
+    "reason": "subscribed",
+    "subject": {
+      "title": "Fix flaky auth token refresh",
+      "url": "https://api.github.com/repos/acme/checkout-api/pulls/482",
+      "type": "PullRequest"
+    },
+    "repository": { "full_name": "acme/checkout-api" },
+    "updated_at": "{{now-12d}}"
+  },
+  {
+    "id": "1002",
+    "reason": "mention",
+    "subject": {
+      "title": "Upgrade Stripe SDK to v14",
+      "url": "https://api.github.com/repos/acme/billing-web/pulls/219",
+      "type": "PullRequest"
+    },
+    "repository": { "full_name": "acme/billing-web" },
+    "updated_at": "{{now-5d}}"
+  }
+]

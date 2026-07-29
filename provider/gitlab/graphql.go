@@ -15,16 +15,25 @@ import (
 
 const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
 	`approved shouldBeRebased divergedFromTargetBranch ` +
-	`headPipeline{status} approvedBy{count nodes{username}}}}`
+	`headPipeline{status} approvedBy{count nodes{username}} ` +
+	`reviewers{nodes{username mergeRequestInteraction{reviewState}}}}}`
 
-// graphQLBatchSize is the max MRs per GraphQL query. Each MR node costs ≈14
-// complexity; GitLab's ceiling is 250. 12 × 14 = 168, leaving headroom for
-// extra fields and stricter instances.
+// graphQLBatchSize is the max MRs per GraphQL query. Each MR node costs ≈18
+// complexity (the reviewers connection adds a few over the base fields);
+// GitLab's ceiling is 250. 12 × 18 = 216, still under the ceiling with headroom
+// for stricter instances.
 const graphQLBatchSize = 12
 
 // reviewStateApproved is the MyReviewState value recorded when the authenticated
 // user appears in a merge request's approvedBy set.
 const reviewStateApproved = "approved"
+
+// GitLab reviewer reviewState (glReviewState) and the normalized review_decision
+// it produces for the author's changes-requested signal.
+const (
+	glReviewStateChangesRequested = "REQUESTED_CHANGES"
+	decisionChangesRequested      = "changes_requested"
+)
 
 // graphQLError is returned by doGraphQL when the server responds HTTP 200 but
 // includes a non-empty errors array with null data (e.g. complexity-ceiling rejection).
@@ -109,6 +118,14 @@ type glGraphQLMR struct {
 			Username string `json:"username"`
 		} `json:"nodes"`
 	} `json:"approvedBy"`
+	Reviewers struct {
+		Nodes []struct {
+			Username    string `json:"username"`
+			Interaction struct {
+				ReviewState string `json:"reviewState"`
+			} `json:"mergeRequestInteraction"`
+		} `json:"nodes"`
+	} `json:"reviewers"`
 }
 
 // graphqlJoin enriches item.observed events with GitLab GraphQL data.
@@ -219,6 +236,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPayload) sdk.ItemObservedPayload {
 	pl.ApprovalsCount = snap.ApprovalsCount
 	pl.MyReviewState = snap.MyReviewState
+	pl.ReviewDecision = snap.ReviewDecision
 	pl.NeedsApproval = pl.NeedsApproval || snap.NeedsApproval
 	pl.FailingChecks = pl.FailingChecks || snap.FailingChecks
 	pl.ChecksRunning = pl.ChecksRunning || snap.ChecksRunning
@@ -245,7 +263,23 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 			}
 		}
 	}
+	// review_decision drives the author's changes-requested chip; it is not a
+	// merge-gate fact, so (like GitHub) it is recorded regardless of draft.
+	pl.ReviewDecision = reviewDecisionFromReviewers(mr)
 	return pl
+}
+
+// reviewDecisionFromReviewers returns "changes_requested" when any reviewer's
+// GraphQL reviewState is REQUESTED_CHANGES, else "" — GitLab has no single
+// PR-level decision field, so the MR-level verdict is derived from its
+// reviewers (the fold only consumes the changes-requested case).
+func reviewDecisionFromReviewers(mr glGraphQLMR) string {
+	for _, r := range mr.Reviewers.Nodes {
+		if r.Interaction.ReviewState == glReviewStateChangesRequested {
+			return decisionChangesRequested
+		}
+	}
+	return ""
 }
 
 // openSetRefresh queries the volatile GraphQL fields for cached open items not

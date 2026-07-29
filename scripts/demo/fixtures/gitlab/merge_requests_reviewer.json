@@ -1,0 +1,22 @@
+[
+  {
+    "iid": 91,
+    "project_id": 13,
+    "title": "Add MFA enrollment endpoint",
+    "web_url": "https://gitlab.com/platform/auth-service/-/merge_requests/91",
+    "state": "opened",
+    "draft": false,
+    "detailed_merge_status": "mergeable",
+    "has_conflicts": false,
+    "blocking_discussions_resolved": true,
+    "merge_when_pipeline_succeeds": false,
+    "updated_at": "{{now-2d}}",
+    "author": { "username": "omar-said" },
+    "assignees": [{ "username": "omar-said" }],
+    "reviewers": [{ "username": "nadia-ellis" }],
+    "references": { "full": "platform/auth-service!91" },
+    "source_branch": "auth/mfa-enrollment",
+    "description": "New endpoint for TOTP enrollment.",
+    "labels": ["security"]
+  }
+]

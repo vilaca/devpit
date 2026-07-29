@@ -1,0 +1,22 @@
+# systemd user unit for DevPit (Linux). Install:
+#
+#   mkdir -p ~/.local/bin ~/.config/systemd/user
+#   cp devpit ~/.local/bin/                       # the downloaded binary
+#   cp packaging/devpit.service ~/.config/systemd/user/
+#   systemctl --user enable --now devpit
+#
+# Runs as your user, binds host loopback only (ADR-0001). Config lives at
+# ~/.config/devpit/config.yaml by default (XDG); see docs/Token_Setup.md.
+[Unit]
+Description=DevPit — self-hosted attention center
+Documentation=https://github.com/vilaca/devpit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/devpit
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -504,6 +504,33 @@ func TestApplyGraphQLMyReviewState(t *testing.T) {
 	}
 }
 
+func TestApplyGraphQLReviewDecision(t *testing.T) {
+	var changes glGraphQLMR
+	if err := json.Unmarshal([]byte(
+		`{"reviewers":{"nodes":[{"username":"other","mergeRequestInteraction":{"reviewState":"REQUESTED_CHANGES"}}]}}`,
+	), &changes); err != nil {
+		t.Fatal(err)
+	}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{}, changes, "octocat"); pl.ReviewDecision != decisionChangesRequested {
+		t.Errorf("ReviewDecision = %q, want changes_requested when a reviewer requested changes", pl.ReviewDecision)
+	}
+	// review_decision is not a merge-gate fact, so a draft still records it.
+	draft := applyGraphQL(sdk.ItemObservedPayload{Draft: true}, changes, "octocat")
+	if draft.ReviewDecision != decisionChangesRequested {
+		t.Errorf("ReviewDecision = %q, want changes_requested even on a draft", draft.ReviewDecision)
+	}
+
+	var approved glGraphQLMR
+	if err := json.Unmarshal([]byte(
+		`{"reviewers":{"nodes":[{"username":"other","mergeRequestInteraction":{"reviewState":"APPROVED"}}]}}`,
+	), &approved); err != nil {
+		t.Fatal(err)
+	}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{}, approved, "octocat"); pl.ReviewDecision != "" {
+		t.Errorf("ReviewDecision = %q, want empty when no reviewer requested changes", pl.ReviewDecision)
+	}
+}
+
 func TestGraphQLJoinChecksRunning(t *testing.T) {
 	p := newTestProvider(t, "graphql_join_checks_running", "octocat")
 	res, err := p.FastPoll(context.Background(), nil)

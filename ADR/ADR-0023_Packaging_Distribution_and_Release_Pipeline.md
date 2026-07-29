@@ -51,6 +51,12 @@ cross-reference on every point, so they live here as one ADR.
   `service` block (`brew services start devpit`) and a `test` block running
   `devpit --version`. A `HOMEBREW_TAP_TOKEN` CI secret is a maintainer-held
   operational prerequisite.
+- **This choice pins goreleaser below v2.10**, which soft-deprecated formula
+  generation (`brews`) in favour of Homebrew *casks*. A cask installs the binary
+  but cannot provide `brew services` (its `service:` stanza is the macOS Services
+  menu, not launchd), so keeping the service one-liner means keeping the formula
+  — and therefore the last goreleaser release before that deprecation. The exact
+  pinned version lives in `.github/workflows/release.yml`.
 
 ### Service integration (the roadmap's "start scripts", reinterpreted)
 
@@ -147,5 +153,10 @@ deferring a user-facing feature until a real instance proves it necessary
 - **Forward dependency**: binary-shipped, user-facing retention ("clear history
   older than X") is deferred to v0.2 (`docs/Roadmap.md`); until then brew/Docker
   users rely on the maintainer scripts or the disposable Docker DB.
+- **Forward dependency**: the goreleaser pin is held below v2.10 to keep formula
+  generation (above). Adopting a newer goreleaser requires migrating the Homebrew
+  config from `brews` to `homebrew_casks` and rehoming the macOS auto-start onto
+  a launchd unit (mirroring the Linux systemd unit) — a deliberate follow-up, not
+  a silent version bump.
 - Provider tokens and their exact scopes are documented in `docs/Token_Setup.md`;
   this ADR does not restate them.

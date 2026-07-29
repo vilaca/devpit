@@ -1,0 +1,157 @@
+# goreleaser configuration for DevPit releases (ADR-0023, docs/Releasing.md).
+#
+# Driven by a v* tag push through .github/workflows/release.yml, and only after
+# the full `scripts/check.sh --ci` gate passes (gate-before-release). Pin the
+# goreleaser version wherever this runs — the workflow and any local invocation —
+# never "latest" (ADR-0013's no-drift rule).
+#
+# PIN NOTE: the pinned goreleaser (release.yml) is deliberately the last release
+# before v2.10, which soft-deprecated `brews` (formula generation) in favour of
+# `homebrew_casks`. We keep a formula because `brew services start devpit` is a
+# formula-only feature casks don't provide (ADR-0023 → Homebrew). Bumping past
+# that line means migrating `brews`→`homebrew_casks` and rehoming the macOS
+# service onto launchd — do not bump without doing so (ADR-0023 forward dep).
+version: 2
+
+project_name: devpit
+
+# The binary embeds the Svelte SPA via go:embed (internal/web/dist, ADR-0010),
+# so the SPA must be built before `go build`. These are the same two steps the
+# frontend gate in scripts/check.sh runs.
+before:
+  hooks:
+    - npm --prefix frontend ci
+    - npm --prefix frontend run build
+
+builds:
+  - id: devpit
+    binary: devpit
+    main: ./cmd/devpit
+    env:
+      - CGO_ENABLED=0 # modernc.org/sqlite is pure Go — cross-compile is free (ADR-0009)
+    flags:
+      - -trimpath
+    ldflags:
+      # Stamp the release version read by `devpit --version` and the update
+      # checker (main.version; "dev" otherwise). {{.Version}} has no leading "v".
+      - -s -w -X main.version={{.Version}}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      # Windows is best-effort amd64 only (ADR-0023); no windows/arm64.
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: devpit
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - packaging/devpit.service
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat(\(.+\))?:'
+      order: 0
+    - title: Bug fixes
+      regexp: '^fix(\(.+\))?:'
+      order: 1
+    - title: Documentation
+      regexp: '^docs(\(.+\))?:'
+      order: 2
+  filters:
+    # Housekeeping prefixes are noise in a user-facing changelog.
+    exclude:
+      - '^style:'
+      - '^build:'
+      - '^chore:'
+      - '^test:'
+      - '^refactor:'
+
+# One image per arch (buildx, native binary copied in — see Dockerfile), then a
+# manifest stitches them into multi-arch `latest` and versioned tags.
+dockers:
+  - id: devpit-amd64
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/vilaca/devpit:{{ .Version }}-amd64"
+      - "ghcr.io/vilaca/devpit:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Self-hosted, read-only attention center for your MRs and PRs"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/vilaca/devpit"
+      - "--label=org.opencontainers.image.licenses=MIT"
+  - id: devpit-arm64
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/vilaca/devpit:{{ .Version }}-arm64"
+      - "ghcr.io/vilaca/devpit:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Self-hosted, read-only attention center for your MRs and PRs"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/vilaca/devpit"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+docker_manifests:
+  - name_template: "ghcr.io/vilaca/devpit:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/vilaca/devpit:{{ .Version }}-amd64"
+      - "ghcr.io/vilaca/devpit:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/vilaca/devpit:latest"
+    image_templates:
+      - "ghcr.io/vilaca/devpit:latest-amd64"
+      - "ghcr.io/vilaca/devpit:latest-arm64"
+
+brews:
+  - name: devpit
+    repository:
+      owner: vilaca
+      name: homebrew-devpit
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/vilaca/devpit"
+    description: "Self-hosted, read-only attention center: one ranked list of the MRs and PRs that need you"
+    license: MIT
+    commit_author:
+      name: goreleaser
+      email: noreply@github.com
+    install: |
+      bin.install "devpit"
+    # `brew services start devpit` launches it at login with the default config
+    # path (~/.config/devpit/config.yaml); logs go under the Homebrew var dir.
+    service: |
+      run [opt_bin/"devpit"]
+      keep_alive true
+      log_path var/"log/devpit.log"
+      error_log_path var/"log/devpit.log"
+    test: |
+      system "#{bin}/devpit", "--version"
+    caveats: |
+      DevPit needs a config file before it will start. Create
+        ~/.config/devpit/config.yaml
+      (chmod 600 it — it holds plaintext tokens). See the README's Setup section
+      and https://github.com/vilaca/devpit/blob/main/docs/Token_Setup.md, then:
+        brew services start devpit    # http://localhost:7474

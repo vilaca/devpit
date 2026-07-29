@@ -1,0 +1,26 @@
+# DevPit demo-world config. Points both connections at the local mock forge
+# (scripts/demo/run.sh starts it on :9099). Tokens are placeholders — the mock
+# ignores auth. This is the source of the hero screenshot, never a real
+# instance. Paths are relative to the repo root; run.sh cd's there first.
+db_path: scripts/demo/.scratch/devpit.db
+listen: localhost:7474
+connections:
+  # handle: matches each mock /user identity. The API derives the authored-item
+  # blue tint from the config handle (the engine resolves identity at runtime
+  # but doesn't yet feed it back to the API — cmd/devpit/main.go), so the demo
+  # sets it explicitly to light the "mine" rows.
+  - id: github-cloud
+    type: github
+    base_url: http://localhost:9099/gh
+    token: demo-token
+    label: GitHub
+    handle: nadia-ellis
+  - id: gitlab-self
+    type: gitlab
+    base_url: http://localhost:9099/gl
+    token: demo-token
+    label: GitLab
+    handle: nadia-ellis
+# No jira: block — the enricher refreshes on a 15-minute cadence (ADR-0004) with
+# no cold-start catch-up, so a Jira status can't show within a screenshot window.
+# The demo omits it rather than ship a signal that only appears 15 minutes in.

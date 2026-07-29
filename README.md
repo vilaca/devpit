@@ -2,110 +2,156 @@
 
 **What requires my attention right now?**
 
-DevPit is a self-hosted attention center for software engineers. Instead of
-triaging notifications across GitHub, GitLab, and other forges, you get one
-ranked list of actionable work — scoped to you, not to repositories.
+![DevPit — one ranked list of the MRs and PRs that need you, across GitHub and GitLab](docs/assets/hero-dark.png)
 
-The shift: repositories become context. You are the center of the workflow.
+DevPit is a self-hosted, read-only **attention center**: one ranked list of the
+MRs/PRs that need *you*, across GitHub and GitLab, with optional Jira status.
+Repositories become context — you are the center of the workflow. It runs on
+your machine, with your tokens, talks only to your forges, and never acts on
+your behalf (every action is a deep link out). Why it exists and how it decides
+what matters: [`docs/Why.md`](docs/Why.md).
 
-<!-- Hero screenshot goes here: capture from seeded demo data at the
-     first-public-release gate (docs/Roadmap.md) — never from a real instance. -->
+## Install
 
-## What you get
+A single binary that embeds the web UI and one SQLite file; no runtime, no
+services to stand up. Artifacts for macOS, Linux, and Windows (best-effort), plus
+a Docker image, are published on each release. The full matrix and its rationale:
+[`ADR-0023`](ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md).
 
-- **One ranked list across forges.** Every open MR/PR you're involved in —
-  authored, reviewing, assigned, mentioned — in a single list, freshest
-  actionable work first.
-- **Neutral signals, not an inferred workflow.** Rows carry the provider's own
-  facts as chips — Changes Requested, Review Requested, Blocked, Ready to
-  Merge, … — plus diagnostic badges (failing checks, merge conflict, unresolved
-  discussions) and age tints. The current vocabulary lives in
-  [`docs/Attention_Engine.md`](docs/Attention_Engine.md).
-- **Knows when only you can merge.** Repos where you are the sole
-  merge-capable account get an always-on attention axis: those MRs surface as
-  blocked on you even without an explicit review request.
-- **Sees the ticket behind the MR.** With a Jira connection configured, items
-  link to their Jira issue and show its workflow status inline.
-- **A "Handle next" zone.** Pin the items you've decided to act on; pins are
-  local-only and exempt from auto-ranking.
-- **Private and read-only.** Runs on your machine, with your tokens, and talks
-  only to your forges. DevPit never acts on your behalf — every action is a
-  deep link out to the provider
-  ([`ADR/ADR-0017_Read_Only_Action_Model.md`](ADR/ADR-0017_Read_Only_Action_Model.md)).
-
-## Status
-
-Pre-release, v0.1.5 — GitHub + GitLab, single-user, localhost. Milestones and
-timing: [`docs/Roadmap.md`](docs/Roadmap.md).
-
-## Under the hood
-
-- **Polling-first, no webhooks.** Uses your own token; no server-side setup,
-  no callback URLs required.
-- **Event log + fold-on-read.** Each poll diff appends events to a durable
-  SQLite log; item facts and signals are computed at read time (pure event
-  sourcing — no materialized state table).
-- **SSE live updates.** The web UI subscribes to a Server-Sent Events stream
-  and re-fetches on `attention.changed` — no page refresh.
-- **Single binary, single SQLite file.** The SPA embeds via `go:embed`; WAL
-  mode keeps reads unblocked while the sync writer appends.
-
-## Quickstart
+### Homebrew (macOS)
 
 ```sh
-scripts/start.sh
+brew install vilaca/devpit/devpit
+brew services start devpit    # launch at login and keep running
+# …or just run it in the foreground:
+devpit
 ```
 
-The script installs frontend deps when needed, builds the SPA (it embeds into
-the binary), builds the binary, stops any running instance, and starts the new
-one. Or do the same by hand:
+Then open <http://localhost:7474>. Configure it first — see [Setup](#setup) below.
+
+### Docker
+
+The image is `ghcr.io/vilaca/devpit`. A container binds all interfaces
+(`listen: :7474` in its config) but the host publishes **loopback only**, so the
+no-auth posture ([`ADR-0001`](ADR/ADR-0001_Local_First_Web_Application.md)) is
+preserved:
 
 ```sh
-npm --prefix frontend ci && npm --prefix frontend run build
-go build -o devpit ./cmd/devpit
-./devpit   # --config <path> to override the default below
+docker run --rm \
+  -v ~/.config/devpit/config.yaml:/etc/devpit/config.yaml:ro \
+  -p 127.0.0.1:7474:7474 \
+  ghcr.io/vilaca/devpit --config /etc/devpit/config.yaml
 ```
 
-Either way the dashboard and the API are served together at
-`http://localhost:7474`.
-
-Configuration is one YAML file (default `~/.config/devpit/config.yaml`;
-`chmod 600` it — it holds plaintext tokens):
+That config must set `listen: :7474`. Or with Compose — the DB volume is
+**optional** (the event store is a rebuildable cache; dropping it re-syncs within
+one cycle and costs only your "Handle next" pins and hover history), the config
+mount is always required:
 
 ```yaml
-db_path: /path/to/devpit.db
+# compose.yaml
+services:
+  devpit:
+    image: ghcr.io/vilaca/devpit:latest
+    command: ["--config", "/etc/devpit/config.yaml"]
+    ports:
+      - "127.0.0.1:7474:7474"     # host loopback only
+    volumes:
+      - ./config.yaml:/etc/devpit/config.yaml:ro   # required
+      - devpit-db:/var/lib/devpit                  # optional (rebuildable cache)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474/up || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+volumes:
+  devpit-db:
+```
+
+The `config.yaml` for Compose sets `listen: :7474` and
+`db_path: /var/lib/devpit/devpit.db`.
+
+### Linux (systemd)
+
+Download the `linux` binary from
+[Releases](https://github.com/vilaca/devpit/releases), then use the committed
+user unit — [`packaging/devpit.service`](packaging/devpit.service):
+
+```sh
+mkdir -p ~/.local/bin ~/.config/systemd/user
+cp devpit ~/.local/bin/
+cp packaging/devpit.service ~/.config/systemd/user/
+systemctl --user enable --now devpit
+```
+
+### Windows (best-effort)
+
+Untested; Docker is recommended. Download `devpit.exe` from
+[Releases](https://github.com/vilaca/devpit/releases) and run it with an explicit
+config path:
+
+```powershell
+devpit.exe --config C:\path\to\config.yaml
+```
+
+## Setup
+
+One YAML file (default `~/.config/devpit/config.yaml`; `chmod 600` it — it holds
+plaintext tokens):
+
+```yaml
+db_path: ~/.local/share/devpit/devpit.db
 connections:
   - id: github-personal
     type: github
-    token: ghp_…            # classic or fine-grained — see docs/Token_Setup.md
-    label: Personal         # optional — shown on each row; defaults to the id
+    token: ghp_…                    # classic or fine-grained
   - id: work-gitlab
     type: gitlab
     base_url: https://gitlab.example.com
-    token: glpat-…          # read_api scope — see docs/Token_Setup.md
-    label: Work             # optional — defaults to the id
-jira:                       # optional — Jira status enrichment
+    token: glpat-…                  # read_api scope
+jira:                               # optional — Jira status enrichment
   base_url: https://example.atlassian.net
   email: you@example.com
   api_token: …
 ```
 
 Per connection only `id`, `type`, and `token` are required; the full schema and
-validation rules live in [`internal/config/config.go`](internal/config/config.go).
-Creating each token, the exact minimal scopes, and the GitHub
-classic-vs-fine-grained trade-off are in
+validation live in [`internal/config/config.go`](internal/config/config.go).
+Creating each token with the exact minimal scopes, and the GitHub
+classic-vs-fine-grained trade-off, are in
 [`docs/Token_Setup.md`](docs/Token_Setup.md).
+
+## Understanding the list
+
+Every chip, badge, tint, and the ranking rules are catalogued in
+[`docs/UI_Vocabulary.md`](docs/UI_Vocabulary.md) — start with
+["Why is this item here, in this order?"](docs/UI_Vocabulary.md#why-is-this-item-here-in-this-order)
+and ["Why is something missing?"](docs/UI_Vocabulary.md#why-is-something-missing).
+
+## Updating
+
+DevPit checks GitHub for a newer release at startup and daily, and shows a quiet
+"update available" chip in the top bar (it never self-updates — the chip links
+out; [`ADR-0023`](ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md)).
+Upgrade with your install channel:
+
+```sh
+brew upgrade vilaca/devpit/devpit      # Homebrew
+docker pull ghcr.io/vilaca/devpit      # Docker
+```
 
 ## Design docs
 
 `docs/` holds the specs; `ADR/` holds every decision with its rationale
-([`ADR/ADR-0014_Documentation_As_Design_Record.md`](ADR/ADR-0014_Documentation_As_Design_Record.md)).
-Start with [`docs/Why.md`](docs/Why.md) and
+([`ADR-0014`](ADR/ADR-0014_Documentation_As_Design_Record.md)). Start with
+[`docs/Why.md`](docs/Why.md) and
 [`docs/High_Level_Architecture.md`](docs/High_Level_Architecture.md).
 
 ## Contributing
 
-See [`docs/Contributing.md`](docs/Contributing.md).
+See [`docs/Contributing.md`](docs/Contributing.md). The demo world behind the
+screenshot above lives in [`scripts/demo/`](scripts/demo/README.md).
 
 ## License
 

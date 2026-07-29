@@ -55,7 +55,15 @@ else
 fi
 
 echo "==> Building backend (embeds internal/web/dist)"
-go build -o "$BIN" ./cmd/devpit
+# Build to a temp file and rename into place so the binary gets a *fresh* inode.
+# `go build -o` rewrites an existing target in place (same inode); if a running
+# instance still has the old binary mmap'd — and it does, since we build before
+# we stop it — rewriting that inode invalidates its code-signed pages and macOS
+# (AMFI) SIGKILLs it with "Killed: 9", no crash report, sometimes taking the
+# freshly-exec'd instance with it. Renaming leaves the running instance's mapping
+# untouched and preserves build-first safety: a failed build keeps the old binary.
+go build -o "$BIN.tmp" ./cmd/devpit
+mv -f "$BIN.tmp" "$BIN"
 
 # PIDs listening on the port. Filtered to LISTEN so we match the server, never
 # a client (e.g. a browser tab connected to the dashboard also has a socket on

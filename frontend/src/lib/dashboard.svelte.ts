@@ -12,7 +12,7 @@
 
 import { getAttention, getConnections, getSyncLog, setFlag, clearFlag } from "./api";
 import { connectEvents, type ConnectionState } from "./sse";
-import type { AttentionItem, Connection, SyncLogEntry } from "./types";
+import type { AttentionItem, Connection, SyncLogEntry, UpdateInfo } from "./types";
 
 interface Banner {
   connectionId: string;
@@ -24,6 +24,9 @@ class Dashboard {
   items = $state<AttentionItem[]>([]);
   connections = $state<Connection[]>([]);
   syncLog = $state<SyncLogEntry[]>([]);
+  // Self-update hint (ADR-0023). Rides on /connections; the TopBar renders a
+  // chip only when available. Null until the first hydrate.
+  update = $state<UpdateInfo | null>(null);
 
   loading = $state(true);
   loadError = $state<string | null>(null);
@@ -60,6 +63,8 @@ class Dashboard {
         void this.refreshConnections();
         void this.refreshSyncLog();
       },
+      // The update hint travels on /connections, so re-fetch that slice.
+      onUpdateAvailable: () => void this.refreshConnections(),
       onStateChange: (s) => {
         this.streamState = s;
       },
@@ -79,6 +84,7 @@ class Dashboard {
       ]);
       this.items = attention.items;
       this.connections = connections.connections;
+      this.update = connections.update;
       this.syncLog = syncLog.entries;
       this.loadError = null;
     } catch (err) {
@@ -98,7 +104,9 @@ class Dashboard {
 
   async refreshConnections(): Promise<void> {
     try {
-      this.connections = (await getConnections()).connections;
+      const resp = await getConnections();
+      this.connections = resp.connections;
+      this.update = resp.update;
     } catch {
       /* transient */
     }

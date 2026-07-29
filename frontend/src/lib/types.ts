@@ -95,8 +95,19 @@ export interface Connection {
   health: HealthInfo;
 }
 
+// Self-update hint (ADR-0023, internal/api/connections.go). available is false
+// until the backend's update checker finds a newer release; the TopBar renders
+// its chip only when available, using in_container to pick the upgrade command.
+export interface UpdateInfo {
+  available: boolean;
+  latest_version?: string;
+  release_url?: string;
+  in_container: boolean;
+}
+
 export interface ConnectionsResponse {
   connections: Connection[];
+  update: UpdateInfo;
 }
 
 export type SyncOperation = "fast_poll" | "reconcile";
@@ -121,7 +132,11 @@ export interface SyncLogResponse {
 
 // SSE event names (docs/REST_API.md, internal/api/events.go). Coarse by design:
 // each says only *that* something changed, so the client re-fetches.
-export type SseEventName = "attention.changed" | "sync.completed" | "sync.failed";
+export type SseEventName =
+  | "attention.changed"
+  | "sync.completed"
+  | "sync.failed"
+  | "update.available";
 
 export interface ConnEventPayload {
   connection_id: string;

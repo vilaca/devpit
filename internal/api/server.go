@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/vilaca/devpit/internal/storage"
@@ -37,6 +38,12 @@ type Server struct {
 	connByID   map[string]ConnectionMeta
 	staleThres time.Duration
 	oldThres   time.Duration
+
+	// update is the self-update hint served on GET /connections; guarded by
+	// updateMu because the update checker writes it from its own goroutine
+	// while HTTP handlers read it. Zero value = no update known (see update.go).
+	updateMu sync.Mutex
+	update   updateInfo
 }
 
 // New constructs a Server. staleThreshold and oldThreshold are forwarded
@@ -59,6 +66,9 @@ func New(db *storage.DB, connections []ConnectionMeta, staleThreshold, oldThresh
 	s.mux.HandleFunc("GET /events", s.handleEvents)
 	s.mux.HandleFunc("GET /connections", s.handleConnections)
 	s.mux.HandleFunc("GET /sync-log", s.handleSyncLog)
+	// GET /up: unauthenticated liveness probe for Docker HEALTHCHECK and service
+	// supervisors (docs/REST_API.md). More specific than the SPA catch-all below.
+	s.mux.HandleFunc("GET /up", handleUp)
 	s.mux.HandleFunc("PUT /items/{id}/flag", s.handleFlagSet)
 	s.mux.HandleFunc("DELETE /items/{id}/flag", s.handleFlagClear)
 	// Catch-all: serve the embedded SPA (ADR-0010). The API patterns above are
@@ -72,6 +82,13 @@ func New(db *storage.DB, connections []ConnectionMeta, staleThreshold, oldThresh
 // ServeHTTP implements [http.Handler].
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
+}
+
+// handleUp serves GET /up: a tiny unauthenticated liveness response. Stateless,
+// so it is a plain function rather than a method.
+func handleUp(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte("ok"))
 }
 
 // connectionIDs returns the ordered list of connection IDs from the config.

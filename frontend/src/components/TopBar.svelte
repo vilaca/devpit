@@ -1,15 +1,17 @@
 <script lang="ts">
-  import type { Connection } from "../lib/types";
+  import type { Connection, UpdateInfo } from "../lib/types";
   import type { ConnectionState } from "../lib/sse";
   import ConnectionHealth from "./ConnectionHealth.svelte";
 
   const {
     connections,
     streamState,
+    update,
     onShowLog,
   }: {
     connections: Connection[];
     streamState: ConnectionState;
+    update: UpdateInfo | null;
     onShowLog: (connectionId?: string) => void;
   } = $props();
 
@@ -18,6 +20,19 @@
     connecting: "Reconnecting to live stream…",
     closed: "Live stream closed",
   };
+
+  // Upgrade command shown on hover: docker inside a container, brew otherwise
+  // (ADR-0023). The backend reports which via update.in_container.
+  const upgradeCmd = $derived(
+    update?.in_container
+      ? "docker pull ghcr.io/vilaca/devpit"
+      : "brew upgrade vilaca/devpit/devpit",
+  );
+  const updateHint = $derived(
+    update?.latest_version
+      ? `${update.latest_version} available — ${upgradeCmd}`
+      : upgradeCmd,
+  );
 </script>
 
 <header class="topbar">
@@ -36,6 +51,17 @@
   {/if}
 
   <nav class="connections">
+    {#if update?.available}
+      <a
+        class="update"
+        href={update.release_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={updateHint}
+      >
+        Update
+      </a>
+    {/if}
     {#each connections as c (c.id)}
       <ConnectionHealth connection={c} onShowLog={(id) => onShowLog(id)} />
     {/each}
@@ -65,6 +91,22 @@
     align-items: center;
     gap: 2px;
     margin-left: auto;
+  }
+  .update {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 3px 8px;
+    margin-right: 6px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .update:hover {
+    background: var(--accent);
+    color: var(--bg);
   }
   .stream {
     border: none;

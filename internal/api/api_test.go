@@ -554,6 +554,48 @@ func TestAttentionFlaggedAtInResponse(t *testing.T) {
 	}
 }
 
+// --- GET /up ---
+
+func TestUpReturns200(t *testing.T) {
+	s := newTestServer(t, openTestDB(t))
+	w := do(t, s, "GET", "/up")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if body := w.Body.String(); body != "ok" {
+		t.Errorf("body = %q, want ok", body)
+	}
+}
+
+// --- update hint on GET /connections ---
+
+func TestConnectionsUpdateAbsentByDefault(t *testing.T) {
+	s := newTestServer(t, openTestDB(t))
+	w := do(t, s, "GET", "/connections")
+	var resp connectionsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Update.Available {
+		t.Errorf("update.available = true, want false before any check")
+	}
+}
+
+func TestConnectionsReflectsSetUpdate(t *testing.T) {
+	s := newTestServer(t, openTestDB(t))
+	s.SetUpdate(true, "v9.0.0", "https://example/releases/v9.0.0", true)
+
+	w := do(t, s, "GET", "/connections")
+	var resp connectionsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	u := resp.Update
+	if !u.Available || u.LatestVersion != "v9.0.0" || u.ReleaseURL != "https://example/releases/v9.0.0" || !u.InContainer {
+		t.Errorf("update = %+v, want the values passed to SetUpdate", u)
+	}
+}
+
 // --- Content-Type ---
 
 func TestContentTypeJSON(t *testing.T) {

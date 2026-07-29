@@ -69,6 +69,28 @@ connections:
 	if len(cfg.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", cfg.Warnings)
 	}
+	if cfg.Listen != DefaultListen {
+		t.Errorf("Listen = %q, want default %q", cfg.Listen, DefaultListen)
+	}
+}
+
+func TestLoadListenOverride(t *testing.T) {
+	stubRegistry(t, "github")
+	path := writeConfig(t, `
+db_path: /tmp/devpit.db
+listen: ":7474"
+connections:
+  - id: gh
+    type: github
+    token: ghp_abc
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Listen != ":7474" {
+		t.Errorf("Listen = %q, want :7474", cfg.Listen)
+	}
 }
 
 func TestLoadValidationErrors(t *testing.T) {

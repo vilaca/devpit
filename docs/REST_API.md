@@ -17,9 +17,12 @@ so there are no create/delete endpoints.
 - `GET /attention` — the single ranked list; states as tags. `?state=` is
   optional client-side sugar.
 - `GET /events` — the SSE stream (below).
-- `GET /connections` — provider connections with health/identity, read-only.
+- `GET /connections` — provider connections with health/identity, plus the
+  self-update hint, read-only.
 - `GET /sync-log` — the user-facing sync/poll log; `?connection=` filters for
   banner deep-links.
+- `GET /up` — unauthenticated liveness probe: `200 OK`, body `ok`. For Docker
+  `HEALTHCHECK` and service supervisors; carries no state.
 - `PUT /items/{id}/flag` / `DELETE /items/{id}/flag` — set/clear the local
   "Handle next" flag (`ADR/ADR-0017_Read_Only_Action_Model.md`); return
   `204 No Content`.
@@ -119,6 +122,13 @@ while pending/failed), and a `health` object: `status`
 fixed `failure_window_minutes` (60). The token is never returned. Drives the
 health dot (`ADR/ADR-0018_Sync_Observability.md`).
 
+The envelope also carries `update` — the self-update hint
+(`ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md`): `available`
+(bool), `latest_version` and `release_url` (present only when available), and
+`in_container` (whether the backend runs in Docker, which picks the upgrade
+command the UI shows). `available` stays false until the update checker finds a
+newer release; the `update.available` SSE event nudges a re-fetch (below).
+
 ## `GET /sync-log`
 
 One entry per poll cycle: `connection_id`, denormalized `connection_label` (so
@@ -139,6 +149,8 @@ re-fetches, rather than patching state from payloads:
 - `sync.completed` — a poll cycle finished for a connection; feeds the health
   indicator and the live sync-log view.
 - `sync.failed` — a poll cycle failed; drives the non-blocking failure banner.
+- `update.available` — the self-update hint changed; client re-fetches
+  `/connections` (where the hint lives).
 
 Fine-grained domain events (`review.requested`, `mention.created`, …) may be
 added later for notification/toast features.

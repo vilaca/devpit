@@ -13,9 +13,23 @@ const (
 	healthFailing  = "failing"
 )
 
-// connectionsResponse is the GET /connections response envelope.
+// connectionsResponse is the GET /connections response envelope. The self-update
+// hint rides here (rather than on a dedicated endpoint) because this is the
+// status the frontend already polls; the update.available SSE event nudges a
+// re-fetch when it changes (docs/REST_API.md).
 type connectionsResponse struct {
 	Connections []connectionItem `json:"connections"`
+	Update      updateInfo       `json:"update"`
+}
+
+// updateInfo is the self-update hint (ADR-0023). Available is false until the
+// update checker (internal/update) finds a newer release; the UI renders the
+// TopBar chip only when Available, using InContainer to pick the upgrade hint.
+type updateInfo struct {
+	Available     bool   `json:"available"`
+	LatestVersion string `json:"latest_version,omitempty"`
+	ReleaseURL    string `json:"release_url,omitempty"`
+	InContainer   bool   `json:"in_container"`
 }
 
 // connectionItem is one entry in the GET /connections response.
@@ -59,7 +73,10 @@ func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
 			Health:   health,
 		})
 	}
-	writeJSON(w, http.StatusOK, connectionsResponse{Connections: result})
+	writeJSON(w, http.StatusOK, connectionsResponse{
+		Connections: result,
+		Update:      s.currentUpdate(),
+	})
 }
 
 // computeHealth derives the health status for one connection from the sync_log.

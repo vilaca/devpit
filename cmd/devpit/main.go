@@ -22,6 +22,7 @@ import (
 	"github.com/vilaca/devpit/internal/engine"
 	"github.com/vilaca/devpit/internal/jira"
 	"github.com/vilaca/devpit/internal/storage"
+	"github.com/vilaca/devpit/internal/update"
 	"github.com/vilaca/devpit/sdk"
 
 	// Register the built-in providers so config type validation (∈ Registry)
@@ -30,9 +31,10 @@ import (
 	_ "github.com/vilaca/devpit/provider/gitlab"
 )
 
-// httpAddr is the loopback address the local dashboard API listens on. Fixed
-// for v0.1 (not yet a config field); loopback-only since the API is unauthenticated.
-const httpAddr = "localhost:7474"
+// version is the running build's version. It stays "dev" for local builds and
+// is overridden at release time via -ldflags -X main.version=… (goreleaser,
+// ADR-0023). The update checker treats "dev" as "never check".
+var version = "dev"
 
 // httpShutdownTimeout bounds how long graceful HTTP shutdown waits for in-flight
 // handlers to drain once the root context is cancelled.
@@ -49,7 +51,13 @@ func main() {
 func run() error {
 	configPath := flag.String("config", config.DefaultPath(),
 		"path to the YAML config file")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		_, _ = fmt.Fprintln(os.Stdout, version)
+		return nil
+	}
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -65,8 +73,8 @@ func run() error {
 	}
 	defer func() { _ = db.Close() }()
 
-	log.Printf("devpit: loaded %d connection(s), db=%s",
-		len(cfg.Connections), cfg.DBPath)
+	log.Printf("devpit %s: config=%s, %d connection(s), db=%s",
+		version, *configPath, len(cfg.Connections), cfg.DBPath)
 
 	// Cancel the root context on SIGINT/SIGTERM so the engine drains and Closes
 	// each provider under its bounded timeout before we exit.
@@ -79,13 +87,14 @@ func run() error {
 	srv := api.New(db, connectionMeta(cfg.Connections),
 		attention.DefaultStaleThreshold, attention.DefaultOldThreshold)
 	var _ engine.Notifier = srv
+	var _ update.Sink = srv
 
 	// Bind before serving so a port clash (e.g. another instance) is a fatal
 	// startup error rather than a lost goroutine.
 	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", httpAddr)
+	ln, err := lc.Listen(ctx, "tcp", cfg.Listen)
 	if err != nil {
-		return fmt.Errorf("listen %s: %w", httpAddr, err)
+		return fmt.Errorf("listen %s: %w", cfg.Listen, err)
 	}
 	httpServer := &http.Server{
 		Handler:           srv,
@@ -99,7 +108,11 @@ func run() error {
 			log.Printf("devpit: http server: %v", err)
 		}
 	}()
-	log.Printf("devpit: API listening on http://%s", httpAddr)
+	log.Printf("devpit: listening on http://%s", cfg.Listen)
+
+	// Surface a newer release as a quiet TopBar chip (ADR-0023). Skipped for
+	// dev builds; failures are quiet. inContainer picks the upgrade hint.
+	update.New(version, inContainer(), srv).Start(ctx)
 
 	if cfg.Jira != nil {
 		r := jira.NewRefresher(jira.Config{
@@ -125,6 +138,14 @@ func run() error {
 		return fmt.Errorf("engine: %w", runErr)
 	}
 	return nil
+}
+
+// inContainer reports whether we are running inside a Docker container, so the
+// update hint can suggest `docker pull` instead of `brew upgrade`. Checked once
+// at startup via the marker file the runtime creates.
+func inContainer() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
 }
 
 // connectionMeta projects the resolved config connections into the API's

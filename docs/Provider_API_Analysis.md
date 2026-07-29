@@ -68,6 +68,14 @@ Without a classic PAT the fast tier is the GraphQL search poll below,
 run at the same cadence — costs a few points per cycle, which the budget
 absorbs easily.
 
+> **Implementation note (as of v0.1.6):** this search-poll fallback and the
+> token-driven capability degradation are **not yet implemented**. `FastPoll`
+> polls `/notifications` unconditionally and GitHub mention signals arrive only
+> from it, so a fine-grained PAT loses the fast tier and mentions entirely (only
+> the 15-minute reconcile runs). The practical token trade-off users face is in
+> `docs/Token_Setup.md`; the "recommended default" and "optional tier" framing
+> here is aspirational until the fallback lands.
+
 ### Bucket → call mapping
 
 One GraphQL request per cycle, aliasing multiple `search()` calls

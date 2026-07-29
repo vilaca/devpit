@@ -125,3 +125,62 @@ A tooltip must say something the tag label doesn't. Every tag shows how long
 its condition has held ("3 days ago" — minutes, then hours past 1h, then days
 past 1d), computed from the item's observed history (`since` map in the API);
 extra facts are appended only where they exist. No tag restates its own name.
+
+## Why is this item here, in this order?
+
+The list answers "what needs me now?". A row earns its place top-to-bottom by
+four rules, in order:
+
+1. **The pinned "Handle next" zone comes first.** Anything you pinned sits at the
+   top in the order you pinned it, exempt from all auto-ranking (it still shows
+   its age tag and pin age). A pin is a deliberate choice; DevPit never reorders
+   it.
+2. **Then age bands.** Below the pins the list splits into **fresh** (idle < 7d),
+   **stale** (7–30d), and **old** (> 30d), and always sorts fresh → stale → old.
+   Fresh work stays on top; rot sinks. This is the one place "how long it sat"
+   changes ordering.
+3. **Newest first within a band.** Inside a band the most recently active item
+   comes first (its newest signal, else the latest provider update).
+4. **Signal precedence orders the *chips*, not the items.** When a row carries
+   several signals the highest-precedence one leads (see the Signals table
+   above); the rest ride along. Precedence picks the headline chip — it does not
+   move the row.
+
+Worked example — four open items:
+
+- **A** — you pinned it yesterday; idle 3 weeks.
+- **B** — authored, changes requested; idle 2 days.
+- **C** — your review requested; idle 1 day.
+- **D** — authored, ready to merge; idle 40 days.
+
+Order: **A** first (pinned, exempt). Then the **fresh** band — **C** (idle 1d)
+above **B** (idle 2d), newest activity first, *not* B's higher-precedence
+"Changes Requested" chip. Then **D** last, alone in the **old** band despite
+being ready to merge — age sinks it. B's "Changes Requested" only makes it B's
+leading chip; it never lifts B above C.
+
+The exact band thresholds, the precedence list, and the fold conditions are in
+`docs/Attention_Engine.md` (the code is authoritative). This is the user-facing
+story, not a second copy of the rules.
+
+## Why is something missing?
+
+DevPit shows only open items **you are involved in**, and only what your token
+and the provider expose. If you expected an item and don't see it:
+
+- **Involvement.** An item appears only if you authored it, are a
+  reviewer/assignee, are the sole account that can merge it, or were @-mentioned
+  on it — the sync scopes plus mention signals (`docs/Attention_Engine.md`, list
+  membership). A PR you merely watch, or one in a repo you hold no role on, never
+  enters the list. Merged/closed items drop out, as do items DevPit can no longer
+  see (lost access, repo deleted).
+- **Provider asymmetries.** The two forges do not expose the same facts, so a
+  signal or badge can be present on one and structurally absent on the other —
+  see the parity notes in the Signals and Diagnostic-badges tables above.
+  Notably `checks_running` is **GitLab-only** (GitHub hides an in-progress gating
+  pipeline inside `blocked`), and GitHub gives no `discussions` or `policy`
+  badge. A missing badge means "the provider can't say", never "all clear".
+- **Token reach.** On GitHub the token *kind* changes what you see: a
+  fine-grained PAT cannot read the notifications feed, so **mentions never
+  appear** and other fast signals wait for the 15-minute reconcile
+  (`docs/Token_Setup.md`). A missing item can be a token limitation, not a bug.

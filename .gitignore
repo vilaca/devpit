@@ -30,6 +30,9 @@ go.work.sum
 # Local build output (scripts/start.sh)
 /bin/
 
+# goreleaser output (regenerated on every release / --snapshot run)
+/dist/
+
 # Demo-world scratch DB (scripts/demo/run.sh wipes + recreates it each run)
 /scripts/demo/.scratch/
 

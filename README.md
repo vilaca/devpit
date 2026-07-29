@@ -77,12 +77,12 @@ db_path: /path/to/devpit.db
 connections:
   - id: github-personal
     type: github
-    token: ghp_…            # read scopes suffice
+    token: ghp_…            # classic or fine-grained — see docs/Token_Setup.md
     label: Personal         # optional — shown on each row; defaults to the id
   - id: work-gitlab
     type: gitlab
     base_url: https://gitlab.example.com
-    token: glpat-…          # read_api scope suffices
+    token: glpat-…          # read_api scope — see docs/Token_Setup.md
     label: Work             # optional — defaults to the id
 jira:                       # optional — Jira status enrichment
   base_url: https://example.atlassian.net
@@ -92,6 +92,9 @@ jira:                       # optional — Jira status enrichment
 
 Per connection only `id`, `type`, and `token` are required; the full schema and
 validation rules live in [`internal/config/config.go`](internal/config/config.go).
+Creating each token, the exact minimal scopes, and the GitHub
+classic-vs-fine-grained trade-off are in
+[`docs/Token_Setup.md`](docs/Token_Setup.md).
 
 ## Design docs
 

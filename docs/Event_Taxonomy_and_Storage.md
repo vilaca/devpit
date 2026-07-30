@@ -32,7 +32,7 @@ Two event streams share one log:
 | Type | Meaning |
 |---|---|
 | `item.observed` | Full normalized fact set. Appended only when the fact set differs from the item's previous snapshot — the poll diff *is* the change detector. The fold reads the latest snapshot per item. |
-| `item.removed` | The reconciliation sweep no longer sees the item and no closing state was observed (lost access, repo deleted). The fold drops the item. |
+| `item.removed` | A complete reconcile sweep no longer sees an open roled item — merged/closed observed by no one, access lost, or un-roled. **Emitted by the engine, not a provider** (`internal/engine`, `ADR/ADR-0024_Reconcile_Item_Reaping.md`): providers only sweep open items, so the engine diffs the sweep against the store's open roled items and reaps the misses. Mention-only (role-less) items are exempt. The fold drops the item. |
 
 **Signal stream** — discrete "aimed at you" occurrences, stored raw and never
 collapsed. They feed the Mentioned bucket, the "×N" tag counts, the item's
@@ -139,8 +139,14 @@ must not duplicate events; the `UNIQUE` constraint enforces this and writers use
 
 - `item.observed`: a hash of the canonical fact-set JSON — doubles as the "did
   anything change?" check against the previous snapshot.
-- `item.removed`: a constant — at most one live removal; reappearance resumes
-  via new snapshots.
+- `item.removed`: keyed to the superseded observed event's id — **per-episode**,
+  not a constant. The engine reaps only items whose latest fact is an observed-open,
+  so a still-gone item is not re-removed each cycle, and a reopen→re-merge yields a
+  fresh, higher-id removal (`ADR/ADR-0024_Reconcile_Item_Reaping.md`). Reappearance
+  after a removal is **salted resurrection**: a snapshot re-observed with an
+  identical fact set hashes to its pre-removal key, so the engine salts that key
+  with the removal's event id, guaranteeing a fresh snapshot that supersedes the
+  removal.
 - Signals with a provider-native identity (todo/review/comment id): that id,
   prefixed with its kind.
 - Signals synthesized from a diff (no native id): a plugin-defined transition

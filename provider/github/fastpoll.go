@@ -71,9 +71,11 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		sigs := p.signalsFromNotification(n, obs.NativeID)
 		// Notifications also arrive for PRs we merely watch (subscribed to the
 		// repo): the reason yields no signal and we hold no role on the PR.
-		// Snapshotting those would surface them as bare rows, since the fold
-		// shows any open item we hold — so drop them at the source.
-		if len(sigs) == 0 && !observedHasRole(obs) {
+		// Snapshotting an *open* one would surface it as a bare row, since the fold
+		// shows any open item we hold — so drop those at the source. A *non-open*
+		// role-less snapshot is kept on purpose: a merged/closed snapshot makes the
+		// fold drop the item, clearing a mention-only ghost on merge (ADR-0024).
+		if len(sigs) == 0 && !observedHasRole(obs) && observedIsOpen(obs) {
 			continue
 		}
 		events = append(events, obs)
@@ -108,6 +110,12 @@ func (p *Provider) fetchPull(ctx context.Context, owner, repo string, number int
 func observedHasRole(ev sdk.Event) bool {
 	pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 	return ok && len(pl.MyRoles) > 0
+}
+
+// observedIsOpen reports whether an item.observed snapshot is in the open state.
+func observedIsOpen(ev sdk.Event) bool {
+	pl, ok := ev.Payload.(sdk.ItemObservedPayload)
+	return ok && pl.State == stateOpen
 }
 
 // signalsFromNotification derives signal events from the notification reason.

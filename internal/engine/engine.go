@@ -27,6 +27,7 @@ type Store interface {
 	SaveCursors(ctx context.Context, connID string, state sdk.PollState) error
 	WriteEvents(ctx context.Context, connID string, events []sdk.Event) (int, error)
 	WriteSyncLog(ctx context.Context, entry storage.SyncLogEntry) error
+	LatestItemFacts(ctx context.Context, connID string) ([]storage.ItemFact, error)
 }
 
 // Engine owns the set of connection goroutines and their shared collaborators.

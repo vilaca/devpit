@@ -134,6 +134,9 @@ type glGraphQLMR struct {
 // Returns the enriched events and a degraded flag (true when at least one batch
 // failed). On failure it logs and falls back to last-known enrichment from
 // openSnapshots (B3: fail closed), so good data is never downgraded to nil.
+// Invariant: it never drops or reorders the input events — every event appears in
+// the output, enriched or carried forward. The engine derives the reconcile swept
+// set from the result's events (ADR-0024) and relies on this; preserve it.
 // Draft suppression: all GraphQL-joined booleans (NeedsApproval, NeedsRebase, FailingChecks)
 // are set to false for draft MRs.
 // glBatchItem identifies one MR to enrich via GraphQL: evIdx is its index in the

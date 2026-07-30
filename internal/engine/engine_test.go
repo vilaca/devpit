@@ -26,9 +26,11 @@ type fakeStore struct {
 	writeErr   error
 	saveErr    error
 	syncLogErr error
+	factsErr   error
 
 	inserted int // WriteEvents return value
 
+	facts         []storage.ItemFact // LatestItemFacts return value
 	eventsWritten [][]sdk.Event
 	cursorsSaved  []sdk.PollState
 	logs          []storage.SyncLogEntry
@@ -64,6 +66,12 @@ func (f *fakeStore) WriteEvents(_ context.Context, _ string, events []sdk.Event)
 	}
 	f.eventsWritten = append(f.eventsWritten, events)
 	return f.inserted, nil
+}
+
+func (f *fakeStore) LatestItemFacts(_ context.Context, _ string) ([]storage.ItemFact, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.facts, f.factsErr
 }
 
 func (f *fakeStore) WriteSyncLog(_ context.Context, entry storage.SyncLogEntry) error {

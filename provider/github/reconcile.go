@@ -3,19 +3,14 @@ package github
 import (
 	"context"
 	"fmt"
-	"maps"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/vilaca/devpit/sdk"
 )
 
-const (
-	cursorRecUpdatedAfter = "gh.rec.updated_after"
-	roleSoleApprover      = "sole_approver"
-)
+const roleSoleApprover = "sole_approver"
 
 // searchScope pairs a query qualifier with the role it implies for me.
 type searchScope struct {
@@ -30,19 +25,12 @@ var reconcileScopes = []searchScope{
 }
 
 // Reconcile implements sdk.Provider: it does the full search-based sweep of the
-// user's involved pull requests and emits item.observed snapshots.
-func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.PollResult, error) {
-	if state == nil {
-		state = sdk.PollState{}
-	}
-	out := sdk.PollState{}
-	maps.Copy(out, state)
-
-	updatedFilter := ""
-	if ua := state[cursorRecUpdatedAfter]; ua != "" {
-		updatedFilter = " updated:>" + ua
-	}
-
+// user's involved pull requests and emits item.observed snapshots. The sweep is
+// authoritative — it enumerates every open roled PR with no incremental cursor,
+// so the engine can reap items that left it (ADR-0024). Complete is true unless
+// a sole-approver probe silently failed, which would leave the identity set
+// short and must suppress reaping.
+func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResult, error) {
 	// Accumulate roles per PR URL across all scoped queries, then emit one
 	// deduplicated item.observed carrying every role that matched.
 	type agg struct {
@@ -54,11 +42,12 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 	var order []string
 	var events []sdk.Event
 	var rate *int
+	complete := true
 
 	scopes := append(append([]searchScope{}, reconcileScopes...), searchScope{"user", roleSoleApprover})
 
 	for _, sc := range scopes {
-		q := fmt.Sprintf("is:pr is:open %s:%s%s", sc.qualifier, p.handle, updatedFilter)
+		q := fmt.Sprintf("is:pr is:open %s:%s", sc.qualifier, p.handle)
 		res, r, err := p.search(ctx, q)
 		if err != nil {
 			return sdk.PollResult{}, err
@@ -75,7 +64,13 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 
 			if sc.role == roleSoleApprover {
 				keep, kErr := p.keepAsSoleApprover(ctx, it, repo)
-				if kErr != nil || !keep {
+				if kErr != nil {
+					// A failed probe leaves the sole-approver set incomplete; skip the
+					// item but mark the sweep non-authoritative so it does not reap.
+					complete = false
+					continue
+				}
+				if !keep {
 					continue
 				}
 			}
@@ -108,12 +103,11 @@ func (p *Provider) Reconcile(ctx context.Context, state sdk.PollState) (sdk.Poll
 
 	events = p.graphqlJoin(ctx, events)
 
-	out[cursorRecUpdatedAfter] = time.Now().UTC().Format(time.RFC3339)
 	return sdk.PollResult{
 		Events:        events,
-		State:         out,
 		RateRemaining: rate,
 		ItemsChanged:  len(events),
+		Complete:      complete,
 	}, nil
 }
 

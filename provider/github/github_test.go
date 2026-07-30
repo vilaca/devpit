@@ -158,6 +158,84 @@ func TestFastPollDropsWatchedNoRole(t *testing.T) {
 	}
 }
 
+// TestFastPollKeepsWatchedMergedNoRole: a watched, role-less PR that has since
+// merged yields no signal and no role — but its *non-open* snapshot must still
+// pass through, so the fold drops the item and a mention-only ghost clears on
+// merge (ADR-0024). Only an *open* role-less snapshot is dropped at the source.
+func TestFastPollKeepsWatchedMergedNoRole(t *testing.T) {
+	p := newTestProvider(t, "fastpoll_watch_merged", "octocat")
+	res, err := p.FastPoll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	var observed int
+	for _, e := range res.Events {
+		if e.EventType != "item.observed" {
+			continue
+		}
+		observed++
+		pl, ok := e.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Fatalf("observed payload type %T", e.Payload)
+		}
+		if pl.State == "open" {
+			t.Errorf("kept snapshot state = %q, want non-open (merged)", pl.State)
+		}
+	}
+	if observed != 1 {
+		t.Errorf("observed events = %d, want 1 (merged snapshot kept for the fold to drop)", observed)
+	}
+}
+
+// soleApproverDegradeRT lets every search scope succeed but fails the
+// collaborators probe, so keepAsSoleApprover errors — the silent-degrade path
+// that must clear Complete.
+type soleApproverDegradeRT struct{}
+
+func (soleApproverDegradeRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	json200 := func(body string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	}
+	switch {
+	case strings.Contains(req.URL.Path, "/search/issues"):
+		// One non-draft PR authored by someone else — a sole-approver candidate.
+		return json200(`{"items":[{"number":100,"title":"x","html_url":"https://github.com/acme/api/pull/100",` +
+			`"state":"open","draft":false,"user":{"login":"jdoe"},"pull_request":{"url":"u"},` +
+			`"repository_url":"https://api.github.com/repos/acme/api"}]}`)
+	case strings.Contains(req.URL.Path, "/collaborators"):
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	case strings.Contains(req.URL.Path, "/graphql"):
+		return json200(`{"data":{}}`)
+	default:
+		return json200(`{"items":[]}`)
+	}
+}
+
+// TestReconcileSoleApproverProbeFailureClearsComplete: a failed collaborators
+// probe leaves the sole-approver set short, so the sweep is not authoritative
+// and must not drive a reap (ADR-0024).
+func TestReconcileSoleApproverProbeFailureClearsComplete(t *testing.T) {
+	p := newStubProvider(t, stubRT{})
+	p.http.Transport = soleApproverDegradeRT{}
+	p.handle = "octocat"
+
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if res.Complete {
+		t.Error("Complete = true, want false when a sole-approver probe failed")
+	}
+}
+
 func TestFastPollNotModified(t *testing.T) {
 	p := newTestProvider(t, "fastpoll_304", "octocat")
 	state := sdk.PollState{
@@ -205,8 +283,9 @@ func TestReconcileDedup(t *testing.T) {
 	if len(pl.MyRoles) != 2 {
 		t.Errorf("roles = %v, want reviewer+author", pl.MyRoles)
 	}
-	if res.State[cursorRecUpdatedAfter] == "" {
-		t.Errorf("reconcile cursor not set")
+	// A full sweep with every scope succeeding is a complete, authoritative sweep.
+	if !res.Complete {
+		t.Errorf("Complete = false, want true when every scope succeeded")
 	}
 }
 

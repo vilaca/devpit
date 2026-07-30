@@ -212,6 +212,22 @@ Noted, not committed to any release.
   own ADR — in particular it is the trigger that would end the "localhost-only,
   no auth" stance of `ADR/ADR-0001_Local_First_Web_Application.md`.
 
+- User-created areas (drag-to-organize): today the only manual grouping is
+  pinning an item to the **Handle next** zone
+  (`frontend/src/components/PinnedZone.svelte`; the flag/"star" action,
+  `PUT`/`DELETE /items/{id}/flag`) — "Filtered" is not a user area, just the
+  ranked list's heading under an active filter. Let the user define their own
+  named areas and **drag** MRs/PRs into them instead of only being able to star,
+  generalizing the single pin zone into arbitrary buckets ("Handle next" becomes
+  one built-in area). Area membership is local-only organizational state that
+  never acts on the forge (`ADR/ADR-0017_Read_Only_Action_Model.md`) and would
+  extend the same local store as pins. Open design questions: ordered lanes
+  (Kanban-style) vs. labels/tags; one area per item vs. many; whether an area
+  suspends auto-ranking and age bands the way the pinned zone does
+  (`docs/UI_Vocabulary.md`); the drag interaction plus a keyboard equivalent
+  (DevPit is keyboard-first); and whether areas join the deferred local-state
+  export path.
+
 - Changelog / "what's new since last visit": surface a per-item activity
   feed showing what changed since the user last opened DevPit —
   new reviews, comments, CI results, state transitions. The storage

@@ -16,15 +16,16 @@
 #   scripts/check.sh --ci GATE ...   # how CI invokes it, one gate per job:
 #                                    # same gates, CI-only install fast paths
 #
-# Gates: gofmt build vet test lint arch frontend
-#   lint = golangci-lint, arch = go-arch-lint, frontend = svelte-check.
-#   gofmt and frontend are included on purpose — both are recurring sources of
-#   after-the-fact "style: gofmt" / "fix: svelte-check" churn that the old CI
-#   never caught.
+# Gates: gofmt build vet test lint arch shell frontend
+#   lint = golangci-lint, arch = go-arch-lint, shell = shellcheck,
+#   frontend = svelte-check.
+#   gofmt, shell, and frontend are included on purpose — all recurring sources of
+#   after-the-fact "style: gofmt" / "fix: svelte-check" / broken-script churn
+#   that the old CI never caught.
 set -uo pipefail   # NOT -e: run every requested gate, report all failures at the end.
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+cd "$REPO" || exit 1
 
 CI_MODE=0
 [[ "${1:-}" == "--ci" ]] && { CI_MODE=1; shift; }
@@ -33,6 +34,7 @@ CI_MODE=0
 # have neither). Bump the version here and it changes for local and CI together.
 GOLANGCI_VERSION="v2.12.2"
 ARCHLINT_VERSION="v1.16.0"
+SHELLCHECK_VERSION="v0.10.0"
 
 # Linters run from a repo-local dir, keyed by a version stamp: the pinned
 # version is the one that runs even if a different build of the same tool is on
@@ -67,6 +69,36 @@ ensure_golangci() {
   fi
 }
 
+# ShellCheck ships prebuilt release binaries only (no `go install`), so local and
+# CI both fetch the pinned tarball — the one pin drives both, same as the others.
+# (A comment starting with the bare word "shellcheck" is read as a directive.)
+ensure_shellcheck() {
+  have_tool shellcheck "$SHELLCHECK_VERSION" && return 0
+  local os arch
+  case "$(uname -s)" in
+    Darwin) os=darwin ;;
+    Linux)  os=linux ;;
+    *) echo "    shellcheck: unsupported OS $(uname -s)" >&2; return 1 ;;
+  esac
+  case "$(uname -m)" in
+    arm64|aarch64) arch=aarch64 ;;
+    x86_64|amd64)  arch=x86_64 ;;
+    *) echo "    shellcheck: unsupported arch $(uname -m)" >&2; return 1 ;;
+  esac
+  echo "    installing shellcheck ($SHELLCHECK_VERSION, release binary)…"
+  local url tmp rc
+  url="https://github.com/koalaman/shellcheck/releases/download/$SHELLCHECK_VERSION/shellcheck-$SHELLCHECK_VERSION.$os.$arch.tar.xz"
+  tmp="$(mktemp -d)"
+  if curl -sSfL "$url" | tar -xJ -C "$tmp" \
+     && mv "$tmp/shellcheck-$SHELLCHECK_VERSION/shellcheck" "$TOOLS/shellcheck"; then
+    stamp_tool shellcheck "$SHELLCHECK_VERSION"; rc=0
+  else
+    rc=1
+  fi
+  rm -rf "$tmp"
+  return $rc
+}
+
 # --- gate definitions: each returns non-zero on failure --------------------
 gate_gofmt() {
   # Tracked files only: `gofmt -l .` recurses into hidden dirs, so it would
@@ -82,6 +114,13 @@ gate_vet()   { go vet ./...; }
 gate_test()  { go test -race ./...; }
 gate_lint()  { ensure_golangci && golangci-lint run; }
 gate_arch()  { ensure_tool go-arch-lint "github.com/fe3dback/go-arch-lint@$ARCHLINT_VERSION" && go-arch-lint check; }
+gate_shell() {
+  # Tracked shell scripts only (same rationale as gofmt: skip agent worktrees).
+  # severity=warning: catch real bugs (unquoted vars, bad redirects, typos), not
+  # style/info nags on deliberate idioms — the naggy tier would only breed churn.
+  ensure_shellcheck || return 1
+  git ls-files -z -- '*.sh' | xargs -0 shellcheck --severity=warning
+}
 gate_frontend() {
   # svelte-check needs deps; install them the way start.sh does when absent/stale.
   if [[ ! -d frontend/node_modules || frontend/package-lock.json -nt frontend/node_modules ]]; then
@@ -90,12 +129,12 @@ gate_frontend() {
   npm --prefix frontend run check
 }
 
-ALL_GATES=(gofmt build vet test lint arch frontend)
+ALL_GATES=(gofmt build vet test lint arch shell frontend)
 
 # --- select which gates to run ---------------------------------------------
 case "${1:-}" in
   "")            gates=("${ALL_GATES[@]}") ;;
-  --no-frontend) gates=(gofmt build vet test lint arch) ;;
+  --no-frontend) gates=(gofmt build vet test lint arch shell) ;;
   *)             gates=("$@") ;;
 esac
 

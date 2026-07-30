@@ -16,8 +16,8 @@ time, and Go's default `go vet` catches only a narrow class of issues.
 ## Decision
 
 `scripts/check.sh` is the single gate runner and the definition of "green": it
-runs `gofmt`, `go build`/`vet`/`test`, golangci-lint, go-arch-lint, and the
-frontend `svelte-check`. Contributors run it before a change is done; CI runs the
+runs `gofmt`, `go build`/`vet`/`test`, golangci-lint, go-arch-lint, shellcheck
+on the shell scripts, and the frontend `svelte-check`. Contributors run it before a change is done; CI runs the
 same script, one job per gate, so a red check names the failing gate and local
 and CI cannot drift — the gate list and the pinned linter versions live only in
 the script, not in the workflow. The two gates that make ADR-0012's layered

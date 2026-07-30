@@ -163,10 +163,10 @@ func TestReconcileDedup(t *testing.T) {
 	if count["acme/api!9"] != 1 {
 		t.Errorf("acme/api!9 (reviewer-only) observed %d times, want 1", count["acme/api!9"])
 	}
-	for _, q := range p.reconcileQueries() {
-		if res.State[cursorRecQuery(q)] == "" {
-			t.Errorf("reconcile cursor for %q not set", q)
-		}
+	// Every REST scope (and sole-approver discovery) succeeding makes this a
+	// complete, authoritative sweep the engine may reap against.
+	if !res.Complete {
+		t.Errorf("Complete = false, want true when every scope succeeded")
 	}
 }
 
@@ -870,11 +870,12 @@ func (rt reconcileDegradeRT) RoundTrip(req *http.Request) (*http.Response, error
 	}, nil
 }
 
-// TestReconcileDegradedHoldsCursors verifies C1: when this cycle's GraphQL
-// enrichment degrades, Reconcile must not advance any scope cursor — the
-// returned State must equal the input state so the next reconcile re-fetches
-// and retries the un-enriched items instead of skipping them.
-func TestReconcileDegradedHoldsCursors(t *testing.T) {
+// TestReconcileDegradedStillComplete verifies Complete is independent of
+// Degraded (ADR-0024): a GraphQL enrichment failure degrades the cycle but the
+// REST identity set is intact, so the sweep is still complete and the engine may
+// reap against it. Suppressing reaping on degradation would strand ghosts on
+// accounts that chronically hit the complexity ceiling.
+func TestReconcileDegradedStillComplete(t *testing.T) {
 	mrsJSON, err := json.Marshal([]glMergeRequest{makeMR("not_approved")})
 	if err != nil {
 		t.Fatal(err)
@@ -887,23 +888,90 @@ func TestReconcileDegradedHoldsCursors(t *testing.T) {
 	p.http.Transport = reconcileDegradeRT{mrsJSON: mrsJSON}
 	p.handle = "octocat"
 
-	// Seed a prior cursor for every scope so we can prove none of them move.
-	in := sdk.PollState{}
-	for _, q := range p.reconcileQueries() {
-		in[cursorRecQuery(q)] = "2026-07-01T00:00:00Z"
-	}
-
-	res, err := p.Reconcile(context.Background(), in)
+	res, err := p.Reconcile(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	if !res.Degraded {
 		t.Fatal("Reconcile should report Degraded when the GraphQL join hits the complexity ceiling")
 	}
-	for _, q := range p.reconcileQueries() {
-		key := cursorRecQuery(q)
-		if got := res.State[key]; got != in[key] {
-			t.Errorf("cursor %q advanced to %q on a degraded enrichment; want held at %q", key, got, in[key])
+	if !res.Complete {
+		t.Error("Complete must stay true on a GraphQL-only degradation (independent of Degraded)")
+	}
+}
+
+// soleApproverDegradeRT routes GitLab reconcile requests so the REST scopes
+// succeed but a chosen sole-approver enumeration step fails. failProjectMRs
+// selects which path degrades: false fails the owned-projects fetch, true lets
+// projects/members succeed but fails the per-project MR page.
+type soleApproverDegradeRT struct{ failProjectMRs bool }
+
+func (rt soleApproverDegradeRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	json200 := func(body string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	}
+	fail := func() (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	}
+	path := req.URL.Path
+	switch {
+	case strings.Contains(path, "/members/all"):
+		return json200(`[{"username":"octocat","access_level":40}]`) // octocat is sole approver
+	case strings.Contains(path, "/projects/") && strings.Contains(path, "/merge_requests"):
+		if rt.failProjectMRs {
+			return fail()
 		}
+		return json200(`[]`)
+	case strings.Contains(path, "/merge_requests"):
+		return json200(`[]`) // top-level reconcile scopes: no roled MRs
+	case strings.Contains(path, "/projects"):
+		if rt.failProjectMRs {
+			return json200(`[{"id":42,"path_with_namespace":"acme/api"}]`) // one owned project
+		}
+		return fail() // owned-projects fetch degrades
+	case strings.Contains(path, "/graphql"):
+		return json200(`{"data":{}}`)
+	default:
+		return json200(`[]`)
+	}
+}
+
+// TestReconcileOwnedProjectsFailureClearsComplete: a failed owned-projects fetch
+// leaves the sole-approver set unknown, so the sweep is not authoritative.
+func TestReconcileOwnedProjectsFailureClearsComplete(t *testing.T) {
+	p := newStubProvider(t, stubRT{})
+	p.http.Transport = soleApproverDegradeRT{failProjectMRs: false}
+	p.handle = "octocat"
+
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if res.Complete {
+		t.Error("Complete = true, want false when the owned-projects fetch failed")
+	}
+}
+
+// TestReconcileProjectMRsFailureClearsComplete: a failed per-project MR page
+// mid-enumeration also clears Complete.
+func TestReconcileProjectMRsFailureClearsComplete(t *testing.T) {
+	p := newStubProvider(t, stubRT{})
+	p.http.Transport = soleApproverDegradeRT{failProjectMRs: true}
+	p.handle = "octocat"
+
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if res.Complete {
+		t.Error("Complete = true, want false when a per-project MR page failed")
 	}
 }

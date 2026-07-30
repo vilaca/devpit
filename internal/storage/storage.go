@@ -653,6 +653,55 @@ func (db *DB) AllOpenTicketKeys(ctx context.Context) ([]string, error) {
 	return keys, rows.Err()
 }
 
+// ItemFact is one item's latest fact-stream event — the max-id row among the
+// item.observed / item.removed events for its (object_type, native_id). Signals
+// are ignored, so this mirrors the fold's notion of an item's current state
+// (docs/Attention_Engine.md): an ItemFact whose EventType is item.observed with
+// an open payload is a live item, and one whose EventType is item.removed is a
+// reaped item. The engine folds these to reap items that left the reconcile
+// sweep and to salt resurrection (ADR-0024).
+type ItemFact struct {
+	ObjectType string
+	NativeID   string
+	EventID    int64
+	EventType  string
+	Payload    json.RawMessage
+}
+
+// LatestItemFacts returns, for connectionID, the latest fact-stream event of
+// every item that has one — one ItemFact per (object_type, native_id), being
+// its max-id item.observed or item.removed event. The latest-per-item shape
+// mirrors AllOpenTicketKeys' max(id) GROUP BY pattern.
+func (db *DB) LatestItemFacts(ctx context.Context, connectionID string) ([]ItemFact, error) {
+	rows, err := db.read.QueryContext(ctx, `
+		SELECT e.id, e.object_type, e.native_id, e.event_type, e.payload
+		FROM events e
+		JOIN (
+			SELECT object_type, native_id, max(id) AS id
+			FROM events
+			WHERE connection_id = ? AND event_type IN ('item.observed', 'item.removed')
+			GROUP BY object_type, native_id
+		) latest ON e.id = latest.id`, connectionID)
+	if err != nil {
+		return nil, fmt.Errorf("latest item facts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var facts []ItemFact
+	for rows.Next() {
+		var (
+			f       ItemFact
+			payload string
+		)
+		if err := rows.Scan(&f.EventID, &f.ObjectType, &f.NativeID, &f.EventType, &payload); err != nil {
+			return nil, fmt.Errorf("scan item fact: %w", err)
+		}
+		f.Payload = json.RawMessage(payload)
+		facts = append(facts, f)
+	}
+	return facts, rows.Err()
+}
+
 // RepoApprover is one row of the repo_approvers table.
 type RepoApprover struct {
 	ConnectionID   string

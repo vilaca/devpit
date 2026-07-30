@@ -59,6 +59,13 @@ type PollResult struct {
 	RateRemaining *int      // from provider rate-limit headers; nil if unknown
 	ItemsChanged  int       // for sync_log
 	Degraded      bool      // true when enrichment partially failed (e.g. GraphQL complexity ceiling)
+	// Complete is true iff this was a full authoritative sweep: every role-scope's
+	// REST identity enumeration succeeded, including sole-approver discovery. It
+	// gates the engine's reap of items that left the sweep (ADR-0024) and is
+	// independent of Degraded — the reap set is the REST identity set, so a
+	// GraphQL enrichment failure never suppresses a removal. Only Reconcile sets
+	// it; FastPoll leaves it false (a partial change-signal poll never reaps).
+	Complete bool
 }
 
 // Sentinel errors mapped by the engine to sync_log outcome and plain-language
@@ -122,9 +129,12 @@ type Provider interface {
 	FastPoll(ctx context.Context, state PollState) (PollResult, error)
 
 	// Reconcile runs the full identity-scoped sweep (~15 min cadence).
-	// Self-heals anything the fast tier may have missed. Same state contract
-	// as FastPoll; the two tiers share one PollState map with namespaced keys
-	// (e.g. "fast.last_modified", "rec.mr_updated_after").
+	// Self-heals anything the fast tier may have missed. It is a full
+	// authoritative sweep of every open roled item with no incremental cursor,
+	// so it ignores the passed state and returns none; it sets Complete so the
+	// engine can reap items that left the sweep (ADR-0024). The state argument is
+	// still passed for FastPoll's benefit — the two tiers share one PollState map
+	// (e.g. "fast.last_modified").
 	Reconcile(ctx context.Context, state PollState) (PollResult, error)
 
 	// Close releases any resources held by the provider (HTTP client, open

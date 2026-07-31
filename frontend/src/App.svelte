@@ -15,7 +15,11 @@
   // Bucket filter + sync-log open state live in the URL so a browser refresh
   // restores the view. No router needed — one query string, history.replaceState.
 
-  function readUrl(): { bucket: Filter | null; log: boolean; logConn: string | null } {
+  function readUrl(): {
+    bucket: Filter | null;
+    log: boolean;
+    logConn: string | null;
+  } {
     const p = new URLSearchParams(location.search);
     return {
       bucket: (p.get("bucket") as Filter | null) ?? null,
@@ -24,7 +28,11 @@
     };
   }
 
-  function writeUrl(state: { bucket: Filter | null; log: boolean; logConn: string | null }) {
+  function writeUrl(state: {
+    bucket: Filter | null;
+    log: boolean;
+    logConn: string | null;
+  }) {
     const p = new SvelteURLSearchParams();
     if (state.bucket) p.set("bucket", state.bucket);
     if (state.log) p.set("log", "1");
@@ -68,7 +76,8 @@
   const visibleItems = $derived.by<AttentionItem[]>(() => {
     const pinned = dashboard.items.filter((i) => i.flagged);
     const ranked = dashboard.items.filter(
-      (i: AttentionItem) => !i.flagged && matchesFilter(i, activeBucket, dashboard.connections),
+      (i: AttentionItem) =>
+        !i.flagged && matchesFilter(i, activeBucket, dashboard.connections),
     );
     return [...pinned, ...ranked];
   });
@@ -118,10 +127,16 @@
         // Cycle through visible buckets: null → first → … → last → null.
         e.preventDefault();
         {
-          const visible = visibleBuckets(dashboard.items, dashboard.connections);
+          const visible = visibleBuckets(
+            dashboard.items,
+            dashboard.connections,
+          );
           if (visible.length === 0) break;
           const idx = visible.findIndex((b) => b.key === activeBucket);
-          activeBucket = idx === -1 ? visible[0].key : (visible[(idx + 1) % visible.length]?.key ?? null);
+          activeBucket =
+            idx === -1
+              ? visible[0].key
+              : (visible[(idx + 1) % visible.length]?.key ?? null);
         }
         break;
       case "Escape":
@@ -147,7 +162,9 @@
 </script>
 
 <svelte:head>
-  <title>DevPit{activeBucket ? ` · ${activeBucket.replace(/_/g, " ")}` : ""}</title>
+  <title
+    >DevPit{activeBucket ? ` · ${activeBucket.replace(/_/g, " ")}` : ""}</title
+  >
 </svelte:head>
 
 <div class="layout">
@@ -185,7 +202,9 @@
         activeFilter={activeBucket}
         {focusedId}
         onToggleFlag={(item: AttentionItem) => void dashboard.toggleFlag(item)}
-        onFocus={(id: string) => { focusedId = id; }}
+        onFocus={(id: string) => {
+          focusedId = id;
+        }}
       />
     {/if}
   </main>
@@ -206,20 +225,107 @@
         aria-label={theme.dark ? "Switch to light mode" : "Switch to dark mode"}
       >
         {#if theme.dark}
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <circle cx="8" cy="8" r="3.5" stroke="currentColor" stroke-width="1.5"/>
-            <line x1="8" y1="1" x2="8" y2="2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="8" y1="13.5" x2="8" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="1" y1="8" x2="2.5" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="13.5" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="3.05" y1="3.05" x2="4.11" y2="4.11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="11.89" y1="11.89" x2="12.95" y2="12.95" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="12.95" y1="3.05" x2="11.89" y2="4.11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="4.11" y1="11.89" x2="3.05" y2="12.95" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="8"
+              cy="8"
+              r="3.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <line
+              x1="8"
+              y1="1"
+              x2="8"
+              y2="2.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="8"
+              y1="13.5"
+              x2="8"
+              y2="15"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="1"
+              y1="8"
+              x2="2.5"
+              y2="8"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="13.5"
+              y1="8"
+              x2="15"
+              y2="8"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="3.05"
+              y1="3.05"
+              x2="4.11"
+              y2="4.11"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="11.89"
+              y1="11.89"
+              x2="12.95"
+              y2="12.95"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="12.95"
+              y1="3.05"
+              x2="11.89"
+              y2="4.11"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="4.11"
+              y1="11.89"
+              x2="3.05"
+              y2="12.95"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
           </svg>
         {:else}
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M13.5 9.5A6 6 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M13.5 9.5A6 6 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+            />
           </svg>
         {/if}
       </button>
@@ -233,7 +339,9 @@
     connections={dashboard.connections}
     filterConnectionId={logConnFilter}
     onClose={closeLog}
-    onFilterChange={(id: string | null) => { logConnFilter = id; }}
+    onFilterChange={(id: string | null) => {
+      logConnFilter = id;
+    }}
   />
 {/if}
 

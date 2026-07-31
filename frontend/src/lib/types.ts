@@ -133,10 +133,7 @@ export interface SyncLogResponse {
 // SSE event names (docs/REST_API.md, internal/api/events.go). Coarse by design:
 // each says only *that* something changed, so the client re-fetches.
 export type SseEventName =
-  | "attention.changed"
-  | "sync.completed"
-  | "sync.failed"
-  | "update.available";
+  "attention.changed" | "sync.completed" | "sync.failed" | "update.available";
 
 export interface ConnEventPayload {
   connection_id: string;

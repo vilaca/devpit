@@ -54,7 +54,7 @@ export function connectEvents(handlers: SseHandlers): () => void {
 
 function parse(e: MessageEvent): ConnEventPayload {
   try {
-    return JSON.parse(e.data) as ConnEventPayload;
+    return JSON.parse(e.data as string) as ConnEventPayload;
   } catch {
     return { connection_id: "" };
   }

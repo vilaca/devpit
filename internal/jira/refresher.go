@@ -8,9 +8,10 @@ import (
 	"github.com/vilaca/devpit/internal/storage"
 )
 
-// refreshEvery is the cadence for Jira ticket refreshes, mirroring the
-// reconcile tier (ADR-0004: cadence is an engine constant, not config).
-const refreshEvery = 15 * time.Minute
+// refreshEvery is the Jira staleness budget — every sweep fetches every
+// referenced ticket unconditionally (ADR-0004: cadence is an engine constant,
+// not config; see ADR-0021 amendment for the change from 15 min).
+const refreshEvery = 5 * time.Minute
 
 // Notifier is satisfied by *api.Server; the refresher calls AttentionChanged
 // after each sweep so connected dashboards re-fetch the attention list.
@@ -72,21 +73,8 @@ func (r *Refresher) sweep(ctx context.Context) {
 		return
 	}
 
-	// Fetch keys that have no row or whose row is older than the cadence.
-	staleThreshold := time.Now().Add(-refreshEvery)
-	existing, err := r.db.GetJiraTickets(ctx, keys)
-	if err != nil {
-		log.Printf("devpit: jira refresher: get existing: %v", err)
-		return
-	}
-
 	changed := false
 	for _, key := range keys {
-		row, ok := existing[key]
-		if ok && row.FetchedAt.After(staleThreshold) {
-			continue
-		}
-
 		result, fetchErr, err := r.client.Fetch(ctx, key)
 		if err != nil {
 			log.Printf("devpit: jira refresher: fetch %s: %v", key, err)

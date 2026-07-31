@@ -43,7 +43,8 @@ export function connectEvents(handlers: SseHandlers): () => void {
 
   // EventSource reconnects on its own; surface the gap so the UI can hint.
   es.addEventListener("error", () => {
-    if (es.readyState === EventSource.CONNECTING) handlers.onStateChange?.("connecting");
+    if (es.readyState === EventSource.CONNECTING)
+      handlers.onStateChange?.("connecting");
   });
 
   return () => {

@@ -46,7 +46,9 @@
   class:muted={item.muted}
   class:old={item.old}
   onclick={() => onFocus(item.id)}
-  onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") onFocus(item.id); }}
+  onkeydown={(e) => {
+    if (e.key === "Enter" || e.key === " ") onFocus(item.id);
+  }}
   role="option"
   aria-selected={focused}
   tabindex="0"
@@ -55,7 +57,10 @@
     class="pin"
     class:is-flagged={item.flagged}
     title={item.flagged ? "Remove from Handle next" : "Mark as Handle next"}
-    onclick={(e) => { e.stopPropagation(); onToggleFlag(item); }}
+    onclick={(e) => {
+      e.stopPropagation();
+      onToggleFlag(item);
+    }}
     aria-label={item.flagged ? "Unpin" : "Pin"}
   >
     {item.flagged ? "★" : "☆"}
@@ -84,7 +89,9 @@
       {/if}
       <span class="conn">{item.connection_label}</span>
       <span class="sep">·</span>
-      <span class="time" title={item.updated_at}>{relativeTime(item.updated_at)}</span>
+      <span class="time" title={item.updated_at}
+        >{relativeTime(item.updated_at)}</span
+      >
       {#if item.author}
         <span class="sep">·</span>
         <span class="author">{item.author}</span>
@@ -97,8 +104,8 @@
           target="_blank"
           rel="noopener noreferrer"
           title={item.jira.key}
-          onclick={(e) => e.stopPropagation()}
-        >{item.jira.status}</a>
+          onclick={(e) => e.stopPropagation()}>{item.jira.status}</a
+        >
       {/if}
       {#if item.approvals_count > 0}
         <span class="sep">·</span>

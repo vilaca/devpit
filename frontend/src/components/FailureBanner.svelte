@@ -18,7 +18,9 @@
   </span>
   <div class="actions">
     <button class="btn-link" onclick={onViewLog}>View log</button>
-    <button class="btn-dismiss" onclick={onDismiss} aria-label="Dismiss">✕</button>
+    <button class="btn-dismiss" onclick={onDismiss} aria-label="Dismiss"
+      >✕</button
+    >
   </div>
 </div>
 
@@ -30,7 +32,8 @@
     gap: 12px;
     padding: 7px 16px;
     background: color-mix(in srgb, var(--health-failing) 10%, var(--bg));
-    border-bottom: 1px solid color-mix(in srgb, var(--health-failing) 40%, transparent);
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--health-failing) 40%, transparent);
     font-size: 13px;
   }
   .msg {

@@ -37,7 +37,8 @@
     <div class="controls">
       <select
         value={filterConnectionId ?? ""}
-        onchange={(e) => onFilterChange((e.target as HTMLSelectElement).value || null)}
+        onchange={(e) =>
+          onFilterChange((e.target as HTMLSelectElement).value || null)}
         aria-label="Filter by connection"
       >
         <option value="">All connections</option>
@@ -45,7 +46,9 @@
           <option value={c.id}>{c.label}</option>
         {/each}
       </select>
-      <button class="close" onclick={onClose} aria-label="Close sync log">✕</button>
+      <button class="close" onclick={onClose} aria-label="Close sync log"
+        >✕</button
+      >
     </div>
   </div>
 
@@ -58,18 +61,28 @@
           <div class="entry-header">
             <span class="time" title={entry.ts}>{relativeTime(entry.ts)}</span>
             <span class="conn-label">{entry.connection_label}</span>
-            <span class="op">{entry.operation === "fast_poll" ? "poll" : "reconcile"}</span>
-            <span class="outcome {outcomeClass(entry.outcome)}">{entry.outcome}</span>
+            <span class="op"
+              >{entry.operation === "fast_poll" ? "poll" : "reconcile"}</span
+            >
+            <span class="outcome {outcomeClass(entry.outcome)}"
+              >{entry.outcome}</span
+            >
           </div>
           <div class="entry-body">
             {#if entry.items_changed > 0}
-              <span>{entry.items_changed} item{entry.items_changed !== 1 ? "s" : ""} changed</span>
+              <span
+                >{entry.items_changed} item{entry.items_changed !== 1
+                  ? "s"
+                  : ""} changed</span
+              >
             {/if}
             {#if entry.rate_remaining !== null}
               <span>rate: {entry.rate_remaining} remaining</span>
             {/if}
             {#if entry.retries > 0}
-              <span class="warn-text">{entry.retries} retr{entry.retries !== 1 ? "ies" : "y"}</span>
+              <span class="warn-text"
+                >{entry.retries} retr{entry.retries !== 1 ? "ies" : "y"}</span
+              >
             {/if}
             {#if entry.error}
               <span class="error-text">{entry.error}</span>

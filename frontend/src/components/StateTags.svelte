@@ -20,14 +20,20 @@
     const dur = onset ? relativeTime(onset) : undefined;
 
     if (s === "blocked") {
-      const detail = item.gate_detail ? ` · provider says: ${item.gate_detail}` : "";
+      const detail = item.gate_detail
+        ? ` · provider says: ${item.gate_detail}`
+        : "";
       return dur ? `${dur}${detail}` : detail || undefined;
     }
     if (s === "ready_to_merge" && item.failing_checks) {
-      return dur ? `${dur} · a non-required check is red` : "a non-required check is red";
+      return dur
+        ? `${dur} · a non-required check is red`
+        : "a non-required check is red";
     }
     if (s === "mentioned") {
-      return dur ? `${dur} · clears when the item closes` : "clears when the item closes";
+      return dur
+        ? `${dur} · clears when the item closes`
+        : "clears when the item closes";
     }
     return dur;
   }
@@ -71,7 +77,9 @@
   // failing_checks, which readyButRed hides — but that requires ready_to_merge
   // (gate `ready`), which cannot co-occur with blocked (gate `blocked`).
   const blockedSuppressed = $derived.by(() => {
-    const marker = item.gate_detail ? GATE_DETAIL_MARKER[item.gate_detail] : undefined;
+    const marker = item.gate_detail
+      ? GATE_DETAIL_MARKER[item.gate_detail]
+      : undefined;
     return marker ? item[marker] : false;
   });
 
@@ -97,40 +105,55 @@
         class="tag"
         style:color={stateCSSVar(s)}
         style:border-color={stateCSSVar(s)}
-        title={titleForState(s)}
-      >Ready to Merge · optional checks red</span>
+        title={titleForState(s)}>Ready to Merge · optional checks red</span
+      >
     {:else if s !== "ready_to_merge" || !readyButRed}
       <span
         class="tag"
         style:color={stateCSSVar(s)}
         style:border-color={stateCSSVar(s)}
-        title={titleForState(s)}
-      >{labelFor(s)}</span>
+        title={titleForState(s)}>{labelFor(s)}</span
+      >
     {/if}
   {/each}
 
   {#if item.merge_conflict}
-    <span class="tag marker-conflict" title={titleForMarker("merge_conflict")}>Conflict</span>
+    <span class="tag marker-conflict" title={titleForMarker("merge_conflict")}
+      >Conflict</span
+    >
   {/if}
   {#if item.needs_rebase}
-    <span class="tag marker-conflict" title={titleForMarker("needs_rebase")}>Rebase</span>
+    <span class="tag marker-conflict" title={titleForMarker("needs_rebase")}
+      >Rebase</span
+    >
   {/if}
   {#if item.failing_checks && !readyButRed}
     <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016) -->
-    <span class="tag marker-conflict" title={titleForMarker("failing_checks")}>Failing Checks</span>
+    <span class="tag marker-conflict" title={titleForMarker("failing_checks")}
+      >Failing Checks</span
+    >
   {/if}
   {#if item.needs_approval}
-    <span class="tag marker-conflict" title={titleForMarker("needs_approval")}>Missing Approvals</span>
+    <span class="tag marker-conflict" title={titleForMarker("needs_approval")}
+      >Missing Approvals</span
+    >
   {/if}
   {#if item.unresolved_discussions}
-    <span class="tag marker-conflict" title={titleForMarker("unresolved_discussions")}>Discussions</span>
+    <span
+      class="tag marker-conflict"
+      title={titleForMarker("unresolved_discussions")}>Discussions</span
+    >
   {/if}
   {#if item.policy_denied}
-    <span class="tag marker-conflict" title={titleForMarker("policy_denied")}>Policy</span>
+    <span class="tag marker-conflict" title={titleForMarker("policy_denied")}
+      >Policy</span
+    >
   {/if}
 
   {#if item.old || item.stale}
-    <span class="tag marker-stale" title={item.old ? oldTitle : staleTitle}>Stale</span>
+    <span class="tag marker-stale" title={item.old ? oldTitle : staleTitle}
+      >Stale</span
+    >
   {/if}
 </span>
 

@@ -10,8 +10,10 @@ export function relativeTime(iso: string): string {
   if (diff < 60) return "just now";
   if (diff < 3600) return plural(Math.floor(diff / 60), "minute") + " ago";
   if (diff < 86400) return plural(Math.floor(diff / 3600), "hour") + " ago";
-  if (diff < 86400 * 30) return plural(Math.floor(diff / 86400), "day") + " ago";
-  if (diff < 86400 * 365) return plural(Math.floor(diff / (86400 * 30)), "month") + " ago";
+  if (diff < 86400 * 30)
+    return plural(Math.floor(diff / 86400), "day") + " ago";
+  if (diff < 86400 * 365)
+    return plural(Math.floor(diff / (86400 * 30)), "month") + " ago";
   return plural(Math.floor(diff / (86400 * 365)), "year") + " ago";
 }
 

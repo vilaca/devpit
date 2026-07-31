@@ -77,7 +77,7 @@ re-derives org rules. That is why it is trustworthy.
 
 | badge | meaning (when `blocked`) | GitHub | GitLab | hover |
 |---|---|---|---|---|
-| `conflict` | manual conflict resolution needed | ✓ `has_conflicts` (REST) | ✓ `has_conflicts` (REST) | {N} |
+| `conflict` | manual conflict resolution needed | ✓ `has_conflicts` (REST) | ✓ `has_conflicts` (REST), refined by `conflicts` (GraphQL) | {N} |
 | `rebase` | mechanical rebase unlocks it | ⚠ `behind` — only when repo requires up-to-date branches | ✓ `shouldBeRebased` (GraphQL) | {N} |
 | `checks failing` | CI / pipeline red | ⚠ non-gating CI only (`unstable`); gating-CI failures hide inside `blocked` | ✓ `headPipeline` (GraphQL, any pipeline) | {N} |
 | `draft` | provider draft; merge gate suspended | draft flag | draft flag | {N} |

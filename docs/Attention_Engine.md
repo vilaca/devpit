@@ -108,7 +108,7 @@ reason shows at once (`docs/UI_Vocabulary.md` has the provider-parity table).
 | Marker | Meaning | GitHub | GitLab |
 |---|---|---|---|
 | `failing_checks` | CI / checks are red | `unstable` (non-gating only; gating-CI failures hide inside `blocked`) | `headPipeline.status` red (GraphQL, any pipeline) |
-| `merge_conflict` | manual conflict resolution needed | `dirty` | `has_conflicts` (REST) |
+| `merge_conflict` | manual conflict resolution needed | `dirty` | `has_conflicts` (REST), refined by `conflicts` (GraphQL) |
 | `needs_rebase` | mechanical rebase / update-branch needed | `behind` (only when up-to-date branches required) | `shouldBeRebased` (GraphQL) |
 | `needs_approval` | required approvals not met | `reviewDecision` (GraphQL) | `approved` (GraphQL) |
 | `unresolved_discussions` | unresolved threads gate the merge | — (gate rule unreadable for non-admins) | `blocking_discussions_resolved` (REST) |

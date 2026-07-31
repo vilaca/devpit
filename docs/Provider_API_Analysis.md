@@ -187,11 +187,13 @@ unapproved | review_started`. Note the `reviewers[]` array embedded in
 MR list responses does **not** carry this — its `state` is the user's
 *account* state. This is a bounded N+1: only over open MRs where I'm a
 reviewer or author, and only when the MR's `updated_at` moved.
-The GraphQL join already selects `reviewers.nodes.mergeRequestInteraction.reviewState`
-and consumes the `REQUESTED_CHANGES` verdict for the author's
-`changes_requested` signal; deriving the *viewer's own* `my_review_state`
-(reviewed / approved) from the same field, instead of the per-MR reviewers
-endpoint, remains a future optimization.
+The GraphQL join selects `reviewers.nodes.mergeRequestInteraction.reviewState`
+and uses it two ways: the `REQUESTED_CHANGES` verdict on any reviewer drives the
+author's `changes_requested` signal, and the *viewer's own* node sets
+`my_review_state` (`changes_requested` / `reviewed` / `approved`), overridden to
+`approved` when they also appear in `approvedBy`. This makes the per-MR reviewers
+endpoint above unnecessary. Pending verdicts (`UNREVIEWED`, `REVIEW_STARTED`)
+leave `my_review_state` empty so the item stays `review_requested`.
 
 ### Merge-gate mapping (`detailed_merge_status`)
 

@@ -26,13 +26,22 @@ const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
 // for stricter instances.
 const graphQLBatchSize = 8
 
-// reviewStateApproved is the MyReviewState value recorded when the authenticated
-// user appears in a merge request's approvedBy set.
-const reviewStateApproved = "approved"
-
-// GitLab reviewer reviewState (glReviewState) and the normalized review_decision
-// it produces for the author's changes-requested signal.
+// Normalized my_review_state values recorded for the authenticated user's own
+// review verdict (see internal/attention: reviewIsDone treats all three as a
+// submitted review). "approved" is also recorded when the user appears in a
+// merge request's approvedBy set.
 const (
+	reviewStateApproved         = "approved"
+	reviewStateReviewed         = "reviewed"
+	reviewStateChangesRequested = "changes_requested"
+)
+
+// GitLab reviewer reviewState enum (glReviewState*) and the normalized
+// review_decision the REQUESTED_CHANGES verdict produces for the author's
+// changes-requested signal.
+const (
+	glReviewStateApproved         = "APPROVED"
+	glReviewStateReviewed         = "REVIEWED"
 	glReviewStateChangesRequested = "REQUESTED_CHANGES"
 	decisionChangesRequested      = "changes_requested"
 )
@@ -251,9 +260,11 @@ func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPay
 
 // applyGraphQL merges the GraphQL-derived booleans onto a payload.
 // Draft items keep all these booleans false (draft suppression).
-// handle is the authenticated user's username; when it appears in approvedBy the
-// payload records MyReviewState "approved" (GitLab exposes no cheap per-user
-// state for comment-only reviews, so only approval is detected here).
+// handle is the authenticated user's username; MyReviewState records the user's
+// own submitted verdict, derived from their reviewers.mergeRequestInteraction
+// entry (changes_requested / reviewed / approved) and overridden to "approved"
+// whenever they appear in approvedBy — approval is the authoritative merge-path
+// verdict even if the interaction field lags.
 func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk.ItemObservedPayload {
 	if !pl.Draft {
 		pl.NeedsApproval = !mr.Approved
@@ -261,6 +272,7 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
 		pl.ChecksRunning = isPipelineRunning(mr.HeadPipeline)
 		pl.ApprovalsCount = mr.ApprovedBy.Count
+		pl.MyReviewState = myReviewStateFromReviewers(mr, handle)
 		for _, u := range mr.ApprovedBy.Nodes {
 			if u.Username == handle {
 				pl.MyReviewState = reviewStateApproved
@@ -272,6 +284,29 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 	// merge-gate fact, so (like GitHub) it is recorded regardless of draft.
 	pl.ReviewDecision = reviewDecisionFromReviewers(mr)
 	return pl
+}
+
+// myReviewStateFromReviewers maps the authenticated user's own reviewer
+// interaction to a normalized my_review_state. GitLab reports the viewer's
+// per-MR verdict in reviewers.nodes.mergeRequestInteraction.reviewState; only
+// the "done" verdicts (a submitted review) are normalized — pending states
+// (UNREVIEWED, REVIEW_STARTED, ...) map to "" so the item stays review_requested.
+func myReviewStateFromReviewers(mr glGraphQLMR, handle string) string {
+	for _, r := range mr.Reviewers.Nodes {
+		if r.Username != handle {
+			continue
+		}
+		switch r.Interaction.ReviewState {
+		case glReviewStateChangesRequested:
+			return reviewStateChangesRequested
+		case glReviewStateReviewed:
+			return reviewStateReviewed
+		case glReviewStateApproved:
+			return reviewStateApproved
+		}
+		break
+	}
+	return ""
 }
 
 // reviewDecisionFromReviewers returns "changes_requested" when any reviewer's

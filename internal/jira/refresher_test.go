@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,7 +73,7 @@ func TestRefresherStaleKeptOnError(t *testing.T) {
 	seedOpenItem(t, db, "api#2", []string{"RPC-1"})
 
 	// Seed a good row so the stale-beats-blank logic has something to keep.
-	now := time.Now().Add(-time.Hour) // old enough to trigger re-fetch
+	now := time.Now() // freshness is irrelevant; every sweep re-fetches regardless
 	goodErr := (*string)(nil)
 	if err := db.UpsertJiraTicket(context.Background(), storage.JiraTicket{
 		Key: "RPC-1", Status: "Done", FetchedAt: now, FetchError: goodErr,
@@ -134,13 +135,16 @@ func TestRefresherPrunesOrphanedKeys(t *testing.T) {
 	}
 }
 
-func TestRefresherSkipsRecentRow(t *testing.T) {
+// TestRefresherRefetchesFreshRow is the regression test for the bug where a
+// freshness guard caused every ticket to be skipped on every other sweep,
+// yielding an effective ~30 min worst-case staleness.
+func TestRefresherRefetchesFreshRow(t *testing.T) {
 	db := openTestDB(t)
 	seedOpenItem(t, db, "api#4", []string{"RPC-1"})
 
-	// Insert a very fresh row — sweep must not re-fetch it.
+	// Seed a very fresh row; sweep must still re-fetch it.
 	if err := db.UpsertJiraTicket(context.Background(), storage.JiraTicket{
-		Key: "RPC-1", Status: "Fresh", FetchedAt: time.Now(),
+		Key: "RPC-1", Status: "Stale", FetchedAt: time.Now(),
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -148,14 +152,116 @@ func TestRefresherSkipsRecentRow(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls++
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"fields":{"summary":"Fix","status":{"name":"In Progress"},"assignee":null}}`))
+	}))
+	defer srv.Close()
+
+	n := &fakeNotifier{}
+	r := NewRefresher(Config{BaseURL: srv.URL, Email: "u@e.com", APIToken: "t"}, db, n)
+	r.sweep(context.Background())
+
+	if calls == 0 {
+		t.Error("HTTP handler should have been hit (fresh row must still be re-fetched)")
+	}
+	got, err := db.GetJiraTickets(context.Background(), []string{"RPC-1"})
+	if err != nil {
+		t.Fatalf("GetJiraTickets: %v", err)
+	}
+	if got["RPC-1"].Status != "In Progress" {
+		t.Errorf("Status = %q, want In Progress", got["RPC-1"].Status)
+	}
+	if n.called == 0 {
+		t.Error("AttentionChanged should have fired after successful fetch")
+	}
+}
+
+func TestRefresherFetchesAllKeysEverySweep(t *testing.T) {
+	db := openTestDB(t)
+	seedOpenItem(t, db, "api#5", []string{"RPC-1"})
+	seedOpenItem(t, db, "api#6", []string{"RPC-2"})
+
+	// Seed fresh rows for both keys.
+	for _, key := range []string{"RPC-1", "RPC-2"} {
+		if err := db.UpsertJiraTicket(context.Background(), storage.JiraTicket{
+			Key: key, Status: "Open", FetchedAt: time.Now(),
+		}); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"fields":{"summary":"","status":{"name":"Open"},"assignee":null}}`))
 	}))
 	defer srv.Close()
 
 	r := NewRefresher(Config{BaseURL: srv.URL, Email: "u@e.com", APIToken: "t"}, db, &fakeNotifier{})
 	r.sweep(context.Background())
+	r.sweep(context.Background())
 
-	if calls != 0 {
-		t.Errorf("HTTP calls = %d, want 0 (row is fresh)", calls)
+	if calls != 4 {
+		t.Errorf("HTTP calls = %d, want 4 (2 keys × 2 sweeps)", calls)
+	}
+}
+
+func TestRefresherMixedOutcomeNotifiesOnPartialSuccess(t *testing.T) {
+	db := openTestDB(t)
+	seedOpenItem(t, db, "api#7", []string{"RPC-1", "RPC-2"})
+
+	// Seed a good prior row for RPC-2 so stale-kept-on-error has something to keep.
+	if err := db.UpsertJiraTicket(context.Background(), storage.JiraTicket{
+		Key: "RPC-2", Status: "Done", FetchedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("seed RPC-2: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "RPC-2") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"fields":{"summary":"Fix","status":{"name":"In Progress"},"assignee":null}}`))
+	}))
+	defer srv.Close()
+
+	n := &fakeNotifier{}
+	r := NewRefresher(Config{BaseURL: srv.URL, Email: "u@e.com", APIToken: "t"}, db, n)
+	r.sweep(context.Background())
+
+	got, err := db.GetJiraTickets(context.Background(), []string{"RPC-2"})
+	if err != nil {
+		t.Fatalf("GetJiraTickets: %v", err)
+	}
+	row := got["RPC-2"]
+	if row.Status != "Done" {
+		t.Errorf("RPC-2 Status = %q, want Done (stale kept on error)", row.Status)
+	}
+	if row.FetchError == nil {
+		t.Error("RPC-2 FetchError should be set after 500")
+	}
+	if n.called == 0 {
+		t.Error("AttentionChanged should fire when at least one fetch succeeds")
+	}
+}
+
+func TestRefresherNoKeysNoNotify(t *testing.T) {
+	db := openTestDB(t)
+	// No open items — keys is empty.
+
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("HTTP handler should not be called with no keys")
+	}))
+	defer srv.Close()
+
+	n := &fakeNotifier{}
+	r := NewRefresher(Config{BaseURL: srv.URL, Email: "u@e.com", APIToken: "t"}, db, n)
+	r.sweep(context.Background())
+
+	if n.called != 0 {
+		t.Error("AttentionChanged should not be called with no keys")
 	}
 }

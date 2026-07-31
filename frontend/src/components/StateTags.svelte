@@ -43,6 +43,38 @@
     item.states.includes("ready_to_merge") && item.failing_checks,
   );
 
+  // Suppress the "Blocked" chip when a visible marker badge already names the
+  // gate's reason (ADR-0016 amendment). Strict match on gate_detail only —
+  // GitLab's needs_approval is true for nearly every unapproved MR, so any
+  // looser rule would erase the chip even when the operative blocker is
+  // something no marker shows (e.g. GitHub's opaque `mergeable_state: "blocked"`).
+  type MarkerField =
+    | "merge_conflict"
+    | "needs_rebase"
+    | "failing_checks"
+    | "needs_approval"
+    | "unresolved_discussions"
+    | "policy_denied";
+  const GATE_DETAIL_MARKER: Record<string, MarkerField> = {
+    conflict: "merge_conflict",
+    need_rebase: "needs_rebase",
+    ci_must_pass: "failing_checks",
+    not_approved: "needs_approval",
+    discussions_not_resolved: "unresolved_discussions",
+    policies_denied: "policy_denied",
+    security_policy_violations: "policy_denied",
+    dirty: "merge_conflict",
+    behind: "needs_rebase",
+    unstable: "failing_checks",
+  };
+  // Every mapped field renders its marker badge unconditionally except
+  // failing_checks, which readyButRed hides — but that requires ready_to_merge
+  // (gate `ready`), which cannot co-occur with blocked (gate `blocked`).
+  const blockedSuppressed = $derived.by(() => {
+    const marker = item.gate_detail ? GATE_DETAIL_MARKER[item.gate_detail] : undefined;
+    return marker ? item[marker] : false;
+  });
+
   const staleTitle = $derived(
     `No activity for ${relativeTime(item.updated_at)} (threshold: 7 days)`,
   );
@@ -57,7 +89,9 @@
   {/if}
 
   {#each item.states as s (s)}
-    {#if s === "ready_to_merge" && readyButRed}
+    {#if s === "blocked" && blockedSuppressed}
+      <!-- suppressed: the matching marker badge below already names the reason -->
+    {:else if s === "ready_to_merge" && readyButRed}
       <!-- Combined "ready · optional checks red" phrase — shown once -->
       <span
         class="tag"

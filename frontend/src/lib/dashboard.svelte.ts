@@ -10,9 +10,20 @@
 // State lives in Svelte 5 runes ($state), so any component that reads
 // `dashboard.*` re-renders when these change.
 
-import { getAttention, getConnections, getSyncLog, setFlag, clearFlag } from "./api";
+import {
+  getAttention,
+  getConnections,
+  getSyncLog,
+  setFlag,
+  clearFlag,
+} from "./api";
 import { connectEvents, type ConnectionState } from "./sse";
-import type { AttentionItem, Connection, SyncLogEntry, UpdateInfo } from "./types";
+import type {
+  AttentionItem,
+  Connection,
+  SyncLogEntry,
+  UpdateInfo,
+} from "./types";
 
 interface Banner {
   connectionId: string;
@@ -126,7 +137,9 @@ class Dashboard {
   }
 
   labelFor(connectionId: string): string {
-    return this.connections.find((c) => c.id === connectionId)?.label ?? connectionId;
+    return (
+      this.connections.find((c) => c.id === connectionId)?.label ?? connectionId
+    );
   }
 
   dismissBanner(): void {

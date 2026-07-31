@@ -70,3 +70,17 @@ persisted cache; presentation is a status prefix on the item title.**
   until the pattern proves itself.
 - A second enricher (e.g. Linear) would generalize this shape; we deliberately
   do not build the abstraction now (one concrete case first).
+
+## Amendment — v0.1.6: 5-minute unconditional refresh (2026-07-16)
+
+- Cadence 15 min → 5 min; it no longer mirrors the reconcile tier — the tiers
+  serve different budgets (forge rate budget vs. Jira staleness), and Jira
+  Cloud limits are nowhere near binding at one fetch per ticket per 5 min.
+- The per-row staleness guard is removed; `fetched_at` is now a record, not a
+  refresh trigger (supersedes "`fetched_at` drives refresh" in the Decision).
+- Why: the guard's threshold equaled the cadence, so rows fetched by sweep N
+  always read fresh at sweep N+1 — effective cadence 2×, observed as ~12 min
+  stale status in the wild. The guard protected nothing: `sweep` only ever
+  runs on the ticker.
+- Note the client stays fire-and-forget (no 429/backoff handling); failures
+  are logged and retried next sweep, unchanged.

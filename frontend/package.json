@@ -10,15 +10,25 @@
     "build:fast": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "lint": "eslint .",
+    "format:check": "prettier --check src",
+    "format": "prettier --write src",
     "postbuild": "node scripts/keep-dist.mjs",
     "postbuild:fast": "node scripts/keep-dist.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tsconfig/svelte": "^5.0.4",
+    "eslint": "^10.7.0",
+    "eslint-plugin-svelte": "^3.20.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.5",
+    "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.19.0",
     "svelte-check": "^4.1.4",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.64.0",
     "vite": "^6.0.11"
   }
 }

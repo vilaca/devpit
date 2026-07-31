@@ -63,7 +63,7 @@
       </a>
     {/if}
     {#each connections as c (c.id)}
-      <ConnectionHealth connection={c} onShowLog={(id) => onShowLog(id)} />
+      <ConnectionHealth connection={c} onShowLog={(id: string) => onShowLog(id)} />
     {/each}
   </nav>
 </header>

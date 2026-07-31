@@ -175,14 +175,7 @@ func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResu
 
 	// Merge the freshly-joined snapshots into the open-set cache so FastPoll's
 	// open-set refresh always starts from a full REST+GraphQL payload.
-	for _, ev := range events {
-		if ev.EventType != eventItemObserved {
-			continue
-		}
-		if pl, ok := ev.Payload.(sdk.ItemObservedPayload); ok {
-			p.openSnapshots[ev.NativeID] = pl
-		}
-	}
+	p.cacheOpenSnapshots(events)
 	return sdk.PollResult{
 		Events:        events,
 		RateRemaining: rate,

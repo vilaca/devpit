@@ -80,7 +80,8 @@ its fields:
     pipeline, extended from `ci_must_pass` in v0.1.2). Previously this also
     included `"dirty"` (narrowed in v0.1.1).
   - `merge_conflict` (v0.1.1) — manual conflict resolution needed (GitHub:
-    `mergeable_state == "dirty"`; GitLab: `has_conflicts` REST field).
+    `mergeable_state == "dirty"`; GitLab: `has_conflicts` REST, refined by
+    `conflicts` GraphQL).
   - `needs_rebase` (v0.1.1) — mechanical rebase / update-branch needed (GitHub:
     `mergeable_state == "behind"`; GitLab: `shouldBeRebased` via the GraphQL join).
   - `needs_approval` (v0.1.2) — required approvals not met (GitHub:

@@ -128,8 +128,8 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		Gate:          gate,
 		GateDetail:    mr.DetailedMergeStatus,
 		FailingChecks: mr.DetailedMergeStatus == dmsCIMustPass, // GraphQL join refines via headPipeline.status
-		MergeConflict: mr.HasConflicts,
-		// GraphQL join ORs in shouldBeRebased + divergedFromTargetBranch.
+		MergeConflict: mr.HasConflicts,                         // GraphQL join overrides via conflicts
+		// GraphQL join overrides via shouldBeRebased + divergedFromTargetBranch.
 		NeedsRebase:           mr.DetailedMergeStatus == "need_rebase",
 		NeedsApproval:         mr.DetailedMergeStatus == "not_approved",
 		UnresolvedDiscussions: unresolvedDiscussions,

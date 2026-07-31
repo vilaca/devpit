@@ -568,6 +568,30 @@ func TestApplyGraphQLReviewDecision(t *testing.T) {
 	}
 }
 
+func TestApplyGraphQLNeedsRebaseOverride(t *testing.T) {
+	// (a) stale NeedsRebase=true + all-false GraphQL → must clear (override, not OR)
+	pl := applyGraphQL(sdk.ItemObservedPayload{NeedsRebase: true}, glGraphQLMR{}, "octocat")
+	if pl.NeedsRebase {
+		t.Error("NeedsRebase should be false: GraphQL override clears stale true")
+	}
+
+	// (b) conflicts:true sets MergeConflict; conflicts:false clears a true input
+	mr := glGraphQLMR{Conflicts: true}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{MergeConflict: false}, mr, "octocat"); !pl.MergeConflict {
+		t.Error("MergeConflict should be true when conflicts:true")
+	}
+	mr.Conflicts = false
+	if pl := applyGraphQL(sdk.ItemObservedPayload{MergeConflict: true}, mr, "octocat"); pl.MergeConflict {
+		t.Error("MergeConflict should be false when conflicts:false (override clears stale true)")
+	}
+
+	// (c) MergeConflict is updated even when Draft:true
+	mr.Conflicts = true
+	if pl := applyGraphQL(sdk.ItemObservedPayload{Draft: true, MergeConflict: false}, mr, "octocat"); !pl.MergeConflict {
+		t.Error("MergeConflict should be set even on a draft (not draft-suppressed)")
+	}
+}
+
 func TestGraphQLJoinChecksRunning(t *testing.T) {
 	p := newTestProvider(t, "graphql_join_checks_running", "octocat")
 	res, err := p.FastPoll(context.Background(), nil)
@@ -645,15 +669,16 @@ func TestGraphQLJoinMultiReason(t *testing.T) {
 	t.Fatal("missing item.observed for acme/api!7")
 }
 
-// TestFastPollOpenSetRefresh verifies that fast_poll refreshes the three GraphQL
-// booleans for open items not covered by a todo this cycle (anti-clobber: REST
-// fields on the cached snapshot must survive the merge unchanged).
+// TestFastPollOpenSetRefresh is the regression test for the stale-badge bug
+// (planning-cloud!30046): a cached NeedsRebase=true and MergeConflict=true must
+// clear within the 60 s open-set refresh cycle when GitLab reports both false —
+// the join now overrides rather than ORing. Non-GraphQL REST fields (Title) must
+// survive the merge.
 func TestFastPollOpenSetRefresh(t *testing.T) {
 	p := newTestProvider(t, "fastpoll_open_set_refresh", "octocat")
 
-	// Seed the cache as reconcile would have: full payload from last sweep.
-	// MergeConflict=true is a REST field; it must survive the GraphQL merge.
-	// FailingChecks=false will be overwritten to true by the cassette response.
+	// Seed the cache as Reconcile would have — but with stale badge state that the
+	// cassette will clear (shouldBeRebased:false, conflicts:false).
 	p.openSnapshots["acme/api!7"] = sdk.ItemObservedPayload{
 		Title:         "cached MR",
 		URL:           "https://gitlab.com/acme/api/-/merge_requests/7",
@@ -665,8 +690,8 @@ func TestFastPollOpenSetRefresh(t *testing.T) {
 		Gate:          gateBlocked,
 		GateDetail:    "ci_must_pass",
 		FailingChecks: false,
-		MergeConflict: true, // REST field — must not be clobbered by GraphQL merge
-		NeedsRebase:   false,
+		MergeConflict: true, // stale — cassette returns conflicts:false; must clear
+		NeedsRebase:   true, // stale — cassette returns shouldBeRebased:false; must clear
 		NeedsApproval: false,
 	}
 
@@ -689,10 +714,14 @@ func TestFastPollOpenSetRefresh(t *testing.T) {
 		if !pl.FailingChecks {
 			t.Error("failing_checks should be true: pipeline FAILED in GraphQL response")
 		}
-		// REST field must survive the merge (anti-clobber guarantee)
-		if !pl.MergeConflict {
-			t.Error("merge_conflict should remain true: REST field must not be clobbered by GraphQL merge")
+		// Both stale badges must clear (override, not OR)
+		if pl.NeedsRebase {
+			t.Error("needs_rebase should be false: GraphQL override clears stale true (shouldBeRebased:false in cassette)")
 		}
+		if pl.MergeConflict {
+			t.Error("merge_conflict should be false: GraphQL override clears stale true (conflicts:false in cassette)")
+		}
+		// Non-GraphQL REST field must survive the merge unchanged
 		if pl.Title != "cached MR" {
 			t.Errorf("title = %q, want %q: REST field must survive", pl.Title, "cached MR")
 		}
@@ -742,6 +771,23 @@ func TestReconcilePopulatesOpenSnapshots(t *testing.T) {
 	}
 	if _, ok := p.openSnapshots["acme/api!7"]; !ok {
 		t.Error("openSnapshots should contain acme/api!7 after Reconcile")
+	}
+}
+
+// TestFastPollUpdatesOpenSnapshots verifies that FastPoll merges todo-driven
+// open-item payloads into openSnapshots after the GraphQL join, so the next
+// cycle's open-set refresh starts from a fresh REST+GraphQL baseline.
+func TestFastPollUpdatesOpenSnapshots(t *testing.T) {
+	p := newTestProvider(t, "fastpoll", "octocat")
+	if _, err := p.FastPoll(context.Background(), nil); err != nil {
+		t.Fatalf("FastPoll: %v", err)
+	}
+	snap, ok := p.openSnapshots["acme/api!7"]
+	if !ok {
+		t.Fatal("openSnapshots should contain acme/api!7 after FastPoll with a todo covering it")
+	}
+	if snap.Title != "Fix flaky sync test" {
+		t.Errorf("openSnapshots[acme/api!7].Title = %q, want %q", snap.Title, "Fix flaky sync test")
 	}
 }
 

@@ -77,9 +77,10 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 
 	var degraded bool
 	events, degraded = p.graphqlJoin(ctx, events)
+	p.cacheOpenSnapshots(events)
 
 	// Open-set refresh: for cached open items not covered by a todo this cycle,
-	// query the three volatile GraphQL booleans and merge onto the cached payload.
+	// query the volatile GraphQL-derived fields and merge onto the cached payload.
 	if len(p.openSnapshots) > 0 {
 		covered := make(map[string]bool, len(events))
 		for _, ev := range events {
@@ -100,6 +101,19 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		ItemsChanged:  len(events),
 		Degraded:      degraded,
 	}, nil
+}
+
+// cacheOpenSnapshots merges post-join open-item payloads into p.openSnapshots so
+// the next cycle's open-set refresh starts from a REST+GraphQL-complete baseline.
+func (p *Provider) cacheOpenSnapshots(events []sdk.Event) {
+	for _, ev := range events {
+		if ev.EventType != eventItemObserved {
+			continue
+		}
+		if pl, ok := ev.Payload.(sdk.ItemObservedPayload); ok && pl.State == stateOpen {
+			p.openSnapshots[ev.NativeID] = pl
+		}
+	}
 }
 
 func (p *Provider) fetchMR(ctx context.Context, projectID, iid int) (*glMergeRequest, error) {

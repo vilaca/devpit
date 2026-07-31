@@ -9,7 +9,9 @@ stores tokens in plaintext in the config file, so keep it `chmod 600`
 `internal/config/config.go`.
 
 A dead or under-scoped token is not a crash: DevPit surfaces it as a red
-per-connection health dot (`ADR/ADR-0018_Sync_Observability.md`).
+per-connection health dot (`ADR/ADR-0018_Sync_Observability.md`). To check a
+token *before* starting — validity and per-capability scope coverage — run
+`scripts/check-tokens.sh`, a read-only probe of the endpoints below.
 
 ## GitHub
 

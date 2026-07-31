@@ -14,15 +14,15 @@ import (
 )
 
 const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
-	`approved shouldBeRebased divergedFromTargetBranch ` +
+	`approved shouldBeRebased divergedFromTargetBranch conflicts ` +
 	`headPipeline{status} approvedBy{count nodes{username}} ` +
 	`reviewers{nodes{username mergeRequestInteraction{reviewState}}}}}`
 
-// graphQLBatchSize is the max MRs per GraphQL query. Each MR node costs ≈23
+// graphQLBatchSize is the max MRs per GraphQL query. Each MR node costs ≈24
 // complexity in practice — more than the field count suggests, because the
 // approvedBy and reviewers connections are each scored — and GitLab's ceiling is
 // 250. An earlier estimate of ≈18/node put the batch at 12 (× 23 = 276), which
-// overshot the ceiling on real instances. 8 × 23 = 184 stays under with headroom
+// overshot the ceiling on real instances. 8 × 24 = 192 stays under with headroom
 // for stricter instances.
 const graphQLBatchSize = 8
 
@@ -122,6 +122,7 @@ type glGraphQLMR struct {
 	Approved     bool        `json:"approved"`
 	ShouldRebase bool        `json:"shouldBeRebased"`
 	Diverged     bool        `json:"divergedFromTargetBranch"`
+	Conflicts    bool        `json:"conflicts"`
 	HeadPipeline *glPipeline `json:"headPipeline"`
 	ApprovedBy   struct {
 		Count int `json:"count"`
@@ -146,8 +147,9 @@ type glGraphQLMR struct {
 // Invariant: it never drops or reorders the input events — every event appears in
 // the output, enriched or carried forward. The engine derives the reconcile swept
 // set from the result's events (ADR-0024) and relies on this; preserve it.
-// Draft suppression: all GraphQL-joined booleans (NeedsApproval, NeedsRebase, FailingChecks)
-// are set to false for draft MRs.
+// Draft suppression: NeedsApproval, NeedsRebase, FailingChecks, ChecksRunning,
+// ApprovalsCount, and MyReviewState are zeroed for draft MRs. MergeConflict is
+// not draft-suppressed (mirrors REST has_conflicts behavior).
 // glBatchItem identifies one MR to enrich via GraphQL: evIdx is its index in the
 // caller's events slice; fullPath/iid locate it; draft gates suppression.
 type glBatchItem struct {
@@ -259,16 +261,19 @@ func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPay
 }
 
 // applyGraphQL merges the GraphQL-derived booleans onto a payload.
-// Draft items keep all these booleans false (draft suppression).
-// handle is the authenticated user's username; MyReviewState records the user's
-// own submitted verdict, derived from their reviewers.mergeRequestInteraction
-// entry (changes_requested / reviewed / approved) and overridden to "approved"
-// whenever they appear in approvedBy — approval is the authoritative merge-path
-// verdict even if the interaction field lags.
+// Draft items have NeedsApproval, NeedsRebase, FailingChecks, ChecksRunning,
+// ApprovalsCount, and MyReviewState suppressed (forced false/zero/empty).
+// MergeConflict is NOT draft-suppressed (REST records has_conflicts on drafts
+// too; GraphQL conflicts keeps parity). handle is the authenticated user's
+// username; MyReviewState records the user's own submitted verdict, derived
+// from their reviewers.mergeRequestInteraction entry (changes_requested /
+// reviewed / approved) and overridden to "approved" whenever they appear in
+// approvedBy — approval is the authoritative merge-path verdict even if the
+// interaction field lags.
 func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk.ItemObservedPayload {
 	if !pl.Draft {
 		pl.NeedsApproval = !mr.Approved
-		pl.NeedsRebase = pl.NeedsRebase || mr.ShouldRebase || mr.Diverged
+		pl.NeedsRebase = mr.ShouldRebase || mr.Diverged
 		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
 		pl.ChecksRunning = isPipelineRunning(mr.HeadPipeline)
 		pl.ApprovalsCount = mr.ApprovedBy.Count
@@ -280,6 +285,9 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 			}
 		}
 	}
+	// MergeConflict is overridden from the GraphQL conflicts scalar regardless of
+	// draft status — REST records has_conflicts on drafts too; keep parity.
+	pl.MergeConflict = mr.Conflicts
 	// review_decision drives the author's changes-requested chip; it is not a
 	// merge-gate fact, so (like GitHub) it is recorded regardless of draft.
 	pl.ReviewDecision = reviewDecisionFromReviewers(mr)

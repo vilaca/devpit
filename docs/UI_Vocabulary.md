@@ -62,6 +62,14 @@ role-aware where the fact is inherently about a role (see role scope notes).
 `blocked` defers entirely to the provider's merge gate — DevPit never
 re-derives org rules. That is why it is trustworthy.
 
+The `blocked` chip is **suppressed** when a visible diagnostic badge (below)
+is the specific reason the gate names — strict match against `gate_detail`,
+not "any badge visible" (GitLab's `missing approvals` is near-ubiquitous and
+would otherwise erase the chip even when the operative blocker is something no
+badge shows, e.g. GitHub's opaque `blocked` gate or a GitLab tier gate). The
+hover above (`{N} · provider says: {gate_detail}`) applies whenever the chip
+renders.
+
 **Provider parity for best-effort signals:**
 - `changes_requested`: a reviewer's changes-requested verdict on both, via the
   GraphQL join — GitHub (`reviewDecision == CHANGES_REQUESTED`) and GitLab

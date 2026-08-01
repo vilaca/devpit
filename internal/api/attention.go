@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"slices"
 	"time"
@@ -84,7 +85,9 @@ func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
 }
 
 // fetchJiraTickets collects the union of TicketKeys across all items and does
-// a single bulk read from jira_tickets. Returns nil on error or no keys.
+// a single bulk read from jira_tickets. Returns nil on error or no keys; Jira
+// decoration is best-effort (ADR-0021), so a read failure is logged and the
+// endpoint still serves items rather than failing the whole request.
 func (s *Server) fetchJiraTickets(ctx context.Context, items []attention.WorkItem) map[string]storage.JiraTicket {
 	seen := map[string]bool{}
 	var keys []string
@@ -101,6 +104,7 @@ func (s *Server) fetchJiraTickets(ctx context.Context, items []attention.WorkIte
 	}
 	tickets, err := s.db.GetJiraTickets(ctx, keys)
 	if err != nil {
+		log.Printf("devpit: api: fetch jira tickets: %v", err)
 		return nil
 	}
 	return tickets

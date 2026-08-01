@@ -87,6 +87,33 @@ func TestClientFetch500(t *testing.T) {
 	}
 }
 
+func TestClientFetchTransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close() // closed listener: the request below must fail to connect
+
+	c := NewClient(Config{BaseURL: url, Email: "u@e.com", APIToken: "tok"})
+	_, _, err := c.Fetch(context.Background(), "RPC-1")
+	if err == nil {
+		t.Fatal("Fetch: want a transport error against a closed listener, got nil")
+	}
+}
+
+func TestClientFetchMalformedBody(t *testing.T) {
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{not valid json`))
+	}))
+
+	_, fetchErr, err := c.Fetch(context.Background(), "BAD-1")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if fetchErr == "" {
+		t.Fatal("fetchErr should be set for a malformed body")
+	}
+}
+
 func TestClientAuthHeader(t *testing.T) {
 	var gotAuth string
 	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

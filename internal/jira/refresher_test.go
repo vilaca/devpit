@@ -248,6 +248,58 @@ func TestRefresherMixedOutcomeNotifiesOnPartialSuccess(t *testing.T) {
 	}
 }
 
+// TestRefresherCollectKeysErrorSkipsSweep exercises AllOpenTicketKeys's error
+// path: closing the DB is the real failure surface (a query against a closed
+// *sql.DB), not a mock. The sweep must log and return without touching the
+// HTTP client or notifier.
+func TestRefresherCollectKeysErrorSkipsSweep(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("HTTP handler should not be called when key collection fails")
+	}))
+	defer srv.Close()
+
+	n := &fakeNotifier{}
+	r := NewRefresher(Config{BaseURL: srv.URL, Email: "u@e.com", APIToken: "t"}, db, n)
+	r.sweep(context.Background()) // must not panic despite the closed DB
+
+	if n.called != 0 {
+		t.Error("AttentionChanged should not be called when key collection fails")
+	}
+}
+
+// TestRefresherLoopExitsOnContextCancel drives loop directly (the function
+// Start launches): the initial sweep runs immediately, then the loop must
+// return once ctx is cancelled rather than blocking on the ticker forever.
+func TestRefresherLoopExitsOnContextCancel(t *testing.T) {
+	db := openTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"fields":{"summary":"","status":{"name":"Open"},"assignee":null}}`))
+	}))
+	defer srv.Close()
+
+	r := NewRefresher(Config{BaseURL: srv.URL, Email: "u@e.com", APIToken: "t"}, db, &fakeNotifier{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		r.loop(ctx)
+		close(done)
+	}()
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("loop did not exit after context cancellation")
+	}
+}
+
 func TestRefresherNoKeysNoNotify(t *testing.T) {
 	db := openTestDB(t)
 	// No open items — keys is empty.

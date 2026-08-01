@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 )
 
 // recordingSink captures the last SetUpdate call for assertions.
@@ -109,6 +110,73 @@ func TestCheckMalformedTagIsQuiet(t *testing.T) {
 
 	if calls, _ := sink.snapshot(); calls != 0 {
 		t.Errorf("SetUpdate calls = %d, want 0 on unparseable tag", calls)
+	}
+}
+
+func TestCheckTransportErrorIsQuiet(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := ts.URL
+	ts.Close() // closed listener: the request below must fail to connect
+
+	sink := &recordingSink{}
+	checkerFor("v0.1.6", false, sink, url).check(context.Background())
+
+	if calls, _ := sink.snapshot(); calls != 0 {
+		t.Errorf("SetUpdate calls = %d, want 0 on a transport error", calls)
+	}
+}
+
+func TestCheckUnexpectedStatusIsQuiet(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	sink := &recordingSink{}
+	checkerFor("v0.1.6", false, sink, ts.URL).check(context.Background())
+
+	if calls, _ := sink.snapshot(); calls != 0 {
+		t.Errorf("SetUpdate calls = %d, want 0 on a non-200/404 status", calls)
+	}
+}
+
+func TestCheckDecodeErrorIsQuiet(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{not valid json`))
+	}))
+	defer ts.Close()
+
+	sink := &recordingSink{}
+	checkerFor("v0.1.6", false, sink, ts.URL).check(context.Background())
+
+	if calls, _ := sink.snapshot(); calls != 0 {
+		t.Errorf("SetUpdate calls = %d, want 0 on a malformed body", calls)
+	}
+}
+
+// TestLoopExitsOnContextCancel drives loop directly (the function Start
+// launches): the initial check runs immediately, then the loop must return
+// once ctx is cancelled rather than blocking on the ticker forever.
+func TestLoopExitsOnContextCancel(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"tag_name":"v0.1.6"}`))
+	}))
+	defer ts.Close()
+
+	c := checkerFor("v0.1.6", false, &recordingSink{}, ts.URL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		c.loop(ctx)
+		close(done)
+	}()
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("loop did not exit after context cancellation")
 	}
 }
 

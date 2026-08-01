@@ -151,3 +151,16 @@ The suite deliberately targets pure logic (buckets, relative-time formatting,
 the SSE reconnect state machine, `toggleFlag`) plus one drift guard that asserts
 the frontend state precedence equals Go's `internal/attention/states.go` — no
 component-DOM harness, matching the "smallest thing that works" stance.
+
+## Amendment — Go coverage floor (2026-07-16)
+
+`gate_test` now runs `go test -race -coverprofile=... ./...`, reads the total
+statement-coverage percentage off `go tool cover -func`'s last line, and fails
+the gate below `COVERAGE_FLOOR` (`scripts/check.sh`, currently 75% — a few
+points under the ~81% measured when the floor was added). It is a ratchet
+against silent regression, not a target to chase: the floor is the single
+number for the whole module, not a per-package minimum, so `cmd/devpit`
+(composition root, no unit tests by design) and `scripts/demo` (a fixture
+generator, not shipped product code) pull the total down without needing an
+exclusion list. The CI `build` job needs no change — it already runs `test`
+via `scripts/check.sh --ci build vet test tidy`.

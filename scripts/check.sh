@@ -18,7 +18,7 @@
 #
 # Gates: gofmt build vet test lint arch shell frontend tidy actionlint links
 #   lint = golangci-lint, arch = go-arch-lint, shell = shellcheck,
-#   frontend = svelte-check + eslint + prettier --check, tidy = go mod tidy -diff,
+#   frontend = svelte-check + eslint + prettier --check + vitest, tidy = go mod tidy -diff,
 #   actionlint = workflow YAML + embedded shellcheck, links = lychee (offline,
 #   internal markdown links only).
 #   gofmt, shell, and frontend are included on purpose — all recurring sources of
@@ -158,11 +158,12 @@ gate_frontend() {
   if [[ ! -d frontend/node_modules || frontend/package-lock.json -nt frontend/node_modules ]]; then
     npm --prefix frontend ci || return 1
   fi
-  # Three explicit commands, not one chained script, so a failure names the
-  # tool that failed (svelte-check vs. eslint vs. prettier) in the output.
+  # Explicit commands, not one chained script, so a failure names the tool that
+  # failed (svelte-check vs. eslint vs. prettier vs. vitest) in the output.
   npm --prefix frontend run check \
     && npm --prefix frontend run lint \
-    && npm --prefix frontend run format:check
+    && npm --prefix frontend run format:check \
+    && npm --prefix frontend run test
 }
 gate_tidy() {
   # -diff: report drift without touching go.mod/go.sum; non-zero exit if any.

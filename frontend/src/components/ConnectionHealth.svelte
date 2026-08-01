@@ -10,7 +10,7 @@
     onShowLog: (connectionId: string) => void;
   } = $props();
 
-  const tooltip = $derived(() => {
+  const tooltip = $derived.by(() => {
     const h = connection.health;
     const last = h.last_synced_at ? relativeTime(h.last_synced_at) : "never";
     const who = connection.identity ?? connection.label;
@@ -23,7 +23,7 @@
   class:ok={connection.health.status === "ok"}
   class:degraded={connection.health.status === "degraded"}
   class:failing={connection.health.status === "failing"}
-  title={tooltip()}
+  title={tooltip}
   onclick={() => onShowLog(connection.id)}
   aria-label="{connection.label} sync status: {connection.health.status}"
 >

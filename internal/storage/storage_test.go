@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -474,6 +475,32 @@ func TestLastSyncedAt(t *testing.T) {
 	}
 }
 
+// TestLastSyncedAtCountsDegraded guards B2: a degraded cycle is a success (it
+// persisted events + cursors, ADR-0024), so a connection with only degraded
+// rows must report its latest degraded ts, not never-synced.
+func TestLastSyncedAtCountsDegraded(t *testing.T) {
+	db := openTest(t)
+	ctx := context.Background()
+
+	base := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	for _, e := range []SyncLogEntry{
+		{Ts: base, ConnectionID: "c1", Operation: "reconcile", Outcome: "degraded"},
+		{Ts: base.Add(time.Minute), ConnectionID: "c1", Operation: "reconcile", Outcome: "degraded"},
+	} {
+		if err := db.WriteSyncLog(ctx, e); err != nil {
+			t.Fatalf("WriteSyncLog: %v", err)
+		}
+	}
+
+	ts, err := db.LastSyncedAt(ctx, "c1")
+	if err != nil {
+		t.Fatalf("LastSyncedAt: %v", err)
+	}
+	if !ts.Equal(base.Add(time.Minute)) {
+		t.Errorf("ts = %v, want %v (latest degraded counts as synced)", ts, base.Add(time.Minute))
+	}
+}
+
 func TestMigrationUpgrade(t *testing.T) {
 	// Open creates a fresh DB at the latest schema version; verify the
 	// jira_tickets table (migration 2) exists and accepts a round-trip.
@@ -511,6 +538,56 @@ func TestMigrationUpgrade(t *testing.T) {
 	}
 	if row.FetchError != nil {
 		t.Errorf("FetchError = %v, want nil", row.FetchError)
+	}
+}
+
+// TestMigrationIncrementalUpgrade seeds a raw DB at schema_version 1 (only the
+// first migration applied) and asserts migrate steps through the remaining
+// migrations to the latest version — the incremental upgrade loop that a fresh
+// Open (already at latest) never exercises (B7).
+func TestMigrationIncrementalUpgrade(t *testing.T) {
+	ctx := context.Background()
+	writeDSN, _ := dsns(":memory:")
+	raw, err := sql.Open("sqlite", writeDSN)
+	if err != nil {
+		t.Fatalf("open raw: %v", err)
+	}
+	raw.SetMaxOpenConns(1) // keep the shared-cache in-memory DB alive
+	t.Cleanup(func() { _ = raw.Close() })
+
+	// Apply only migration 1 by hand and stamp the DB at version 1.
+	if _, err := raw.ExecContext(ctx, `CREATE TABLE schema_version (version INTEGER NOT NULL)`); err != nil {
+		t.Fatalf("create schema_version: %v", err)
+	}
+	if _, err := raw.ExecContext(ctx, migrations[0]); err != nil {
+		t.Fatalf("apply migration 1: %v", err)
+	}
+	if _, err := raw.ExecContext(ctx, `INSERT INTO schema_version (version) VALUES (1)`); err != nil {
+		t.Fatalf("seed version: %v", err)
+	}
+
+	// migrate must run migrations 2..N incrementally. (Do not call db.Close:
+	// this DB has no read pool or file lock — closing raw directly is enough.)
+	db := &DB{write: raw}
+	if err := db.migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var version int
+	if err := raw.QueryRowContext(ctx, `SELECT version FROM schema_version`).Scan(&version); err != nil {
+		t.Fatalf("read version: %v", err)
+	}
+	if version != len(migrations) {
+		t.Errorf("version = %d, want %d", version, len(migrations))
+	}
+
+	// The tables from migrations 2 (jira_tickets) and 3 (repo_approvers) exist.
+	now := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	if err := db.UpsertJiraTicket(ctx, JiraTicket{Key: "RPC-1", FetchedAt: now}); err != nil {
+		t.Errorf("jira_tickets (migration 2) missing: %v", err)
+	}
+	if err := db.UpsertRepoApprover(ctx, RepoApprover{ConnectionID: "c1", Repo: "r", FetchedAt: now}); err != nil {
+		t.Errorf("repo_approvers (migration 3) missing: %v", err)
 	}
 }
 
@@ -595,6 +672,17 @@ func TestAllOpenTicketKeys(t *testing.T) {
 			EventType: "item.observed", DedupeKey: "k3",
 			Payload: sdk.ItemObservedPayload{State: "open"},
 		},
+		// #4 was observed open with a key, then reaped (item.removed): its latest
+		// fact is the removal, so its key must not leak (ADR-0024, B1 regression).
+		{
+			ObjectType: "merge_request", NativeID: "conn1/api#4",
+			EventType: "item.observed", DedupeKey: "k4",
+			Payload: sdk.ItemObservedPayload{State: "open", TicketKeys: []string{"RPC-7"}},
+		},
+		{
+			ObjectType: "merge_request", NativeID: "conn1/api#4",
+			EventType: "item.removed", DedupeKey: "r4",
+		},
 	}
 	if _, err := db.WriteEvents(ctx, "conn1", events); err != nil {
 		t.Fatalf("WriteEvents: %v", err)
@@ -609,10 +697,13 @@ func TestAllOpenTicketKeys(t *testing.T) {
 		got[k] = true
 	}
 	if !got["RPC-1"] || !got["RPC-2"] {
-		t.Errorf("keys = %v, want RPC-1 and RPC-2", keys)
+		t.Errorf("keys = %v, want RPC-1 and RPC-2 (still-open item)", keys)
 	}
 	if got["RPC-9"] {
 		t.Error("RPC-9 from merged item should not appear")
+	}
+	if got["RPC-7"] {
+		t.Error("RPC-7 from a reaped (item.removed) item must not appear")
 	}
 }
 

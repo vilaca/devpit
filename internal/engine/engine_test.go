@@ -430,6 +430,40 @@ func TestCycleWriteEventsError(t *testing.T) {
 	}
 }
 
+// TestCycleSaveCursorsError exercises the crash-safety boundary the "events
+// first, then cursors" durability design rests on (B4): when WriteEvents lands
+// rows but SaveCursors then fails, the cycle must log a storage outcome that
+// carries the inserted count and fire NEITHER AttentionChanged nor
+// SyncCompleted — the next cycle re-covers from the unadvanced cursor.
+func TestCycleSaveCursorsError(t *testing.T) {
+	store := &fakeStore{inserted: 3, saveErr: errors.New("disk full")}
+	prov := &fakeProvider{result: sdk.PollResult{
+		Events: []sdk.Event{{NativeID: "x"}},
+		State:  sdk.PollState{"k": "v"},
+	}}
+	notify := &recordNotifier{}
+	c := newTestConn(store, prov, notify)
+
+	c.cycle(context.Background(), opReconcile, false)
+
+	log := store.lastLog(t)
+	if log.Outcome != outcomeStorage {
+		t.Errorf("outcome = %q, want storage", log.Outcome)
+	}
+	if log.ItemsChanged != 3 {
+		t.Errorf("items_changed = %d, want 3 (rows that landed before SaveCursors failed)", log.ItemsChanged)
+	}
+	if notify.attention != 0 {
+		t.Errorf("AttentionChanged fired %d times, want 0", notify.attention)
+	}
+	if len(notify.completed) != 0 {
+		t.Errorf("SyncCompleted fired %d times, want 0", len(notify.completed))
+	}
+	if len(notify.failed) != 1 {
+		t.Errorf("SyncFailed fired %d times, want 1", len(notify.failed))
+	}
+}
+
 // --- cycle: gating & shutdown ---------------------------------------------
 
 func TestCycleBackoffGate(t *testing.T) {

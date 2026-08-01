@@ -339,7 +339,7 @@ func TestDoStatusClassification(t *testing.T) {
 		{"ok", http.StatusOK, nil, 0},
 		{"not modified", http.StatusNotModified, nil, 0},
 		{"unauthorized", http.StatusUnauthorized, sdk.ErrUnauthorized, 0},
-		{"forbidden", http.StatusForbidden, sdk.ErrRateLimited, 0},
+		{"forbidden without rate signal", http.StatusForbidden, sdk.ErrUnauthorized, 0},
 		{"too many requests", http.StatusTooManyRequests, sdk.ErrRateLimited, 0},
 		{"server error", http.StatusInternalServerError, sdk.ErrServer, 500},
 		{"service unavailable", http.StatusServiceUnavailable, sdk.ErrServer, 503},
@@ -727,5 +727,256 @@ func TestReconcileSoleApprover(t *testing.T) {
 		if itemHasRole(observed, nid, roleSoleApprover) {
 			t.Errorf("%s must not have role sole_approver", nid)
 		}
+	}
+}
+
+// TestObservedApprovalsCountUnknownDefault verifies a fresh PR reports
+// approvals_count -1 (unknown) from both constructors, so a PR first seen while
+// GraphQL is degraded reads unknown rather than 0/hide-count (A6).
+func TestObservedApprovalsCountUnknownDefault(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+	pull, ok := p.observedFromPull(makePR("clean")).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("observedFromPull payload type assertion failed")
+	}
+	if pull.ApprovalsCount != -1 {
+		t.Errorf("observedFromPull approvals_count = %d, want -1 (unknown before the GraphQL join)", pull.ApprovalsCount)
+	}
+	item := ghSearchItem{Number: 1, HTMLURL: "https://github.com/acme/api/pull/1", User: ghUser{Login: "jdoe"}}
+	search, ok := p.observedFromSearch(item, "acme/api", nil).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("observedFromSearch payload type assertion failed")
+	}
+	if search.ApprovalsCount != -1 {
+		t.Errorf("observedFromSearch approvals_count = %d, want -1 (unknown before the GraphQL join)", search.ApprovalsCount)
+	}
+}
+
+// TestDo403RateLimitVsAuth verifies a 403 is treated as rate-limited only when a
+// rate signal is present (Retry-After, or the primary-limit marker
+// X-RateLimit-Remaining: 0); a 403 with neither — including one that carries
+// non-zero rate headers, as every GitHub response does — is a permission/SSO/scope
+// denial that surfaces as ErrUnauthorized rather than retrying forever (A4).
+func TestDo403RateLimitVsAuth(t *testing.T) {
+	cases := []struct {
+		name    string
+		header  http.Header
+		wantErr error
+	}{
+		{"retry-after present", http.Header{"Retry-After": {"30"}}, sdk.ErrRateLimited},
+		{"remaining zero", http.Header{"X-Ratelimit-Remaining": {"0"}}, sdk.ErrRateLimited},
+		{"remaining non-zero", http.Header{"X-Ratelimit-Remaining": {"57"}}, sdk.ErrUnauthorized},
+		{"no rate signal", http.Header{}, sdk.ErrUnauthorized},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := newStubProvider(t, stubRT{status: http.StatusForbidden, header: c.header, body: "{}"})
+			resp, err := p.do(context.Background(), "https://api.github.com/x", nil)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if !errors.Is(err, c.wantErr) {
+				t.Fatalf("err = %v, want %v", err, c.wantErr)
+			}
+		})
+	}
+}
+
+// TestDoGraphQLErrorClassification verifies GitHub's HTTP-200 GraphQL error
+// bodies are classified (A1): a RATE_LIMITED type surfaces sdk.ErrRateLimited so
+// the engine backs off, a generic errors array with null data surfaces a
+// *graphQLError, and a null data body with no errors is still an error (never a
+// silent nil-data success).
+func TestDoGraphQLErrorClassification(t *testing.T) {
+	rateLimited := func() *Provider {
+		return newStubProvider(t, stubRT{status: 200,
+			body: `{"data":null,"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}`})
+	}
+	if _, err := rateLimited().doGraphQL(context.Background(), "query{}"); !errors.Is(err, sdk.ErrRateLimited) {
+		t.Errorf("RATE_LIMITED: err = %v, want ErrRateLimited", err)
+	}
+
+	generic := newStubProvider(t, stubRT{status: 200,
+		body: `{"data":null,"errors":[{"message":"Something went wrong executing your query."}]}`})
+	var gErr *graphQLError
+	if _, err := generic.doGraphQL(context.Background(), "query{}"); !errors.As(err, &gErr) {
+		t.Errorf("generic error: err type = %T (%v), want *graphQLError", err, err)
+	}
+
+	nullData := newStubProvider(t, stubRT{status: 200, body: `{"data":null}`})
+	if _, err := nullData.doGraphQL(context.Background(), "query{}"); err == nil {
+		t.Error("null data with no errors: want a classified error, got nil")
+	}
+}
+
+// TestGraphQLJoinRateLimitPropagates verifies a GraphQL RATE_LIMITED error is
+// propagated out of the join (not swallowed) so FastPoll/Reconcile fail the cycle
+// and the engine backs off (A1).
+func TestGraphQLJoinRateLimitPropagates(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200, body: `{"data":null,"errors":[{"type":"RATE_LIMITED"}]}`})
+	p.handle = "octocat"
+	events := []sdk.Event{p.observedFromPull(makePR("blocked"))}
+	_, degraded, err := p.graphqlJoin(context.Background(), events)
+	if !errors.Is(err, sdk.ErrRateLimited) {
+		t.Fatalf("err = %v, want ErrRateLimited", err)
+	}
+	if degraded {
+		t.Error("degraded should be false when the cycle fails outright with a rate limit")
+	}
+}
+
+// TestGraphQLJoinGenericErrorDegrades verifies a non-rate GraphQL error degrades
+// the batch (Degraded=true, no error) and leaves the REST payload intact — the
+// unknown approvals count stays -1 rather than being zeroed (A1/A2).
+func TestGraphQLJoinGenericErrorDegrades(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200, body: `{"data":null,"errors":[{"message":"boom"}]}`})
+	p.handle = "octocat"
+	events := []sdk.Event{p.observedFromPull(makePR("blocked"))}
+	out, degraded, err := p.graphqlJoin(context.Background(), events)
+	if err != nil {
+		t.Fatalf("err = %v, want nil (a generic GraphQL error degrades, not fails)", err)
+	}
+	if !degraded {
+		t.Error("degraded should be true on a generic GraphQL error")
+	}
+	pl, ok := out[0].Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatalf("payload type %T", out[0].Payload)
+	}
+	if pl.ApprovalsCount != -1 {
+		t.Errorf("approvals_count = %d, want -1 (REST payload kept, not zeroed)", pl.ApprovalsCount)
+	}
+}
+
+// TestGraphQLJoinNullNodeKeepsREST verifies a JSON-null PR node (an inaccessible
+// repo in the batch) is skipped so its REST payload survives instead of being
+// overwritten with zeros, while sibling PRs still enrich and the cycle is marked
+// degraded (A3).
+func TestGraphQLJoinNullNodeKeepsREST(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200,
+		// a0 (PR #1) resolves; a1 (PR #2) is null with an accompanying field error.
+		body: `{"data":{"a0":{"pullRequest":{"reviewDecision":"APPROVED",` +
+			`"latestReviews":{"nodes":[{"state":"APPROVED","author":{"login":"someone"}}]}}},"a1":null},` +
+			`"errors":[{"type":"NOT_FOUND","path":["a1"],"message":"Could not resolve to a Repository"}]}`})
+	p.handle = "octocat"
+
+	pr1 := makePR("blocked")
+	pr2 := makePR("blocked")
+	pr2.Number = 2
+	pr2.HTMLURL = "https://github.com/acme/api/pull/2"
+	events := []sdk.Event{p.observedFromPull(pr1), p.observedFromPull(pr2)}
+
+	out, degraded, err := p.graphqlJoin(context.Background(), events)
+	if err != nil {
+		t.Fatalf("graphqlJoin: %v", err)
+	}
+	if !degraded {
+		t.Error("degraded should be true when a node came back null")
+	}
+	byID := map[string]sdk.ItemObservedPayload{}
+	for _, e := range out {
+		pl, ok := e.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Fatalf("payload type %T", e.Payload)
+		}
+		byID[e.NativeID] = pl
+	}
+	if got := byID["acme/api#1"].ApprovalsCount; got != 1 {
+		t.Errorf("PR#1 approvals_count = %d, want 1 (enriched from the good node)", got)
+	}
+	if got := byID["acme/api#2"].ApprovalsCount; got != -1 {
+		t.Errorf("PR#2 approvals_count = %d, want -1 (null node keeps REST payload, not zeroed)", got)
+	}
+}
+
+// reconcileGraphQLDegradeRT lets every REST call succeed (a self-authored PR on
+// every scope, no sole-approver probe needed) but degrades the GraphQL join.
+type reconcileGraphQLDegradeRT struct{}
+
+func (reconcileGraphQLDegradeRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	json200 := func(body string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	}
+	switch {
+	case strings.Contains(req.URL.Path, "/graphql"):
+		return json200(`{"data":null,"errors":[{"message":"Something went wrong."}]}`)
+	case strings.Contains(req.URL.Path, "/search/issues"):
+		return json200(`{"items":[{"number":50,"title":"x","html_url":"https://github.com/acme/api/pull/50",` +
+			`"state":"open","draft":false,"user":{"login":"octocat"},"pull_request":{"url":"u"},` +
+			`"repository_url":"https://api.github.com/repos/acme/api"}]}`)
+	default:
+		return json200(`{"items":[]}`)
+	}
+}
+
+// TestReconcileDegradedStillComplete verifies Complete is independent of Degraded
+// (ADR-0024): a GraphQL enrichment failure degrades the cycle but the REST
+// identity set is intact, so the sweep stays complete and the engine may reap
+// against it (A2).
+func TestReconcileDegradedStillComplete(t *testing.T) {
+	p := newStubProvider(t, stubRT{})
+	p.http.Transport = reconcileGraphQLDegradeRT{}
+	p.handle = "octocat"
+
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if !res.Degraded {
+		t.Error("Degraded should be true when the GraphQL join fails")
+	}
+	if !res.Complete {
+		t.Error("Complete must stay true on a GraphQL-only degradation (independent of Degraded)")
+	}
+}
+
+// soleApproverURLRT captures the collaborators request URL and returns two
+// merge-capable members so the probe reports not-sole; used to prove the probe
+// no longer filters to affiliation=direct (A5).
+type soleApproverURLRT struct{ collabURL string }
+
+func (rt *soleApproverURLRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	json200 := func(body string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	}
+	if strings.Contains(req.URL.Path, "/collaborators") {
+		rt.collabURL = req.URL.String()
+		// octocat is a direct collaborator; teammate can merge via a team — both
+		// must be counted so the repo is not sole-approver.
+		return json200(`[{"login":"octocat","permissions":{"push":true}},` +
+			`{"login":"teammate","permissions":{"push":true}}]`)
+	}
+	return json200(`[]`)
+}
+
+// TestProbeIsSoleApproverIncludesTeamMembers verifies probeIsSoleApprover queries
+// with affiliation=all (not direct), so a member who can merge via team/org
+// membership is counted and the repo is not falsely tagged sole_approver (A5).
+func TestProbeIsSoleApproverIncludesTeamMembers(t *testing.T) {
+	rt := &soleApproverURLRT{}
+	p := newStubProvider(t, stubRT{})
+	p.http.Transport = rt
+	p.handle = "octocat"
+
+	isSole, err := p.probeIsSoleApprover(context.Background(), "acme/api")
+	if err != nil {
+		t.Fatalf("probeIsSoleApprover: %v", err)
+	}
+	if isSole {
+		t.Error("isSole = true, want false: a team-based approver must count")
+	}
+	if strings.Contains(rt.collabURL, "affiliation=direct") {
+		t.Errorf("collaborators URL %q still filters affiliation=direct; must include team/org members", rt.collabURL)
+	}
+	if !strings.Contains(rt.collabURL, "affiliation=all") {
+		t.Errorf("collaborators URL %q should request affiliation=all", rt.collabURL)
 	}
 }

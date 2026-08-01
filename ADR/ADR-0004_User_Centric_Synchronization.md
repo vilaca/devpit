@@ -89,9 +89,11 @@ merge-capable permission** — the sole-approver axis. These items are assigned 
 **Scope definition:**
 - **GitHub**: `GET /search/issues?q=is:pr+is:open+user:<handle>` discovers open
   PRs on repos owned by the user. For each qualifying result, the provider calls
-  `GET /repos/{owner}/{repo}/collaborators?affiliation=direct` to count accounts
-  with `push`, `maintain`, or `admin` permission. Sole iff count == 1 and that
-  account is the authenticated user.
+  `GET /repos/{owner}/{repo}/collaborators?affiliation=all` to count accounts
+  with `push`, `maintain`, or `admin` permission. `affiliation=all` (not `direct`)
+  so accounts that can merge via team/org membership are counted — otherwise a repo
+  with one direct collaborator but a merge-capable team is falsely flagged
+  sole-approver. Sole iff count == 1 and that account is the authenticated user.
 - **GitLab**: `GET /projects?membership=true&min_access_level=40` lists projects
   where the user has Maintainer or higher access. For each project,
   `GET /projects/:path/members/all?min_access_level=40` counts members with

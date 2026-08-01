@@ -159,14 +159,26 @@ type glBatchItem struct {
 	draft    bool
 }
 
-// runGraphQLBatches queries the join fields for items in batches of
-// graphQLBatchSize (kept under GitLab's complexity ceiling) and returns the
-// per-evIdx results plus a degraded flag set when any batch failed.
-func (p *Provider) runGraphQLBatches(ctx context.Context, items []glBatchItem) (map[int]glGraphQLMR, bool) {
-	results := make(map[int]glGraphQLMR, len(items))
+// mrBatchQuery locates one MR for the GraphQL join by its GraphQL path + iid.
+type mrBatchQuery struct {
+	fullPath string
+	iid      int
+}
+
+// runMRBatches queries mrQueryFmt for the given MRs in batches kept under
+// GitLab's complexity ceiling and returns each resolved MR node keyed by its
+// index in queries, plus a degraded flag set when any batch's doGraphQL call
+// failed. Missing/null nodes are skipped (left for the caller's fallback). This
+// is the single owner of the batch-build + doGraphQL + null-node-guard loop
+// shared by the reconcile join (runGraphQLBatches) and the FastPoll open-set
+// refresh (openSetRefresh) — an in-package duplication, not the cross-provider
+// kind ADR-0003 forbids, so consolidating it keeps the null-node guard and query
+// construction in one place (A8).
+func (p *Provider) runMRBatches(ctx context.Context, queries []mrBatchQuery) (map[int]glGraphQLMR, bool) {
+	results := make(map[int]glGraphQLMR, len(queries))
 	var degraded bool
-	for start := 0; start < len(items); start += graphQLBatchSize {
-		batch := items[start:min(start+graphQLBatchSize, len(items))]
+	for start := 0; start < len(queries); start += graphQLBatchSize {
+		batch := queries[start:min(start+graphQLBatchSize, len(queries))]
 
 		var q strings.Builder
 		q.WriteString("query{")
@@ -177,12 +189,12 @@ func (p *Provider) runGraphQLBatches(ctx context.Context, items []glBatchItem) (
 
 		data, err := p.doGraphQL(ctx, q.String())
 		if err != nil {
-			log.Printf("devpit: gitlab graphql join degraded: %v", err)
+			log.Printf("devpit: gitlab graphql batch degraded: %v", err)
 			degraded = true
 			continue
 		}
 
-		for j, it := range batch {
+		for j := range batch {
 			raw, ok := data[fmt.Sprintf("a%d", j)]
 			if !ok || raw == nil {
 				continue
@@ -191,9 +203,24 @@ func (p *Provider) runGraphQLBatches(ctx context.Context, items []glBatchItem) (
 				MergeRequest *glGraphQLMR `json:"mergeRequest"`
 			}
 			if json.Unmarshal(raw, &node) == nil && node.MergeRequest != nil {
-				results[it.evIdx] = *node.MergeRequest
+				results[start+j] = *node.MergeRequest
 			}
 		}
+	}
+	return results, degraded
+}
+
+// runGraphQLBatches queries the join fields for items and returns the per-evIdx
+// results plus a degraded flag set when any batch failed.
+func (p *Provider) runGraphQLBatches(ctx context.Context, items []glBatchItem) (map[int]glGraphQLMR, bool) {
+	queries := make([]mrBatchQuery, len(items))
+	for i, it := range items {
+		queries[i] = mrBatchQuery{it.fullPath, it.iid}
+	}
+	byIndex, degraded := p.runMRBatches(ctx, queries)
+	results := make(map[int]glGraphQLMR, len(byIndex))
+	for i, mr := range byIndex {
+		results[items[i].evIdx] = mr
 	}
 	return results, degraded
 }
@@ -249,10 +276,18 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 // carryForwardEnrichment merges the GraphQL-sourced fields from a prior snapshot
 // onto pl so a failed batch does not zero out previously-known approval state.
 // Boolean flags use OR so a known-bad state is never cleared by a stale snapshot.
+// Draft suppression mirrors applyGraphQL: on an MR that has since become a draft
+// the approval/review/gate fields are NOT carried (a draft hides them), so a
+// stale non-draft snapshot cannot resurrect a "N approved" / needs-approval state
+// on a now-draft MR. review_decision is not a merge-gate fact and is carried
+// regardless of draft, matching applyGraphQL.
 func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPayload) sdk.ItemObservedPayload {
+	pl.ReviewDecision = snap.ReviewDecision
+	if pl.Draft {
+		return pl
+	}
 	pl.ApprovalsCount = snap.ApprovalsCount
 	pl.MyReviewState = snap.MyReviewState
-	pl.ReviewDecision = snap.ReviewDecision
 	pl.NeedsApproval = pl.NeedsApproval || snap.NeedsApproval
 	pl.FailingChecks = pl.FailingChecks || snap.FailingChecks
 	pl.ChecksRunning = pl.ChecksRunning || snap.ChecksRunning
@@ -359,46 +394,30 @@ func (p *Provider) openSetRefresh(
 		return events, false
 	}
 
-	var degraded bool
-	for start := 0; start < len(openItems); start += graphQLBatchSize {
-		batch := openItems[start:min(start+graphQLBatchSize, len(openItems))]
+	queries := make([]mrBatchQuery, len(openItems))
+	for i, it := range openItems {
+		queries[i] = mrBatchQuery{it.fullPath, it.iid}
+	}
+	byIndex, degraded := p.runMRBatches(ctx, queries)
 
-		var q strings.Builder
-		q.WriteString("query{")
-		for j, it := range batch {
-			fmt.Fprintf(&q, mrQueryFmt, j, it.fullPath, it.iid)
-		}
-		q.WriteString("}")
-
-		data, err := p.doGraphQL(ctx, q.String())
-		if err != nil {
-			log.Printf("devpit: gitlab graphql open-set refresh degraded: %v", err)
-			degraded = true
+	// Iterate openItems in index order (not the map) so the appended events keep
+	// a deterministic order.
+	for i := range openItems {
+		mr, ok := byIndex[i]
+		if !ok {
 			continue
 		}
-
-		for j, it := range batch {
-			raw, ok := data[fmt.Sprintf("a%d", j)]
-			if !ok || raw == nil {
-				continue
-			}
-			var node struct {
-				MergeRequest *glGraphQLMR `json:"mergeRequest"`
-			}
-			if json.Unmarshal(raw, &node) != nil || node.MergeRequest == nil {
-				continue
-			}
-			pl := applyGraphQL(it.payload, *node.MergeRequest, p.handle)
-			events = append(events, sdk.Event{
-				ObjectType: objectType,
-				NativeID:   it.nativeID,
-				EventType:  eventItemObserved,
-				OccurredAt: parseTime(pl.ProviderUpdatedAt),
-				Actor:      pl.Author,
-				DedupeKey:  observedDedupeKey(pl),
-				Payload:    pl,
-			})
-		}
+		it := openItems[i]
+		pl := applyGraphQL(it.payload, mr, p.handle)
+		events = append(events, sdk.Event{
+			ObjectType: objectType,
+			NativeID:   it.nativeID,
+			EventType:  eventItemObserved,
+			OccurredAt: parseTime(pl.ProviderUpdatedAt),
+			Actor:      pl.Author,
+			DedupeKey:  observedDedupeKey(pl),
+			Payload:    pl,
+		})
 	}
 	return events, degraded
 }

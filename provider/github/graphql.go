@@ -43,7 +43,11 @@ type ghResult struct {
 }
 
 type ghPRNode struct {
-	PullRequest struct {
+	// PullRequest is a pointer so an aliased repository/pullRequest that resolves
+	// to JSON null (inaccessible repo, deleted PR) reads as nil instead of a zero
+	// struct — the caller then keeps the REST payload rather than overwriting it
+	// with zeros (A3).
+	PullRequest *struct {
 		ReviewDecision string `json:"reviewDecision"`
 		LatestReviews  struct {
 			Nodes []struct {
@@ -62,14 +66,25 @@ type ghPRNode struct {
 	} `json:"pullRequest"`
 }
 
-func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, results map[int]ghResult, handle string) {
+// mergeGHBatchResults applies each aliased PR node onto results, keyed by the
+// item's event index. It returns true when any node was missing or JSON-null: a
+// null node unmarshals into a zero struct, so guarding on node presence stops an
+// inaccessible repo in the batch from overwriting a PR's good REST enrichment
+// with zeros (A3). A missing/null node is skipped — its REST payload survives —
+// and reported as degraded so the cycle records a degraded outcome (A2).
+func mergeGHBatchResults(
+	data map[string]json.RawMessage, batch []prItem, results map[int]ghResult, handle string,
+) bool {
+	var degraded bool
 	for j, it := range batch {
 		raw, ok := data[fmt.Sprintf("a%d", j)]
 		if !ok || raw == nil {
+			degraded = true
 			continue
 		}
 		var node ghPRNode
-		if json.Unmarshal(raw, &node) != nil {
+		if json.Unmarshal(raw, &node) != nil || node.PullRequest == nil {
+			degraded = true
 			continue
 		}
 		count := 0
@@ -87,6 +102,7 @@ func mergeGHBatchResults(data map[string]json.RawMessage, batch []prItem, result
 			node.PullRequest.AutoMergeRequest != nil, myReviewState,
 		}
 	}
+	return degraded
 }
 
 // ghReviewDecision maps GitHub's PR-level reviewDecision (the
@@ -123,8 +139,28 @@ func ghReviewState(state string) string {
 	}
 }
 
+// ghErrRateLimited is the GitHub GraphQL error `type` for both primary and
+// secondary rate limiting, delivered as HTTP 200 with an errors array.
+const ghErrRateLimited = "RATE_LIMITED"
+
+// graphQLError is returned by doGraphQL when GitHub responds HTTP 200 with an
+// errors array and no data that is not a rate limit — e.g. a query-complexity
+// rejection. The caller records a degraded outcome rather than silently treating
+// every node as missing. Duplicated from the GitLab provider on purpose
+// (ADR-0003): providers never share helpers.
+type graphQLError struct {
+	msg string
+}
+
+func (e *graphQLError) Error() string { return "github graphql: " + e.msg }
+
 // doGraphQL POSTs a GraphQL query to the GitHub GraphQL API and returns the "data" map.
-// On non-2xx it returns a classified SDK error. Graceful-degradation callers catch errors and continue.
+// On non-2xx it returns a classified SDK error. GitHub also signals GraphQL-level
+// failures as HTTP 200 with an errors array (complexity ceilings and secondary
+// rate limiting both arrive this way); those are classified too — a rate limit
+// surfaces sdk.ErrRateLimited so the engine backs off, anything else a
+// *graphQLError so the caller degrades. Graceful-degradation callers catch the
+// non-rate errors and continue.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
 	body, _ := json.Marshal(struct { //nolint:errchkjson // struct has no interface fields; Marshal cannot fail
 		Query string `json:"query"`
@@ -149,10 +185,20 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 	case resp.StatusCode == http.StatusUnauthorized:
 		_ = resp.Body.Close()
 		return nil, sdk.ErrUnauthorized
-	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests:
+	case resp.StatusCode == http.StatusTooManyRequests:
 		d := parseRateDelay(resp)
 		_ = resp.Body.Close()
 		return nil, &sdk.RateLimitError{RetryAfter: d}
+	case resp.StatusCode == http.StatusForbidden:
+		// A 403 is a rate limit only with rate signals present; otherwise it is a
+		// permission/SSO/scope denial that must surface, not retry forever (A4).
+		if isRateLimited(resp) {
+			d := parseRateDelay(resp)
+			_ = resp.Body.Close()
+			return nil, &sdk.RateLimitError{RetryAfter: d}
+		}
+		_ = resp.Body.Close()
+		return nil, sdk.ErrUnauthorized
 	default:
 		_ = resp.Body.Close()
 		return nil, &sdk.StatusError{Status: resp.StatusCode}
@@ -160,17 +206,81 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 
 	var result struct {
 		Data   map[string]json.RawMessage `json:"data"`
-		Errors json.RawMessage            `json:"errors"`
+		Errors []struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"errors"`
 	}
 	if err := decodeJSON(resp, &result); err != nil {
 		return nil, err
 	}
+
+	// GitHub delivers GraphQL-level failures as HTTP 200 + an errors array.
+	if len(result.Errors) > 0 {
+		for _, e := range result.Errors {
+			if e.Type == ghErrRateLimited {
+				return nil, sdk.ErrRateLimited
+			}
+		}
+		// Partial data (some aliases resolved, others errored to null) is still
+		// worth applying: return it so the good nodes enrich and the null-node
+		// guard in mergeGHBatchResults skips-and-degrades the rest (A3).
+		if result.Data != nil {
+			return result.Data, nil
+		}
+		msg := "server returned errors with no data"
+		if result.Errors[0].Message != "" {
+			msg = result.Errors[0].Message
+		}
+		return nil, &graphQLError{msg: msg}
+	}
+	if result.Data == nil {
+		return nil, &graphQLError{msg: "server returned no data"}
+	}
 	return result.Data, nil
 }
 
+// runGHBatches queries the join fields for items in batches of batchSize (kept
+// well within the GraphQL node budget) and returns the per-evIdx results, a
+// degraded flag (any batch failed or any node came back null), and an error only
+// for a rate limit — that is propagated so the engine backs off, while every
+// other GraphQL failure logs, degrades, and keeps the batch's REST payload.
+func (p *Provider) runGHBatches(ctx context.Context, items []prItem) (map[int]ghResult, bool, error) {
+	results := make(map[int]ghResult, len(items))
+	var degraded bool
+	const batchSize = 30
+	for start := 0; start < len(items); start += batchSize {
+		batch := items[start:min(start+batchSize, len(items))]
+
+		var q strings.Builder
+		q.WriteString("query{")
+		for j, it := range batch {
+			fmt.Fprintf(&q, prQueryFmt, j, it.owner, it.repo, it.number)
+		}
+		q.WriteString("}")
+
+		data, err := p.doGraphQL(ctx, q.String())
+		if err != nil {
+			if errors.Is(err, sdk.ErrRateLimited) {
+				return nil, false, err
+			}
+			log.Printf("devpit: github graphql join degraded: %v", err)
+			degraded = true
+			continue
+		}
+		if mergeGHBatchResults(data, batch, results, p.handle) {
+			degraded = true
+		}
+	}
+	return results, degraded, nil
+}
+
 // graphqlJoin enriches item.observed events with GitHub GraphQL data
-// (reviewDecision, approvals, and auto-merge state).
-// On any GraphQL error it logs and returns the original events unchanged (graceful degradation).
+// (reviewDecision, approvals, and auto-merge state). It returns the events, a
+// degraded flag (true when any batch failed or any node came back null), and an
+// error only for a rate limit — a rate-limit signal is propagated so the engine
+// backs off, while every other GraphQL failure logs, degrades, and keeps the
+// batch's REST payload (A1/A2), since REST data is still authoritative.
 // Invariant: it never drops or reorders events — every input event appears in the output,
 // enriched or verbatim. The engine relies on this to derive the reconcile swept set from
 // the result's events (ADR-0024); a future edit must preserve it.
@@ -179,7 +289,7 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 // AutoMergeArmed is set from autoMergeRequest (non-null ⇒ armed); it degrades to false when the
 // field is unreadable or GraphQL fails. ChecksRunning is left false on GitHub (documented parity
 // gap: a gating in-progress pipeline is hidden inside the blocked gate, ADR-0016).
-func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Event {
+func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool, error) {
 	var items []prItem
 	for i, ev := range events {
 		if ev.EventType != eventItemObserved {
@@ -196,33 +306,15 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		items = append(items, prItem{i, owner, repo, number, pl.Draft, pl.Gate})
 	}
 	if len(items) == 0 {
-		return events
+		return events, false, nil
 	}
 
-	results := make(map[int]ghResult, len(items))
-
-	const batchSize = 30
-	for start := 0; start < len(items); start += batchSize {
-		batch := items[start:min(start+batchSize, len(items))]
-
-		var q strings.Builder
-		q.WriteString("query{")
-		for j, it := range batch {
-			fmt.Fprintf(&q, prQueryFmt, j, it.owner, it.repo, it.number)
-		}
-		q.WriteString("}")
-
-		data, err := p.doGraphQL(ctx, q.String())
-		if err != nil {
-			log.Printf("devpit: github graphql join degraded: %v", err)
-			continue
-		}
-
-		mergeGHBatchResults(data, batch, results, p.handle)
+	results, degraded, err := p.runGHBatches(ctx, items)
+	if err != nil {
+		return events, false, err
 	}
-
 	if len(results) == 0 {
-		return events
+		return events, degraded, nil
 	}
 
 	// Build a lookup from evIdx → "owner/repo" for the opportunistic downgrade below.
@@ -261,7 +353,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) []sdk.Ev
 		ev.DedupeKey = observedDedupeKey(pl)
 		out[evIdx] = ev
 	}
-	return out
+	return out, degraded, nil
 }
 
 // parseGHNativeID splits "owner/repo#number" into its components.

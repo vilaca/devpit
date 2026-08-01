@@ -135,9 +135,12 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		UnresolvedDiscussions: unresolvedDiscussions,
 		PolicyDenied:          isPolicyDenied(mr.DetailedMergeStatus),
 		AutoMergeArmed:        mr.MergeWhenPipelineSucceeds, // REST list field; ChecksRunning is refined by the GraphQL join
-		ProviderUpdatedAt:     mr.UpdatedAt,
-		TicketKeys:            sdk.ExtractTicketKeys(mr.Title, mr.SourceBranch, mr.Description),
-		Labels:                mr.Labels,
+		// -1 = unknown until the GraphQL join sets the real count; an MR first seen
+		// while GraphQL is degraded must read unknown, not 0/hide-count (A6).
+		ApprovalsCount:    -1,
+		ProviderUpdatedAt: mr.UpdatedAt,
+		TicketKeys:        sdk.ExtractTicketKeys(mr.Title, mr.SourceBranch, mr.Description),
+		Labels:            mr.Labels,
 	}
 
 	return sdk.Event{

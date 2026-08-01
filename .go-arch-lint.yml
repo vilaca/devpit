@@ -23,8 +23,14 @@ excludeFiles:
 # under .claude/worktrees/. go-arch-lint scans the filesystem, so without this
 # it reports every worktree file as "not attached to any component". CI has no
 # worktrees, so this only affects local `scripts/check.sh arch` runs.
+#
+# frontend/node_modules: npm packages can bundle stray .go files (e.g.
+# eslint's file-entry-cache -> flat-cache -> flatted ships one); frontend/go.mod
+# already walls this off from `go build/vet/test ./...`, but go-arch-lint scans
+# the filesystem directly rather than the Go module graph.
 exclude:
   - .claude
+  - frontend/node_modules
 
 components:
   sdk: { in: sdk }

@@ -265,7 +265,7 @@ func TestDoStatusClassification(t *testing.T) {
 	}{
 		{"ok", http.StatusOK, nil, 0},
 		{"unauthorized", http.StatusUnauthorized, sdk.ErrUnauthorized, 0},
-		{"forbidden", http.StatusForbidden, sdk.ErrRateLimited, 0},
+		{"forbidden without rate signal", http.StatusForbidden, sdk.ErrUnauthorized, 0},
 		{"too many requests", http.StatusTooManyRequests, sdk.ErrRateLimited, 0},
 		{"server error", http.StatusInternalServerError, sdk.ErrServer, 500},
 		{"service unavailable", http.StatusServiceUnavailable, sdk.ErrServer, 503},
@@ -1056,5 +1056,232 @@ func TestReconcileProjectMRsFailureClearsComplete(t *testing.T) {
 	}
 	if res.Complete {
 		t.Error("Complete = true, want false when a per-project MR page failed")
+	}
+}
+
+// TestDo403RateLimitVsAuth verifies a 403 is treated as rate-limited only when it
+// carries a Retry-After hint (GitLab signals limits as 429 + Retry-After); a bare
+// 403 is a permission/scope denial that surfaces as ErrUnauthorized (A4).
+func TestDo403RateLimitVsAuth(t *testing.T) {
+	cases := []struct {
+		name    string
+		header  http.Header
+		wantErr error
+	}{
+		{"retry-after present", http.Header{"Retry-After": {"30"}}, sdk.ErrRateLimited},
+		{"no rate signal", http.Header{}, sdk.ErrUnauthorized},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := newStubProvider(t, stubRT{status: http.StatusForbidden, header: c.header, body: "[]"})
+			resp, err := p.do(context.Background(), "https://gitlab.com/api/v4/x")
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if !errors.Is(err, c.wantErr) {
+				t.Fatalf("err = %v, want %v", err, c.wantErr)
+			}
+		})
+	}
+}
+
+// TestObservedApprovalsCountUnknownDefault verifies a fresh REST MR reports
+// approvals_count -1 (unknown), so an MR first seen while GraphQL is degraded
+// reads unknown rather than 0/hide-count (A6).
+func TestObservedApprovalsCountUnknownDefault(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+	pl, ok := p.observedFromMR(makeMR("mergeable")).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
+	if pl.ApprovalsCount != -1 {
+		t.Errorf("approvals_count = %d, want -1 (unknown before the GraphQL join)", pl.ApprovalsCount)
+	}
+}
+
+// TestGraphQLJoinCarryForward exercises the fail-closed carry-forward path
+// (carryForwardEnrichment, previously 0%-covered): a degraded batch with a prior
+// openSnapshots entry copies the last-known approval fields and OR-s the boolean
+// gate flags instead of downgrading to the REST defaults (A7).
+func TestGraphQLJoinCarryForward(t *testing.T) {
+	p := newStubProvider(t, stubRT{
+		status: 200,
+		header: http.Header{"Content-Type": {"application/json"}},
+		body:   `{"data":null,"errors":[{"message":"Query has complexity of 420 which exceeds max complexity of 250"}]}`,
+	})
+	p.handle = "octocat"
+
+	// Prior cycle's enriched snapshot for !7.
+	p.openSnapshots["acme/api!7"] = sdk.ItemObservedPayload{
+		ApprovalsCount: 3,
+		MyReviewState:  reviewStateApproved,
+		ReviewDecision: decisionChangesRequested,
+		NeedsApproval:  true,
+		FailingChecks:  true,
+		NeedsRebase:    true,
+	}
+
+	// Fresh REST MR, not yet enriched (approvals_count defaults to -1).
+	events := []sdk.Event{p.observedFromMR(makeMR("not_approved"))}
+
+	out, degraded := p.graphqlJoin(context.Background(), events)
+	if !degraded {
+		t.Fatal("degraded should be true when the batch hits the complexity ceiling")
+	}
+	pl, ok := out[0].Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatalf("payload type %T", out[0].Payload)
+	}
+	if pl.ApprovalsCount != 3 {
+		t.Errorf("approvals_count = %d, want 3 (carried from snapshot, not the -1 REST default)", pl.ApprovalsCount)
+	}
+	if pl.MyReviewState != reviewStateApproved {
+		t.Errorf("my_review_state = %q, want approved (carried)", pl.MyReviewState)
+	}
+	if pl.ReviewDecision != decisionChangesRequested {
+		t.Errorf("review_decision = %q, want changes_requested (carried)", pl.ReviewDecision)
+	}
+	// makeMR("not_approved") sets REST NeedsApproval=true; snapshot also true → OR true.
+	if !pl.NeedsApproval {
+		t.Error("needs_approval should be true (OR of REST and snapshot)")
+	}
+	// REST FailingChecks/NeedsRebase are false here; the snapshot's true values OR in.
+	if !pl.FailingChecks {
+		t.Error("failing_checks should be true (OR carries the snapshot's true)")
+	}
+	if !pl.NeedsRebase {
+		t.Error("needs_rebase should be true (OR carries the snapshot's true)")
+	}
+}
+
+// TestCarryForwardEnrichmentNowDraft is the now-draft edge case: an MR that had a
+// non-draft snapshot (3 approved) and has since become a draft must NOT have that
+// approval/review state carried forward — drafts suppress those facts (mirrors
+// applyGraphQL), so the stale snapshot cannot re-show "N approved" (A7).
+func TestCarryForwardEnrichmentNowDraft(t *testing.T) {
+	snap := sdk.ItemObservedPayload{
+		ApprovalsCount: 3,
+		MyReviewState:  reviewStateApproved,
+		ReviewDecision: decisionChangesRequested,
+		NeedsApproval:  true,
+		FailingChecks:  true,
+		NeedsRebase:    true,
+	}
+
+	draft := carryForwardEnrichment(sdk.ItemObservedPayload{Draft: true, ApprovalsCount: -1}, snap)
+	if draft.ApprovalsCount != -1 {
+		t.Errorf("approvals_count = %d, want -1 (suppressed on a draft, not carried)", draft.ApprovalsCount)
+	}
+	if draft.MyReviewState != "" {
+		t.Errorf("my_review_state = %q, want empty (suppressed on a draft)", draft.MyReviewState)
+	}
+	if draft.NeedsApproval {
+		t.Error("needs_approval should stay false on a draft (snapshot not carried)")
+	}
+	if draft.FailingChecks {
+		t.Error("failing_checks should stay false on a draft (snapshot not carried)")
+	}
+	// review_decision is not a merge-gate fact — carried even on a draft.
+	if draft.ReviewDecision != decisionChangesRequested {
+		t.Errorf("review_decision = %q, want changes_requested (carried regardless of draft)", draft.ReviewDecision)
+	}
+
+	// Regression guard: a non-draft MR still carries the snapshot enrichment.
+	live := carryForwardEnrichment(sdk.ItemObservedPayload{ApprovalsCount: -1}, snap)
+	if live.ApprovalsCount != 3 || live.MyReviewState != reviewStateApproved {
+		t.Errorf("non-draft carry: approvals=%d review=%q, want 3/approved", live.ApprovalsCount, live.MyReviewState)
+	}
+}
+
+// soleApproverPagesRT drives sole-approver discovery where a project's MRs span
+// two pages (X-Next-Page). failPage2 fails the second page to exercise the
+// mid-enumeration failure branch of fetchProjectSoleApproverMRs.
+type soleApproverPagesRT struct{ failPage2 bool }
+
+func (rt soleApproverPagesRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	json200 := func(body string, hdr http.Header) (*http.Response, error) {
+		if hdr == nil {
+			hdr = http.Header{}
+		}
+		hdr.Set("Content-Type", "application/json")
+		return &http.Response{StatusCode: http.StatusOK, Header: hdr, Body: io.NopCloser(strings.NewReader(body))}, nil
+	}
+	fail := func() (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	}
+	mr := func(iid int) string {
+		return fmt.Sprintf(`{"iid":%d,"project_id":42,"title":"t",`+
+			`"web_url":"https://gitlab.com/acme/api/-/merge_requests/%d","state":"opened",`+
+			`"detailed_merge_status":"not_approved","draft":false,"author":{"username":"jdoe"},`+
+			`"references":{"full":"acme/api!%d"},"updated_at":"2026-07-10T00:00:00Z"}`, iid, iid, iid)
+	}
+	path := req.URL.Path
+	page := req.URL.Query().Get("page")
+	switch {
+	case strings.Contains(path, "/members/all"):
+		return json200(`[{"username":"octocat","access_level":40}]`, nil) // octocat is sole approver
+	case strings.Contains(path, "/projects/") && strings.Contains(path, "/merge_requests"):
+		if page == "2" {
+			if rt.failPage2 {
+				return fail()
+			}
+			return json200("["+mr(8)+"]", nil)
+		}
+		return json200("["+mr(7)+"]", http.Header{"X-Next-Page": {"2"}})
+	case strings.Contains(path, "/merge_requests"):
+		return json200(`[]`, nil) // top-level reconcile scopes: no roled MRs
+	case strings.Contains(path, "/graphql"):
+		return json200(`{"data":{}}`, nil)
+	case strings.Contains(path, "/projects"):
+		return json200(`[{"id":42,"path_with_namespace":"acme/api"}]`, nil) // one owned project
+	default:
+		return json200(`[]`, nil)
+	}
+}
+
+// TestReconcileSoleApproverMultiPage verifies fetchProjectSoleApproverMRs follows
+// the X-Next-Page cursor: both !7 (page 1) and !8 (page 2) are swept and Complete
+// stays true (A7: previously-untested pagination loop).
+func TestReconcileSoleApproverMultiPage(t *testing.T) {
+	p := newStubProvider(t, stubRT{})
+	p.http.Transport = soleApproverPagesRT{failPage2: false}
+	p.handle = "octocat"
+
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, e := range res.Events {
+		if e.EventType == "item.observed" {
+			seen[e.NativeID] = true
+		}
+	}
+	if !seen["acme/api!7"] || !seen["acme/api!8"] {
+		t.Errorf("swept = %v, want both !7 (page 1) and !8 (page 2)", seen)
+	}
+	if !res.Complete {
+		t.Error("Complete should be true when every sole-approver page succeeded")
+	}
+}
+
+// TestReconcileSoleApproverPage2FailureClearsComplete verifies a failure on the
+// SECOND page of a project's MRs (mid-enumeration) clears Complete, so a partial
+// sole-approver set never drives a reap (A7 / ADR-0024).
+func TestReconcileSoleApproverPage2FailureClearsComplete(t *testing.T) {
+	p := newStubProvider(t, stubRT{})
+	p.http.Transport = soleApproverPagesRT{failPage2: true}
+	p.handle = "octocat"
+
+	res, err := p.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if res.Complete {
+		t.Error("Complete = true, want false when a mid-enumeration page failed")
 	}
 }

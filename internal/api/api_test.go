@@ -596,6 +596,73 @@ func TestConnectionsReflectsSetUpdate(t *testing.T) {
 	}
 }
 
+// --- 500 paths (DB failure) ---
+//
+// Closing the DB before the request is the real failure surface (a query
+// against a closed *sql.DB), not a mock — storage.DB has no interface seam
+// in this package, and the point is to see genuine storage errors turn into
+// the errCodeInternal envelope.
+
+func TestAttentionDBErrorReturns500(t *testing.T) {
+	db := openTestDB(t)
+	s := newTestServer(t, db)
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	w := do(t, s, "GET", "/attention")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+	var resp errorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Error != errCodeInternal {
+		t.Errorf("error = %q, want %q", resp.Error, errCodeInternal)
+	}
+}
+
+func TestConnectionsDBErrorReturns500(t *testing.T) {
+	db := openTestDB(t)
+	s := newTestServer(t, db)
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	w := do(t, s, "GET", "/connections")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+	var resp errorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Error != errCodeInternal {
+		t.Errorf("error = %q, want %q", resp.Error, errCodeInternal)
+	}
+}
+
+func TestSyncLogDBErrorReturns500(t *testing.T) {
+	db := openTestDB(t)
+	s := newTestServer(t, db)
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	w := do(t, s, "GET", "/sync-log")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+	var resp errorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Error != errCodeInternal {
+		t.Errorf("error = %q, want %q", resp.Error, errCodeInternal)
+	}
+}
+
 // --- Content-Type ---
 
 func TestContentTypeJSON(t *testing.T) {

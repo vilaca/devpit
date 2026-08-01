@@ -101,12 +101,16 @@ func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResu
 		events = append(events, p.observedFromSearch(a.item, a.repo, sortedRoles(a.roles)))
 	}
 
-	events = p.graphqlJoin(ctx, events)
+	events, degraded, err := p.graphqlJoin(ctx, events)
+	if err != nil {
+		return sdk.PollResult{}, err
+	}
 
 	return sdk.PollResult{
 		Events:        events,
 		RateRemaining: rate,
 		ItemsChanged:  len(events),
+		Degraded:      degraded,
 		Complete:      complete,
 	}, nil
 }

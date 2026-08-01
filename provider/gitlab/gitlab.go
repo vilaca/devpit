@@ -86,10 +86,21 @@ func (p *Provider) do(ctx context.Context, url string) (*http.Response, error) {
 	case resp.StatusCode == http.StatusUnauthorized:
 		_ = resp.Body.Close()
 		return nil, sdk.ErrUnauthorized
-	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests:
+	case resp.StatusCode == http.StatusTooManyRequests:
 		d := parseRateDelay(resp)
 		_ = resp.Body.Close()
 		return nil, &sdk.RateLimitError{RetryAfter: d}
+	case resp.StatusCode == http.StatusForbidden:
+		// GitLab signals rate limits as 429 + Retry-After; a 403 is a rate limit
+		// only when it carries that hint, otherwise it is a permission/scope denial
+		// that must surface rather than retry on backoff forever (A4).
+		if resp.Header.Get("Retry-After") != "" {
+			d := parseRateDelay(resp)
+			_ = resp.Body.Close()
+			return nil, &sdk.RateLimitError{RetryAfter: d}
+		}
+		_ = resp.Body.Close()
+		return nil, sdk.ErrUnauthorized
 	default:
 		_ = resp.Body.Close()
 		return nil, &sdk.StatusError{Status: resp.StatusCode}

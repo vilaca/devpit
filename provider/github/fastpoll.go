@@ -82,13 +82,17 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		events = append(events, sigs...)
 	}
 
-	events = p.graphqlJoin(ctx, events)
+	events, degraded, err := p.graphqlJoin(ctx, events)
+	if err != nil {
+		return sdk.PollResult{}, err
+	}
 
 	return sdk.PollResult{
 		Events:        events,
 		State:         out,
 		RateRemaining: rate,
 		ItemsChanged:  len(events),
+		Degraded:      degraded,
 	}, nil
 }
 

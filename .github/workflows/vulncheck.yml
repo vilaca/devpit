@@ -1,0 +1,23 @@
+name: Vulncheck
+
+# NOT a scripts/check.sh gate, deliberately: govulncheck's result is
+# time-dependent — a new CVE disclosure can flip it red with no code change,
+# which would break the "green is deterministic, local == CI" invariant
+# check.sh exists to guarantee (ADR-0013). It runs here instead, on its own
+# schedule; a red run is a to-do for humans to triage, not a broken build.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with: { go-version: '1.26', cache: true }
+      # Pinned here, not in scripts/check.sh: this is the one exception to
+      # versions-live-in-check.sh, because this check deliberately isn't a
+      # check.sh gate (see rationale above).
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...

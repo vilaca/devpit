@@ -22,10 +22,9 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(path, {
     headers: { Accept: "application/json" },
-    signal,
   });
   if (!res.ok) {
     let code: ApiError["error"] | "unknown" = "unknown";
@@ -42,28 +41,16 @@ async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function getAttention(
-  state?: string,
-  signal?: AbortSignal,
-): Promise<AttentionResponse> {
-  const q = state ? `?state=${encodeURIComponent(state)}` : "";
-  return getJSON<AttentionResponse>(`/attention${q}`, signal);
+export function getAttention(): Promise<AttentionResponse> {
+  return getJSON<AttentionResponse>("/attention");
 }
 
-export function getConnections(
-  signal?: AbortSignal,
-): Promise<ConnectionsResponse> {
-  return getJSON<ConnectionsResponse>("/connections", signal);
+export function getConnections(): Promise<ConnectionsResponse> {
+  return getJSON<ConnectionsResponse>("/connections");
 }
 
-export function getSyncLog(
-  connectionId?: string,
-  signal?: AbortSignal,
-): Promise<SyncLogResponse> {
-  const q = connectionId
-    ? `?connection=${encodeURIComponent(connectionId)}`
-    : "";
-  return getJSON<SyncLogResponse>(`/sync-log${q}`, signal);
+export function getSyncLog(): Promise<SyncLogResponse> {
+  return getJSON<SyncLogResponse>("/sync-log");
 }
 
 // setFlag / clearFlag drive the "Handle next" pinned zone. Read-only model

@@ -32,9 +32,15 @@
 
   let rowEl: HTMLDivElement | undefined = $state();
 
-  // Scroll focused row into view when keyboard nav lands on it.
+  // When keyboard nav (j/k) lands on this row, move real DOM focus to it and
+  // scroll it into view. Moving focus is what makes assistive tech announce the
+  // row — updating focusedId alone left AT users with no feedback. preventScroll
+  // keeps focus() from fighting the explicit scrollIntoView below.
   $effect(() => {
-    if (focused && rowEl) rowEl.scrollIntoView({ block: "nearest" });
+    if (focused && rowEl && document.activeElement !== rowEl) {
+      rowEl.focus({ preventScroll: true });
+      rowEl.scrollIntoView({ block: "nearest" });
+    }
   });
 </script>
 
@@ -47,11 +53,13 @@
   class:old={item.old}
   onclick={() => onFocus(item.id)}
   onkeydown={(e) => {
+    // Keyboard parity with the click handler (satisfies the a11y lint rule).
+    // Opening on Enter is handled globally in App (openFocused via focusedId).
     if (e.key === "Enter" || e.key === " ") onFocus(item.id);
   }}
   role="option"
   aria-selected={focused}
-  tabindex="0"
+  tabindex={focused ? 0 : -1}
 >
   <button
     class="pin"

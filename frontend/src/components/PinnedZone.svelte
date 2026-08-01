@@ -18,10 +18,12 @@
 
 {#if items.length > 0}
   <section class="pinned-zone">
-    <h2>Handle next</h2>
-    <div role="list">
+    <h2 id="pinned-heading">Handle next</h2>
+    <div role="listbox" aria-labelledby="pinned-heading">
       {#each items as item (item.id)}
-        <div class="pinned-item">
+        <!-- Presentational wrapper: exists only to position the pin-age badge,
+             so the WorkItemRow option stays a direct child of the listbox. -->
+        <div class="pinned-item" role="presentation">
           <WorkItemRow
             {item}
             focused={focusedId === item.id}

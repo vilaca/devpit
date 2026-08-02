@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -127,6 +128,7 @@ func (e *Engine) Run(ctx context.Context) error {
 			continue
 		}
 
+		slog.Info("connection polling", "connection", cfg.ID, "type", cfg.Type)
 		e.wg.Go(func() {
 			c.run(ctx)
 		})
@@ -141,6 +143,10 @@ func (e *Engine) Run(ctx context.Context) error {
 // applies no backoff (there is no goroutine to back off) and uses the "startup"
 // operation so the row is distinguishable from cycle rows.
 func (e *Engine) logStartupFailure(connID, outcome, detail string) {
+	// Mirror to the console so a connection that never starts is visible in the
+	// terminal, not only in the sync_log (ADR-0018) behind the UI.
+	slog.Error("connection failed to start",
+		"connection", connID, "outcome", outcome, "err", detail)
 	logCtx, cancel := context.WithTimeout(context.Background(), e.closeTimeout)
 	defer cancel()
 	_ = e.store.WriteSyncLog(logCtx, storage.SyncLogEntry{

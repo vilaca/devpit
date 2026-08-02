@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"time"
@@ -104,7 +104,7 @@ func (s *Server) fetchJiraTickets(ctx context.Context, items []attention.WorkIte
 	}
 	tickets, err := s.db.GetJiraTickets(ctx, keys)
 	if err != nil {
-		log.Printf("devpit: api: fetch jira tickets: %v", err)
+		slog.Warn("api: fetch jira tickets", "err", err)
 		return nil
 	}
 	return tickets

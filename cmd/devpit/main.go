@@ -8,7 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -44,7 +44,23 @@ func main() {
 	// run holds the deferred cleanup (db.Close, signal stop); main only reports
 	// the error, so a fatal exit still runs those defers first.
 	if err := run(); err != nil {
-		log.Fatalf("devpit: %v", err)
+		slog.Error("fatal", "err", err)
+		os.Exit(1)
+	}
+}
+
+// parseLogLevel maps the -log-level flag to a slog.Level, defaulting to Info
+// for any unrecognized value so a typo never silences the log entirely.
+func parseLogLevel(s string) slog.Level {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }
 
@@ -52,6 +68,8 @@ func run() error {
 	configPath := flag.String("config", config.DefaultPath(),
 		"path to the YAML config file")
 	showVersion := flag.Bool("version", false, "print the version and exit")
+	logLevel := flag.String("log-level", "info",
+		"log verbosity: debug, info, warn, or error")
 	flag.Parse()
 
 	if *showVersion {
@@ -59,12 +77,15 @@ func run() error {
 		return nil
 	}
 
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr,
+		&slog.HandlerOptions{Level: parseLogLevel(*logLevel)})))
+
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		return err
 	}
 	for _, w := range cfg.Warnings {
-		_, _ = fmt.Fprintf(os.Stderr, "devpit: warning: %s\n", w)
+		slog.Warn("config", "warning", w)
 	}
 
 	db, err := storage.Open(cfg.DBPath)
@@ -73,8 +94,8 @@ func run() error {
 	}
 	defer func() { _ = db.Close() }()
 
-	log.Printf("devpit %s: config=%s, %d connection(s), db=%s",
-		version, *configPath, len(cfg.Connections), cfg.DBPath)
+	slog.Info("starting", "version", version, "config", *configPath,
+		"connections", len(cfg.Connections), "db", cfg.DBPath)
 
 	// Cancel the root context on SIGINT/SIGTERM so the engine drains and Closes
 	// each provider under its bounded timeout before we exit.
@@ -105,10 +126,10 @@ func run() error {
 	}
 	go func() {
 		if err := httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("devpit: http server: %v", err)
+			slog.Error("http server", "err", err)
 		}
 	}()
-	log.Printf("devpit: listening on http://%s", cfg.Listen)
+	slog.Info("listening", "addr", "http://"+cfg.Listen)
 
 	// Surface a newer release as a quiet TopBar chip (ADR-0023). Skipped for
 	// dev builds; failures are quiet. inContainer picks the upgrade hint.
@@ -121,7 +142,7 @@ func run() error {
 			APIToken: cfg.Jira.APIToken,
 		}, db, srv)
 		r.Start(ctx)
-		log.Printf("devpit: jira enricher started (base_url=%s)", cfg.Jira.BaseURL)
+		slog.Info("jira enricher started", "base_url", cfg.Jira.BaseURL)
 	}
 
 	eng := engine.New(db, cfg.Connections, engine.WithNotifier(srv))
@@ -131,7 +152,7 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), httpShutdownTimeout)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("devpit: http shutdown: %v", err)
+		slog.Error("http shutdown", "err", err)
 	}
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {

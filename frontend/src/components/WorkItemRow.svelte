@@ -86,9 +86,9 @@
       >
         {item.title}
       </a>
-      {#if !item.muted}
-        <div class="tags-wrap"><StateTags {item} /></div>
-      {/if}
+      <!-- StateTags self-filters when muted: only the changes_requested chip
+           renders on a muted row; all other chips/markers stay suppressed. -->
+      <div class="tags-wrap"><StateTags {item} /></div>
     </div>
     <div class="meta-row">
       {#if item.repo}

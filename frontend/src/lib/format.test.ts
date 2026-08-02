@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { relativeTime } from "./format";
+import { relativeTime, visibleStates } from "./format";
+import type { State } from "./types";
 
 const NOW = new Date("2026-07-16T12:00:00.000Z").getTime();
 const ago = (seconds: number): string =>
@@ -48,5 +49,23 @@ describe("relativeTime", () => {
 
   it("treats a future date as 'just now'", () => {
     expect(relativeTime(ago(-30))).toBe("just now");
+  });
+});
+
+describe("visibleStates", () => {
+  it("returns all states when not muted", () => {
+    const states: State[] = ["blocked", "mentioned", "review_submitted"];
+    expect(visibleStates(states, false)).toEqual(states);
+  });
+
+  it("keeps only changes_requested when muted", () => {
+    const states: State[] = ["changes_requested", "review_submitted"];
+    expect(visibleStates(states, true)).toEqual(["changes_requested"]);
+  });
+
+  it("hides every chip on a muted approve/comment row", () => {
+    // reviewer-side approved/commented rows collapse to review_submitted, which
+    // the mute suppresses -> a chipless dim row.
+    expect(visibleStates(["review_submitted"], true)).toEqual([]);
   });
 });

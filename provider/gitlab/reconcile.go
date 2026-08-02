@@ -3,7 +3,7 @@ package gitlab
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"sort"
 
@@ -71,7 +71,7 @@ func (p *Provider) fetchScopeMRs(ctx context.Context, base string, seen map[stri
 func (p *Provider) fetchSoleApproverMRs(ctx context.Context, seen map[string]bool) ([]sdk.Event, bool) {
 	projects, err := p.fetchOwnedProjects(ctx)
 	if err != nil {
-		log.Printf("devpit: gitlab: owned-projects fetch degraded: %v", err)
+		slog.Warn("gitlab: owned-projects fetch degraded", "err", err)
 		return nil, false
 	}
 
@@ -109,13 +109,13 @@ func (p *Provider) fetchProjectSoleApproverMRs(
 	for u := base; u != ""; {
 		resp, err := p.do(ctx, u)
 		if err != nil {
-			log.Printf("devpit: gitlab: sole-approver MR fetch degraded: %v", err)
+			slog.Warn("gitlab: sole-approver MR fetch degraded", "err", err)
 			return events, false
 		}
 		next := resp.Header.Get("X-Next-Page")
 		var mrs []glMergeRequest
 		if err := decodeJSON(resp, &mrs); err != nil {
-			log.Printf("devpit: gitlab: sole-approver MR decode degraded: %v", err)
+			slog.Warn("gitlab: sole-approver MR decode degraded", "err", err)
 			return events, false
 		}
 		for _, mr := range mrs {

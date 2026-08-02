@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -190,7 +190,7 @@ func (p *Provider) runMRBatches(ctx context.Context, queries []mrBatchQuery) (ma
 
 		data, err := p.doGraphQL(ctx, q.String())
 		if err != nil {
-			log.Printf("devpit: gitlab graphql batch degraded: %v", err)
+			slog.Warn("gitlab graphql batch degraded", "err", err)
 			degraded = true
 			continue
 		}

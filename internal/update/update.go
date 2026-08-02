@@ -11,7 +11,7 @@ package update
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -94,14 +94,14 @@ type release struct {
 func (c *Checker) check(ctx context.Context) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
-		log.Printf("devpit: update check: build request: %v", err)
+		slog.Debug("update check: build request", "err", err)
 		return
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		log.Printf("devpit: update check: %v", err)
+		slog.Debug("update check", "err", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -110,13 +110,13 @@ func (c *Checker) check(ctx context.Context) {
 		return // no releases yet — quietly means "no update"
 	}
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("devpit: update check: unexpected status %d", resp.StatusCode)
+		slog.Debug("update check: unexpected status", "status", resp.StatusCode)
 		return
 	}
 
 	var rel release
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		log.Printf("devpit: update check: decode: %v", err)
+		slog.Debug("update check: decode", "err", err)
 		return
 	}
 	if newer(c.current, rel.TagName) {

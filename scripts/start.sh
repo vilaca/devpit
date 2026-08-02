@@ -109,5 +109,7 @@ stop_running
 # running with logs on the terminal until you stop it with Ctrl-C (SIGINT,
 # which devpit drains gracefully). exec replaces the shell so there is no extra
 # process and signals go straight to devpit.
-echo "==> Starting devpit on http://$ADDR (Ctrl-C to stop)"
+# The address is intentionally omitted here: devpit prints its own authoritative
+# "listening on http://…" line once it has actually bound the port.
+echo "==> Starting devpit (Ctrl-C to stop)"
 exec "$BIN" "${devpit_args[@]}"

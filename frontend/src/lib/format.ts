@@ -42,3 +42,16 @@ const STATE_LABELS: Record<State, string> = {
 export function stateCSSVar(s: State): string {
   return `var(--state-${s.replace(/_/g, "-")})`;
 }
+
+// States that still render a chip on a muted (reviewed-done) row. Everything
+// else — other state chips plus the draft/marker/stale badges — is suppressed
+// when muted (ADR-0016). Today only changes_requested survives: it means "I
+// requested changes; ball is with the author", and the dim row keeps this chip
+// so it says why it's dim.
+const MUTED_VISIBLE: ReadonlySet<State> = new Set<State>(["changes_requested"]);
+
+// visibleStates returns the state chips to render for a row: all of them
+// normally, or just the muted-visible subset when the row is muted.
+export function visibleStates(states: State[], muted: boolean): State[] {
+  return muted ? states.filter((s) => MUTED_VISIBLE.has(s)) : states;
+}

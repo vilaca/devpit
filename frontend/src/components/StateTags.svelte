@@ -1,8 +1,18 @@
 <script lang="ts">
   import type { AttentionItem, State } from "../lib/types";
-  import { stateLabel, stateCSSVar, relativeTime } from "../lib/format";
+  import {
+    stateLabel,
+    stateCSSVar,
+    relativeTime,
+    visibleStates,
+  } from "../lib/format";
 
   const { item }: { item: AttentionItem } = $props();
+
+  // A muted row (reviewed-done) suppresses its chips — except changes_requested
+  // (ADR-0016). visibleStates encodes that rule; the draft/marker badges and the
+  // stale tag are separately gated on !item.muted below.
+  const chips = $derived(visibleStates(item.states, item.muted ?? false));
 
   // "Mentioned ×3" — signal_counts key is "mentioned" (fold.go strips prefix).
   function labelFor(s: State): string {
@@ -92,11 +102,11 @@
 </script>
 
 <span class="tags">
-  {#if item.draft}
+  {#if item.draft && !item.muted}
     <span class="tag marker-draft" title={titleForMarker("draft")}>Draft</span>
   {/if}
 
-  {#each item.states as s (s)}
+  {#each chips as s (s)}
     {#if s === "blocked" && blockedSuppressed}
       <!-- suppressed: the matching marker badge below already names the reason -->
     {:else if s === "ready_to_merge" && readyButRed}
@@ -117,43 +127,47 @@
     {/if}
   {/each}
 
-  {#if item.merge_conflict}
-    <span class="tag marker-conflict" title={titleForMarker("merge_conflict")}
-      >Conflict</span
-    >
-  {/if}
-  {#if item.needs_rebase}
-    <span class="tag marker-conflict" title={titleForMarker("needs_rebase")}
-      >Rebase</span
-    >
-  {/if}
-  {#if item.failing_checks && !readyButRed}
-    <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016) -->
-    <span class="tag marker-conflict" title={titleForMarker("failing_checks")}
-      >Failing Checks</span
-    >
-  {/if}
-  {#if item.needs_approval}
-    <span class="tag marker-conflict" title={titleForMarker("needs_approval")}
-      >Missing Approvals</span
-    >
-  {/if}
-  {#if item.unresolved_discussions}
-    <span
-      class="tag marker-conflict"
-      title={titleForMarker("unresolved_discussions")}>Discussions</span
-    >
-  {/if}
-  {#if item.policy_denied}
-    <span class="tag marker-conflict" title={titleForMarker("policy_denied")}
-      >Policy</span
-    >
-  {/if}
+  <!-- Diagnostic markers and the stale tag are suppressed on muted rows, which
+       carry only the changes_requested chip (see visibleStates). -->
+  {#if !item.muted}
+    {#if item.merge_conflict}
+      <span class="tag marker-conflict" title={titleForMarker("merge_conflict")}
+        >Conflict</span
+      >
+    {/if}
+    {#if item.needs_rebase}
+      <span class="tag marker-conflict" title={titleForMarker("needs_rebase")}
+        >Rebase</span
+      >
+    {/if}
+    {#if item.failing_checks && !readyButRed}
+      <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016) -->
+      <span class="tag marker-conflict" title={titleForMarker("failing_checks")}
+        >Failing Checks</span
+      >
+    {/if}
+    {#if item.needs_approval}
+      <span class="tag marker-conflict" title={titleForMarker("needs_approval")}
+        >Missing Approvals</span
+      >
+    {/if}
+    {#if item.unresolved_discussions}
+      <span
+        class="tag marker-conflict"
+        title={titleForMarker("unresolved_discussions")}>Discussions</span
+      >
+    {/if}
+    {#if item.policy_denied}
+      <span class="tag marker-conflict" title={titleForMarker("policy_denied")}
+        >Policy</span
+      >
+    {/if}
 
-  {#if item.old || item.stale}
-    <span class="tag marker-stale" title={item.old ? oldTitle : staleTitle}
-      >Stale</span
-    >
+    {#if item.old || item.stale}
+      <span class="tag marker-stale" title={item.old ? oldTitle : staleTitle}
+        >Stale</span
+      >
+    {/if}
   {/if}
 </span>
 

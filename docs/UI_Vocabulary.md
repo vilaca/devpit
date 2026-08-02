@@ -49,7 +49,7 @@ role-aware where the fact is inherently about a role (see role scope notes).
 
 | chip | role scope | it means | hover |
 |---|---|---|---|
-| `changes_requested` | author | a reviewer requested changes | {N} |
+| `changes_requested` | author / reviewer | author-side: a reviewer requested changes on your item (bright, actionable). reviewer-side: you requested changes on someone's item — the row is muted (ball is with the author), but this chip alone still renders so the dim row says why | {N} |
 | `review_requested`  | reviewer / sole approver | your review was requested (or implied — you are the only merge path), not submitted | {N} |
 | `blocked`           | author / sole approver | provider merge gate not satisfied | {N} · provider says: {gate_detail} |
 | `mentioned`         | anyone | you were @-mentioned (shows ×N if repeated) | {N} · clears when the item closes |
@@ -57,7 +57,7 @@ role-aware where the fact is inherently about a role (see role scope notes).
 | `auto_merge_armed`  | author / sole approver | provider auto-merge / merge-when-pipeline-succeeds is armed | {N} |
 | `checks_running`    | author / sole approver | a pipeline is in progress | {N} |
 | `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; replaces the bare row | {N} |
-| `review_submitted`  | reviewer | you already reviewed; ball with author | {N} |
+| `review_submitted`  | reviewer | you already reviewed (approved / commented); ball with author. Computed but never shown — the reviewed-done row is muted and suppresses its chips. The one exception is a reviewer-side changes-requested verdict, which surfaces as the `changes_requested` chip above | {N} |
 
 `blocked` defers entirely to the provider's merge gate — DevPit never
 re-derives org rules. That is why it is trustworthy.
@@ -71,9 +71,12 @@ hover above (`{N} · provider says: {gate_detail}`) applies whenever the chip
 renders.
 
 **Provider parity for best-effort signals:**
-- `changes_requested`: a reviewer's changes-requested verdict on both, via the
-  GraphQL join — GitHub (`reviewDecision == CHANGES_REQUESTED`) and GitLab
-  (`reviewers.nodes.mergeRequestInteraction.reviewState == REQUESTED_CHANGES`).
+- `changes_requested`: author-side uses the PR/MR-level verdict (any reviewer) —
+  GitHub (`reviewDecision == CHANGES_REQUESTED`) and GitLab
+  (any `reviewers.nodes.mergeRequestInteraction.reviewState == REQUESTED_CHANGES`).
+  Reviewer-side uses *your own* verdict via `my_review_state == changes_requested`,
+  populated on both — GitHub (`latestReviews` node for you) and GitLab (your own
+  reviewer `reviewState == REQUESTED_CHANGES`).
 - `auto_merge_armed`: ships on both GitHub (GraphQL `autoMergeRequest{enabledAt}`,
   non-null ⇒ armed; degrades to false for PATs that cannot read it) and GitLab
   (REST `merge_when_pipeline_succeeds`).

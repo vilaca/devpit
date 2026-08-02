@@ -17,7 +17,7 @@ computes no attention state itself — buckets are folded on read by
   at startup. Connections do not change while running (no runtime add/remove).
 - Resolve identity, distinguishing **permanent** from **transient** failure.
 - Run two tiers per connection on a **single goroutine** — a fast change-signal
-  poll (~60 s) and a slow full reconcile (~15 min) — never overlapping.
+  poll (~60 s) and a slow full reconcile (~3 min) — never overlapping.
 - Per cycle: load cursors → call the provider → **on success** persist events
   then cursors → write one `sync_log` row → notify. **On error**, persist
   nothing and leave cursors untouched.
@@ -68,6 +68,12 @@ so the engine never retries before the provider's floor but waits longer if the
 streak already demands it. The provider normalizes all rate signals (GitHub's
 `Retry-After` and `X-RateLimit-Reset`, GitLab's `Retry-After`) into a single
 retry hint — the engine owns backoff timing, not the provider.
+
+Backoff is the **only** retry mechanism, and it operates at cycle granularity: a
+failure within a cycle is not re-issued in place. An enrichment call that fails
+mid-cycle (e.g. a GitLab GraphQL batch) is logged, skipped, and the cycle still
+succeeds as `degraded` — the failed work is simply re-attempted on the next
+cycle, not retried before the current one returns.
 
 ## Sync-log outcomes
 

@@ -2,7 +2,7 @@ package jira
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/vilaca/devpit/internal/storage"
@@ -62,13 +62,13 @@ func (r *Refresher) loop(ctx context.Context) {
 func (r *Refresher) sweep(ctx context.Context) {
 	keys, err := r.db.AllOpenTicketKeys(ctx)
 	if err != nil {
-		log.Printf("devpit: jira refresher: collect keys: %v", err)
+		slog.Warn("jira refresher: collect keys", "err", err)
 		return
 	}
 
 	if len(keys) == 0 {
 		if err := r.db.PruneJiraTickets(ctx, nil); err != nil {
-			log.Printf("devpit: jira refresher: prune: %v", err)
+			slog.Warn("jira refresher: prune", "err", err)
 		}
 		return
 	}
@@ -77,7 +77,7 @@ func (r *Refresher) sweep(ctx context.Context) {
 	for _, key := range keys {
 		result, fetchErr, err := r.client.Fetch(ctx, key)
 		if err != nil {
-			log.Printf("devpit: jira refresher: fetch %s: %v", key, err)
+			slog.Warn("jira refresher: fetch", "key", key, "err", err)
 			continue
 		}
 
@@ -92,7 +92,7 @@ func (r *Refresher) sweep(ctx context.Context) {
 			t.URL = result.URL
 		}
 		if err := r.db.UpsertJiraTicket(ctx, t); err != nil {
-			log.Printf("devpit: jira refresher: upsert %s: %v", key, err)
+			slog.Warn("jira refresher: upsert", "key", key, "err", err)
 			continue
 		}
 		if fetchErr == "" {
@@ -101,7 +101,7 @@ func (r *Refresher) sweep(ctx context.Context) {
 	}
 
 	if err := r.db.PruneJiraTickets(ctx, keys); err != nil {
-		log.Printf("devpit: jira refresher: prune: %v", err)
+		slog.Warn("jira refresher: prune", "err", err)
 	}
 
 	if changed {

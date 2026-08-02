@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -309,7 +309,7 @@ func (p *Provider) runGHBatches(ctx context.Context, items []prItem) (map[int]gh
 			if errors.Is(err, sdk.ErrRateLimited) {
 				return nil, false, err
 			}
-			log.Printf("devpit: github graphql join degraded: %v", err)
+			slog.Warn("github graphql join degraded", "err", err)
 			degraded = true
 			continue
 		}

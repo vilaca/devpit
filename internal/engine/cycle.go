@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/vilaca/devpit/internal/storage"
@@ -207,8 +207,8 @@ func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error
 				// snapshot leaves openRoled false, making the item a ghost that
 				// is never reaped nor resurrected. Log it so the corruption is
 				// observable rather than silent. Control flow is unchanged.
-				log.Printf("engine: connection %q: reap: unparseable item.observed payload for %q: %v",
-					c.cfg.ID, f.NativeID, err)
+				slog.Warn("reap: unparseable item.observed payload",
+					"connection", c.cfg.ID, "item", f.NativeID, "err", err)
 			} else {
 				lf.openRoled = pl.State == itemStateOpen && len(pl.MyRoles) > 0
 			}
@@ -377,7 +377,7 @@ func (c *conn) writeLog(entry storage.SyncLogEntry) {
 	logCtx, cancel := context.WithTimeout(context.Background(), c.closeTimeout)
 	defer cancel()
 	if err := c.store.WriteSyncLog(logCtx, entry); err != nil {
-		log.Printf("engine: connection %q: write sync_log: %v", c.cfg.ID, err)
+		slog.Error("write sync_log", "connection", c.cfg.ID, "err", err)
 	}
 }
 

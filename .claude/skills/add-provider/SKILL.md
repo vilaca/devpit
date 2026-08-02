@@ -25,9 +25,10 @@ mirroring an existing provider, not by inventing structure.
   type. This is the spec of record; `docs/Provider_SDK.md` explains its
   semantics.
 - `provider/github/` and `provider/gitlab/` — the two working templates. List
-  their files and pick the closer analogue (GraphQL vs REST). Note how each file
-  is organised (client, identity, normalize, types, urls, fastpoll, reconcile,
-  doc) — you will mirror this set.
+  their files and pick the closer analogue (GraphQL vs REST). Note how each is
+  split into per-concern files (the client entrypoint, identity, normalize,
+  types, fastpoll, reconcile, doc) — the exact set varies per provider, so
+  mirror your chosen template's files rather than a fixed list.
 - How providers **register**: find the `init()` registration in an existing
   provider and the registry it calls.
 - How `cmd/devpit/main.go` constructs providers (the composition root).

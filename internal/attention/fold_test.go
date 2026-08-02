@@ -368,6 +368,39 @@ func TestFoldSignalCountsAndRankingTime(t *testing.T) {
 	}
 }
 
+// TestFoldRankingTimeAdvancesOnVerdictSignal is the real-case guard
+// (DevHEL/planning-cloud!29939): an item whose only prior signal is an old
+// ci_failed but which has since gained an approval verdict must rank by that
+// verdict's provider-reported time, not stay frozen at the stale signal.
+// Verdicts now carry a real OccurredAt from the provider's system-note timestamp
+// (GitLab) or submittedAt (GitHub), so the fold ranks them at that true time.
+func TestFoldRankingTimeAdvancesOnVerdictSignal(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	// Provider time and the last CI signal are both a week stale.
+	stale := baseTime.Add(-7 * 24 * time.Hour)
+	f.ProviderUpdatedAt = stale.Format(time.RFC3339)
+
+	approvalTime := baseTime.Add(-30 * time.Minute) // true provider-reported approval time
+
+	// A verdict signal with a real occurred_at (provider time), older observed_at.
+	approval := sig(3, "acme/api#1", "signal.approved", approvalTime)
+	approval.ObservedAt = baseTime.Add(-1 * time.Minute) // observed well after the approval
+
+	items := fold([]storage.StoredEvent{
+		obs(1, "c", "acme/api#1", f),
+		sig(2, "acme/api#1", "signal.ci_failed", stale),
+		approval,
+	})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if !items[0].UpdatedAt.Equal(approvalTime) {
+		t.Errorf("UpdatedAt = %v, want the approval's OccurredAt %v (ranked by provider-reported time)",
+			items[0].UpdatedAt, approvalTime)
+	}
+}
+
 func TestFoldRankingTimeFallsBackToProviderUpdatedAt(t *testing.T) {
 	f := openFacts()
 	f.MyRoles = []string{"reviewer"}

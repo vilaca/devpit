@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -225,6 +226,194 @@ func (p *Provider) runGraphQLBatches(ctx context.Context, items []glBatchItem) (
 	return results, degraded
 }
 
+// glNote is one element returned by the MR notes REST endpoint.
+// Only system notes are used; non-system notes are skipped by the matcher.
+type glNote struct {
+	ID     int    `json:"id"`
+	System bool   `json:"system"`
+	Body   string `json:"body"`
+	Author struct {
+		Username string `json:"username"`
+	} `json:"author"`
+	CreatedAt string `json:"created_at"`
+}
+
+// Exact system-note body strings for verdict events (verified 2026-07-17 against
+// gitlab.relexsolutions.com /api/v4/projects/:id/merge_requests/:iid/notes).
+const (
+	glNoteBodyApproved         = "approved this merge request"
+	glNoteBodyChangesRequested = "requested changes"
+)
+
+// fetchVerdictNotes fetches page 1 of MR notes (newest-first) from the REST API.
+// Returns nil on any HTTP or parse error so the caller can retry next cycle.
+func (p *Provider) fetchVerdictNotes(ctx context.Context, fullPath string, iid int) []glNote {
+	notesURL := p.apiBase + "/projects/" + url.PathEscape(fullPath) +
+		"/merge_requests/" + strconv.Itoa(iid) +
+		"/notes?order_by=created_at&sort=desc&per_page=100"
+	resp, err := p.do(ctx, notesURL)
+	if err != nil {
+		return nil
+	}
+	var notes []glNote
+	if err := decodeJSON(resp, &notes); err != nil {
+		return nil
+	}
+	return notes
+}
+
+// emitNewVerdictSignals applies the change-triggered verdict-signal logic for
+// one MR. It computes the current verdict set from the GraphQL node, diffs it
+// against the in-memory baseline, and — on first change — fetches page 1 of
+// the MR's system notes to obtain the real provider timestamp for the new verdict.
+//
+// Design (ADR-0016 §2026-07-17):
+//   - First sight of an MR (no baseline entry): store as history, emit nothing.
+//     Pre-existing verdicts are already-known facts; they rank by updated_at.
+//   - Changed/new verdict: one REST notes fetch for the MR; emit one event per
+//     matched note with OccurredAt = note.created_at. Dedupe on note ID so an
+//     unapprove + re-approve produces a new note and a new event.
+//   - Notes fetch fails (HTTP error): emit nothing; leave the baseline entry
+//     absent so the next cycle retries.
+//   - Notes fetch succeeds but no matching system note on page 1: emit nothing,
+//     update the baseline (give up; the verdict never advances the clock rather
+//     than falling back to our poll clock).
+//   - Actor disappears from the verdict set: evict from baseline so a re-verdict
+//     counts as new.
+//   - Draft MRs: no baseline, no emission — verdicts on a draft are suppressed
+//     everywhere (applyGraphQL); a draft must not rank on a hidden approval.
+func (p *Provider) emitNewVerdictSignals(
+	ctx context.Context, nativeID, fullPath string, iid int, mr glGraphQLMR, draft bool,
+) []sdk.Event {
+	if draft {
+		return nil
+	}
+
+	current := currentVerdictSet(mr)
+
+	baseline, seen := p.verdictBaseline[nativeID]
+	if !seen {
+		// First sight: store as history, no emission.
+		p.verdictBaseline[nativeID] = current
+		return nil
+	}
+
+	// Evict actors that left the verdict set so a re-verdict is treated as new.
+	for actor := range baseline {
+		if _, still := current[actor]; !still {
+			delete(baseline, actor)
+		}
+	}
+
+	changed := changedVerdicts(current, baseline)
+	if len(changed) == 0 {
+		return nil
+	}
+
+	// One REST notes fetch covers all changed actors for this MR.
+	notes := p.fetchVerdictNotes(ctx, fullPath, iid)
+	if notes == nil {
+		// HTTP error: leave baseline entries absent so next cycle retries.
+		return nil
+	}
+
+	matched := matchVerdictNotes(notes, changed, current)
+
+	var out []sdk.Event
+	for _, actor := range changed {
+		baseline[actor] = current[actor] // update regardless of match (give up if no note)
+		n, ok := matched[actor]
+		if !ok {
+			continue // no matching note on page 1; baseline updated, no event
+		}
+		if ev, emit := verdictEvent(nativeID, actor, current[actor], n); emit {
+			out = append(out, ev)
+		}
+	}
+	p.verdictBaseline[nativeID] = current
+	return out
+}
+
+// currentVerdictSet maps each actor with a current verdict to its normalized
+// value (reviewStateApproved / reviewStateChangesRequested) from the GraphQL node.
+func currentVerdictSet(mr glGraphQLMR) map[string]string {
+	current := make(map[string]string, len(mr.ApprovedBy.Nodes)+len(mr.Reviewers.Nodes))
+	for _, u := range mr.ApprovedBy.Nodes {
+		current[u.Username] = reviewStateApproved
+	}
+	for _, r := range mr.Reviewers.Nodes {
+		if r.Interaction.ReviewState == glReviewStateChangesRequested {
+			current[r.Username] = reviewStateChangesRequested
+		}
+	}
+	return current
+}
+
+// changedVerdicts returns actors whose current verdict differs from the baseline.
+func changedVerdicts(current, baseline map[string]string) []string {
+	var changed []string
+	for actor, verdict := range current {
+		if baseline[actor] != verdict {
+			changed = append(changed, actor)
+		}
+	}
+	return changed
+}
+
+// matchVerdictNotes scans notes newest-first and returns the first matching
+// system note per changed actor (author + verdict-specific body).
+func matchVerdictNotes(notes []glNote, changed []string, current map[string]string) map[string]*glNote {
+	matched := make(map[string]*glNote, len(changed))
+	for i := range notes {
+		n := &notes[i]
+		if !n.System {
+			continue
+		}
+		for _, actor := range changed {
+			if _, already := matched[actor]; already || n.Author.Username != actor {
+				continue
+			}
+			wantBody := glNoteBodyApproved
+			if current[actor] == reviewStateChangesRequested {
+				wantBody = glNoteBodyChangesRequested
+			}
+			if n.Body == wantBody {
+				matched[actor] = n
+			}
+		}
+	}
+	return matched
+}
+
+// verdictEvent builds the signal event for a matched note. emit is false when
+// the note's created_at is unparsable (treated as no-match — never our clock).
+func verdictEvent(nativeID, actor, verdict string, n *glNote) (ev sdk.Event, emit bool) {
+	t := parseTime(n.CreatedAt)
+	if t == nil {
+		return sdk.Event{}, false
+	}
+	if verdict == reviewStateApproved {
+		return sdk.Event{
+			ObjectType: objectType,
+			NativeID:   nativeID,
+			EventType:  signalApproved,
+			OccurredAt: t,
+			Actor:      actor,
+			DedupeKey:  signalApproved + ":note:" + strconv.Itoa(n.ID),
+			Payload:    sdk.SignalApprovedPayload{Approver: actor},
+		}, true
+	}
+	return sdk.Event{
+		ObjectType: objectType,
+		NativeID:   nativeID,
+		EventType:  signalChangesRequested,
+		OccurredAt: t,
+		Actor:      actor,
+		DedupeKey:  signalChangesRequested + ":note:" + strconv.Itoa(n.ID),
+		Payload:    sdk.SignalChangesRequestedPayload{Reviewer: actor},
+	}, true
+}
+
 func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool) {
 	var items []glBatchItem
 	for i, ev := range events {
@@ -251,25 +440,37 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 		return events, false
 	}
 
-	out := make([]sdk.Event, len(events))
-	copy(out, events)
+	enriched := make([]sdk.Event, len(events))
+	copy(enriched, events)
+	var verdicts []sdk.Event
 	for _, it := range items {
-		ev := out[it.evIdx]
+		ev := enriched[it.evIdx]
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 		if !ok {
 			continue
 		}
-		if mr, enriched := gqlResults[it.evIdx]; enriched {
+		if mr, ok := gqlResults[it.evIdx]; ok {
 			pl = applyGraphQL(pl, mr, p.handle)
+			if pl.State == stateOpen {
+				verdicts = append(verdicts, p.emitNewVerdictSignals(ctx, ev.NativeID, it.fullPath, it.iid, mr, pl.Draft)...)
+			}
 		} else if snap, ok := p.openSnapshots[ev.NativeID]; ok {
 			// Batch for this item degraded: carry forward the last-known GraphQL-
 			// enriched fields so a transient failure never downgrades good data.
+			// No fresh verdict data, so no verdict signal — a prior cycle emitted it.
 			pl = carryForwardEnrichment(pl, snap)
 		}
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
-		out[it.evIdx] = ev
+		enriched[it.evIdx] = ev
 	}
+
+	// Verdict signals ride after all input events, which keep their positions —
+	// the reconcile reap derives its swept set from the item.observed native_ids
+	// regardless of order, and the no-drop/no-reorder invariant is preserved (ADR-0024).
+	out := make([]sdk.Event, 0, len(enriched)+len(verdicts))
+	out = append(out, enriched...)
+	out = append(out, verdicts...)
 	return out, degraded
 }
 
@@ -418,6 +619,8 @@ func (p *Provider) openSetRefresh(
 			DedupeKey:  observedDedupeKey(pl),
 			Payload:    pl,
 		})
+		// openSnapshots holds only open items; draft suppression is inside emitNewVerdictSignals.
+		events = append(events, p.emitNewVerdictSignals(ctx, it.nativeID, it.fullPath, it.iid, mr, pl.Draft)...)
 	}
 	return events, degraded
 }

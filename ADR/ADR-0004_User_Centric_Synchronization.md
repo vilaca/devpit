@@ -143,3 +143,21 @@ Reconcile. Three root causes, all in `provider/gitlab`:
    open-set-refresh block, mirroring Reconcile's existing loop.
 
 `carryForwardEnrichment` is unchanged (fail-closed OR on degraded batches, B3).
+
+## Amendment — v0.1.6: reconcile cadence 15 min → 3 min (2026-07-17)
+
+- `defaultReconEvery` lowered from 15 min to 3 min (`internal/engine/engine.go`).
+- Why: since the v0.1.3 open-set refresh, FastPoll (~60 s) already refreshes the
+  volatile signals of every known-open item, so the reconcile sweep's only
+  remaining unique jobs are **new-item discovery** and **self-heal** (deleted
+  todos, watermark gaps, GitHub search lag; on a fine-grained PAT with no
+  notifications feed it is the *only* discovery path — `docs/Token_Setup.md`).
+  15 min was therefore the worst-case latency for a new item to appear at all.
+- Rate budget is not the constraint: the fast tier is ~5% of GitHub's budget and
+  <1% of GitLab's (`docs/Provider_API_Analysis.md`); a 3-min full sweep adds only
+  single-digit percent on GitHub and stays negligible on GitLab.
+- Why 3 min and not lower: the two-tier design (fast cheap tier + infrequent
+  heavy sweep) only holds while the full sweep runs meaningfully less often than
+  FastPoll. At 3 min it still runs 3× less often; pushing it toward the 60 s
+  cadence collapses the tiers into constant full-sweeping for a latency win the
+  fast tier already delivers for most items.

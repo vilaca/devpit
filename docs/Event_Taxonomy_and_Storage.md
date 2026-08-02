@@ -45,6 +45,17 @@ ranking timestamp, and "what's new since last visit":
 | `signal.review_submitted` | review-decision / reviewer-state transitions; GitLab todo `review_submitted` |
 | `signal.assigned` | assigned result set / todos `assigned` |
 | `signal.ci_failed` | red checks on authored PRs (incl. non-gating); GitLab todo `build_failed` |
+| `signal.approved` | a reviewer's approval verdict (GitLab: system-note `created_at`; GitHub: `latestReviews.submittedAt`) |
+| `signal.changes_requested` | a reviewer's requested-changes verdict (same sources) |
+
+The last two are **rank-only**: they advance the item's ranking timestamp so a
+verdict resurfaces the item, but they add no chip — the chip surface is the
+`changes_requested` chip (driven by the `review_decision` fact) and the "N
+approved" meta-row (`docs/Attention_Engine.md`, `ADR/ADR-0016`). They carry a
+real `occurred_at` from the provider (GitLab system-note `created_at`; GitHub
+`submittedAt`), so the fold ranks them at the true verdict time — see dedupe
+keys below. Removal then re-addition of the same verdict **does re-emit** as a
+genuinely new event (new note ID / new submittedAt).
 
 Merged/closed are not signals — they arrive as an `item.observed` state change
 and the fold drops the item. New signal types extend the taxonomy without
@@ -154,6 +165,12 @@ must not duplicate events; the `UNIQUE` constraint enforces this and writers use
   fingerprint (e.g. review-requested + provider-updated timestamp) — a
   re-request after a completed review yields a new fingerprint; a re-poll of the
   same state does not.
+- Review-verdict signals (`signal.approved`, `signal.changes_requested`) key on
+  the provider's verdict identity: `signal.approved:note:<note_id>` (GitLab) or
+  `signal.approved:review:<login>:<submittedAt>` (GitHub), and similarly for
+  `signal.changes_requested`. A re-verdict produces a new note ID or a new
+  `submittedAt`, yielding a new dedupe key and a new stored event that re-ranks
+  the item at the true verdict time.
 
 ## Retention
 

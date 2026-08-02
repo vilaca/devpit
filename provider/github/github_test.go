@@ -980,3 +980,115 @@ func TestProbeIsSoleApproverIncludesTeamMembers(t *testing.T) {
 		t.Errorf("collaborators URL %q should request affiliation=all", rt.collabURL)
 	}
 }
+
+// ghVerdictGraphQLBody wraps a latestReviews nodes JSON fragment in the full
+// GraphQL response envelope for PR alias a0. State names live inside this raw
+// string (never as standalone Go literals) so the fold's verdict emission can be
+// driven without repeating enum literals across the test file.
+func ghVerdictGraphQLBody(reviewNodes string) string {
+	return `{"data":{"a0":{"pullRequest":{"reviewDecision":"APPROVED",` +
+		`"latestReviews":{"nodes":[` + reviewNodes + `]},"autoMergeRequest":null}}}}`
+}
+
+// newGHVerdictProvider builds a github provider whose single HTTP dependency
+// (the GraphQL POST) returns body. No BaseURL is set — New defaults it, and the
+// stub transport answers every request, so tests need no live host.
+func newGHVerdictProvider(t *testing.T, body string) *Provider {
+	t.Helper()
+	p := newStubProvider(t, stubRT{status: http.StatusOK, body: body})
+	p.handle = "octocat"
+	return p
+}
+
+// TestGHVerdictSignalsApproved verifies that an APPROVED review with submittedAt
+// emits signal.approved with OccurredAt = submittedAt and dedupe key
+// "signal.approved:review:<login>:<submittedAt>".
+func TestGHVerdictSignalsApproved(t *testing.T) {
+	submittedAt := "2026-07-16T15:00:00Z"
+	body := ghVerdictGraphQLBody(
+		`{"state":"APPROVED","submittedAt":"` + submittedAt + `","author":{"login":"alice"}}`)
+	p := newGHVerdictProvider(t, body)
+
+	out, degraded, err := p.graphqlJoin(context.Background(), []sdk.Event{p.observedFromPull(makePR("clean"))})
+	if err != nil || degraded {
+		t.Fatalf("graphqlJoin: err=%v degraded=%v", err, degraded)
+	}
+
+	var approved int
+	for _, e := range out {
+		if e.EventType != signalApproved {
+			continue
+		}
+		approved++
+		if e.Actor != "alice" {
+			t.Errorf("actor = %q, want alice", e.Actor)
+		}
+		wantDedupe := "signal.approved:review:alice:" + submittedAt
+		if e.DedupeKey != wantDedupe {
+			t.Errorf("dedupe = %q, want %q", e.DedupeKey, wantDedupe)
+		}
+		wantTime, _ := time.Parse(time.RFC3339, submittedAt)
+		if e.OccurredAt == nil || !e.OccurredAt.Equal(wantTime) {
+			t.Errorf("OccurredAt = %v, want %v", e.OccurredAt, wantTime)
+		}
+	}
+	if approved != 1 {
+		t.Errorf("signal.approved count = %d, want 1", approved)
+	}
+}
+
+// TestGHVerdictSignalsChangesRequested verifies CHANGES_REQUESTED emits
+// signal.changes_requested with a real OccurredAt.
+func TestGHVerdictSignalsChangesRequested(t *testing.T) {
+	submittedAt := "2026-07-17T08:00:00Z"
+	body := ghVerdictGraphQLBody(
+		`{"state":"CHANGES_REQUESTED","submittedAt":"` + submittedAt + `","author":{"login":"bob"}}`)
+	p := newGHVerdictProvider(t, body)
+
+	out, _, _ := p.graphqlJoin(context.Background(), []sdk.Event{p.observedFromPull(makePR("clean"))})
+	var changes int
+	for _, e := range out {
+		if e.EventType != signalChangesRequested {
+			continue
+		}
+		changes++
+		if e.DedupeKey != "signal.changes_requested:review:bob:"+submittedAt {
+			t.Errorf("dedupe = %q, want signal.changes_requested:review:bob:%s", e.DedupeKey, submittedAt)
+		}
+	}
+	if changes != 1 {
+		t.Errorf("signal.changes_requested count = %d, want 1", changes)
+	}
+}
+
+// TestGHVerdictSignalsDraftSuppressed verifies draft PRs emit no verdict signals.
+func TestGHVerdictSignalsDraftSuppressed(t *testing.T) {
+	body := ghVerdictGraphQLBody(
+		`{"state":"APPROVED","submittedAt":"2026-07-17T09:00:00Z","author":{"login":"carol"}}`)
+	p := newGHVerdictProvider(t, body)
+
+	pr := makePR("clean")
+	pr.Draft = true
+	out, _, _ := p.graphqlJoin(context.Background(), []sdk.Event{p.observedFromPull(pr)})
+	for _, e := range out {
+		if e.EventType == signalApproved || e.EventType == signalChangesRequested {
+			t.Errorf("draft PR must not emit verdict signal %q", e.EventType)
+		}
+	}
+}
+
+// TestGHVerdictSignalsCommentedDismissedSkipped verifies COMMENTED and DISMISSED
+// review states do not emit verdict signals (only APPROVED and CHANGES_REQUESTED).
+func TestGHVerdictSignalsCommentedDismissedSkipped(t *testing.T) {
+	body := ghVerdictGraphQLBody(
+		`{"state":"COMMENTED","submittedAt":"2026-07-17T10:00:00Z","author":{"login":"dave"}},` +
+			`{"state":"DISMISSED","submittedAt":"2026-07-17T11:00:00Z","author":{"login":"erin"}}`)
+	p := newGHVerdictProvider(t, body)
+
+	out, _, _ := p.graphqlJoin(context.Background(), []sdk.Event{p.observedFromPull(makePR("clean"))})
+	for _, e := range out {
+		if e.EventType == signalApproved || e.EventType == signalChangesRequested {
+			t.Errorf("COMMENTED/DISMISSED must not emit verdict signal %q", e.EventType)
+		}
+	}
+}

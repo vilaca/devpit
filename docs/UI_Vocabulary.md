@@ -151,7 +151,10 @@ four rules, in order:
    Fresh work stays on top; rot sinks. This is the one place "how long it sat"
    changes ordering.
 3. **Newest first within a band.** Inside a band the most recently active item
-   comes first (its newest signal, else the latest provider update).
+   comes first (its newest signal, else the latest provider update). A review
+   verdict counts as activity: an approval or a requested-changes verdict
+   resurfaces the item by recency, even though neither adds its own chip
+   (`ADR/ADR-0016_Presentation_And_Ranking.md`).
 4. **Signal precedence orders the *chips*, not the items.** When a row carries
    several signals the highest-precedence one leads (see the Signals table
    above); the rest ride along. Precedence picks the headline chip — it does not
@@ -193,5 +196,5 @@ and the provider expose. If you expected an item and don't see it:
   badge. A missing badge means "the provider can't say", never "all clear".
 - **Token reach.** On GitHub the token *kind* changes what you see: a
   fine-grained PAT cannot read the notifications feed, so **mentions never
-  appear** and other fast signals wait for the 15-minute reconcile
+  appear** and other fast signals wait for the 3-minute reconcile
   (`docs/Token_Setup.md`). A missing item can be a token limitation, not a bug.

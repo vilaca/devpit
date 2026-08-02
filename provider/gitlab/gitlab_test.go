@@ -895,9 +895,14 @@ func TestGraphQLBatchingUnderCeiling(t *testing.T) {
 	if degraded {
 		t.Fatal("graphqlJoin degraded with 20 MRs: complexity ceiling hit — batch size too large")
 	}
-	// Every event should be enriched: the fake transport returns approvedBy.count=1
-	// and approvedBy.nodes=[{username:"octocat"}], so MyReviewState="approved".
+	// Every item.observed event should be enriched: the fake transport returns
+	// approvedBy.count=1 and approvedBy.nodes=[{username:"octocat"}], so
+	// MyReviewState="approved". The join also appends signal.approved events per
+	// approver (rank-only) — skip those here.
 	for i, ev := range out {
+		if ev.EventType != eventItemObserved {
+			continue
+		}
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 		if !ok {
 			t.Errorf("event %d: payload type %T", i, ev.Payload)
@@ -1283,5 +1288,422 @@ func TestReconcileSoleApproverPage2FailureClearsComplete(t *testing.T) {
 	}
 	if res.Complete {
 		t.Error("Complete = true, want false when a mid-enumeration page failed")
+	}
+}
+
+// verdictBaselineRT is a fake http.RoundTripper for the baseline-diff verdict
+// tests. It routes GraphQL and notes requests to per-call handlers so each test
+// scenario can configure the exact responses.
+type verdictBaselineRT struct {
+	// graphqlApprovers is the list of approvers returned by every GraphQL call.
+	graphqlApprovers []string
+	// graphqlChanges is the list of REQUESTED_CHANGES reviewers returned by every GraphQL call.
+	graphqlChanges []string
+	// graphqlDraft causes the GraphQL response to mark the MR as a draft.
+	graphqlDraft bool
+	// notesStatus is the HTTP status for notes calls (0 = 200 with notesBody).
+	notesStatus int
+	// notesBody is the JSON body for the notes endpoint (used when notesStatus == 0).
+	notesBody string
+}
+
+func (rt *verdictBaselineRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.Contains(req.URL.Path, "graphql") {
+		body, _ := io.ReadAll(req.Body)
+		_ = req.Body.Close()
+		var envelope struct {
+			Query string `json:"query"`
+		}
+		_ = json.Unmarshal(body, &envelope)
+		count := strings.Count(envelope.Query, "project(")
+		data := make(map[string]any, count)
+		for i := range count {
+			approvedNodes := make([]any, len(rt.graphqlApprovers))
+			for j, u := range rt.graphqlApprovers {
+				approvedNodes[j] = map[string]any{"username": u}
+			}
+			reviewerNodes := make([]any, len(rt.graphqlChanges))
+			for j, u := range rt.graphqlChanges {
+				reviewerNodes[j] = map[string]any{
+					"username":                u,
+					"mergeRequestInteraction": map[string]any{"reviewState": "REQUESTED_CHANGES"},
+				}
+			}
+			data[fmt.Sprintf("a%d", i)] = map[string]any{
+				"mergeRequest": map[string]any{
+					"approved":                 len(rt.graphqlApprovers) > 0,
+					"shouldBeRebased":          false,
+					"divergedFromTargetBranch": false,
+					"draft":                    rt.graphqlDraft,
+					"approvedBy":               map[string]any{"count": len(rt.graphqlApprovers), "nodes": approvedNodes},
+					"reviewers":                map[string]any{"nodes": reviewerNodes},
+				},
+			}
+		}
+		respBody, _ := json.Marshal(map[string]any{"data": data}) //nolint:errchkjson // fixed JSON-safe test map
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	}
+	if strings.Contains(req.URL.Path, "/notes") {
+		status := http.StatusOK
+		if rt.notesStatus != 0 {
+			status = rt.notesStatus
+		}
+		return &http.Response{
+			StatusCode: status,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(rt.notesBody)),
+		}, nil
+	}
+	// Any other REST call (todos, MR detail) returns an empty array.
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader("[]")),
+	}, nil
+}
+
+// newVerdictProvider builds a provider wired to the given transport for verdict tests.
+func newVerdictProvider(t *testing.T, rt http.RoundTripper) *Provider {
+	t.Helper()
+	p, err := New(sdk.ConnectionConfig{Type: "gitlab", Token: "test-token", BaseURL: testBaseURL})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	p.http.Transport = rt
+	p.handle = "octocat"
+	return p
+}
+
+// countVerdictEvents counts verdict signal events in a slice.
+func countVerdictEvents(events []sdk.Event) (approved, changes int) {
+	for _, ev := range events {
+		switch ev.EventType {
+		case signalApproved:
+			approved++
+		case signalChangesRequested:
+			changes++
+		}
+	}
+	return
+}
+
+// glNoteJSON builds one system-note JSON object for the notes endpoint. body is
+// the exact verdict body (the production glNoteBody* constants).
+func glNoteJSON(noteID int, body, username, createdAt string) string {
+	return fmt.Sprintf(
+		`{"id":%d,"system":true,"body":%q,"author":{"username":%q},"created_at":%q}`,
+		noteID, body, username, createdAt)
+}
+
+// approvalNote builds a JSON notes-endpoint response with one approval note.
+func approvalNote(noteID int, username, createdAt string) string {
+	return "[" + glNoteJSON(noteID, glNoteBodyApproved, username, createdAt) + "]"
+}
+
+// changesNote builds a JSON notes-endpoint response with one requested-changes note.
+func changesNote(noteID int, username, createdAt string) string {
+	return "[" + glNoteJSON(noteID, glNoteBodyChangesRequested, username, createdAt) + "]"
+}
+
+// TestVerdictSignalsFirstSightNoEmission verifies that the first time a provider
+// sees an MR's verdicts, it stores a baseline and emits no signals — those
+// verdicts are history and must not re-rank the MR.
+func TestVerdictSignalsFirstSightNoEmission(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlApprovers: []string{"alice"},
+		notesBody:        approvalNote(101, "alice", "2026-07-16T10:00:00Z"),
+	}
+	p := newVerdictProvider(t, rt)
+
+	out, degraded := p.graphqlJoin(context.Background(), []sdk.Event{p.observedFromMR(makeMR("not_approved"))})
+	if degraded {
+		t.Fatal("unexpectedly degraded")
+	}
+	if approved, _ := countVerdictEvents(out); approved != 0 {
+		t.Errorf("first sight: got %d signal.approved, want 0 (pre-existing verdicts are history)", approved)
+	}
+	// Baseline is stored for !7.
+	if _, ok := p.verdictBaseline["acme/api!7"]; !ok {
+		t.Error("verdictBaseline[acme/api!7] not populated after first sight")
+	}
+}
+
+// TestVerdictSignalsNewApprover verifies that on the second cycle, when a new
+// approver appears, the provider fetches notes and emits signal.approved with
+// OccurredAt = the note's created_at and a note-ID dedupe key.
+func TestVerdictSignalsNewApprover(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlApprovers: []string{"alice"},
+		notesBody:        approvalNote(101, "alice", "2026-07-16T10:00:00Z"),
+	}
+	p := newVerdictProvider(t, rt)
+
+	mr := makeMR("not_approved")
+	mr.References.Full = "acme/api!7"
+	ev := p.observedFromMR(mr)
+
+	// First sight: no emission, baseline stored.
+	p.graphqlJoin(context.Background(), []sdk.Event{ev})
+
+	// Second cycle: alice is still an approver (no change). Should still not emit.
+	out, _ := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	if approved, _ := countVerdictEvents(out); approved != 0 {
+		t.Errorf("unchanged baseline: got %d signal.approved, want 0", approved)
+	}
+
+	// Third cycle: bob joins as a new approver.
+	rt.graphqlApprovers = []string{"alice", "bob"}
+	rt.notesBody = "[" +
+		glNoteJSON(102, glNoteBodyApproved, "bob", "2026-07-17T09:00:00Z") + "," +
+		glNoteJSON(101, glNoteBodyApproved, "alice", "2026-07-16T10:00:00Z") + "]"
+
+	out, _ = p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	approved, _ := countVerdictEvents(out)
+	if approved != 1 {
+		t.Errorf("new approver: got %d signal.approved, want 1", approved)
+	}
+	for _, e := range out {
+		if e.EventType != signalApproved {
+			continue
+		}
+		if e.Actor != "bob" {
+			t.Errorf("approved actor = %q, want bob", e.Actor)
+		}
+		if e.DedupeKey != "signal.approved:note:102" {
+			t.Errorf("dedupe = %q, want signal.approved:note:102", e.DedupeKey)
+		}
+		wantTime, _ := time.Parse(time.RFC3339, "2026-07-17T09:00:00Z")
+		if e.OccurredAt == nil || !e.OccurredAt.Equal(wantTime) {
+			t.Errorf("OccurredAt = %v, want %v", e.OccurredAt, wantTime)
+		}
+	}
+}
+
+// TestVerdictSignalsNotesFetchFailure verifies that an HTTP error on the notes
+// endpoint causes no emission and leaves the actor absent from the baseline
+// (so the next cycle retries the fetch).
+func TestVerdictSignalsNotesFetchFailure(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlApprovers: []string{"alice"},
+		notesStatus:      http.StatusInternalServerError,
+		notesBody:        "",
+	}
+	p := newVerdictProvider(t, rt)
+
+	ev := p.observedFromMR(makeMR("not_approved"))
+
+	// First sight: baseline stored, no emission.
+	p.graphqlJoin(context.Background(), []sdk.Event{ev})
+
+	// Second cycle: alice appears as a new approver; notes fetch fails.
+	rt.graphqlApprovers = []string{"alice", "bob"}
+
+	out, _ := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	if approved, _ := countVerdictEvents(out); approved != 0 {
+		t.Errorf("notes fail: got %d signal.approved, want 0", approved)
+	}
+	// alice stays absent in baseline — next cycle will retry.
+	if v := p.verdictBaseline["acme/api!7"]["bob"]; v != "" {
+		t.Errorf("bob should not be in baseline after fetch failure, got %q", v)
+	}
+
+	// Next cycle: notes succeed; bob should now emit.
+	rt.notesStatus = 0
+	rt.notesBody = approvalNote(103, "bob", "2026-07-17T09:30:00Z")
+
+	out, _ = p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	if approved, _ := countVerdictEvents(out); approved != 1 {
+		t.Errorf("after retry: got %d signal.approved, want 1", approved)
+	}
+}
+
+// TestVerdictSignalsNoMatchingNote verifies that when the notes endpoint returns
+// successfully but has no matching system note for the changed actor, no event
+// is emitted and the baseline is updated so the next cycle does not refetch.
+func TestVerdictSignalsNoMatchingNote(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlApprovers: []string{},
+		notesBody:        `[]`, // no notes
+	}
+	p := newVerdictProvider(t, rt)
+
+	ev := p.observedFromMR(makeMR("not_approved"))
+
+	// First sight: baseline stored.
+	p.graphqlJoin(context.Background(), []sdk.Event{ev})
+
+	// Second cycle: alice appears but notes endpoint returns no matching note.
+	rt.graphqlApprovers = []string{"alice"}
+	out, _ := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	if approved, _ := countVerdictEvents(out); approved != 0 {
+		t.Errorf("no matching note: got %d signal.approved, want 0", approved)
+	}
+	// alice IS in baseline now (give up; no retry).
+	if p.verdictBaseline["acme/api!7"]["alice"] != "approved" {
+		t.Error("alice should be in baseline after no-match (give up, no retry)")
+	}
+
+	// Third cycle: alice still in approvedBy — baseline matches, no notes fetch, no emit.
+	rt.notesBody = approvalNote(105, "alice", "2026-07-17T11:00:00Z")
+	out, _ = p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	if approved, _ := countVerdictEvents(out); approved != 0 {
+		t.Errorf("no-retry: got %d signal.approved on third cycle, want 0", approved)
+	}
+}
+
+// TestVerdictSignalsDraftSuppressed verifies that draft MRs are never baselined
+// and never emit verdict signals.
+func TestVerdictSignalsDraftSuppressed(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlApprovers: []string{"alice"},
+		graphqlDraft:     true,
+		notesBody:        approvalNote(106, "alice", "2026-07-16T10:00:00Z"),
+	}
+	p := newVerdictProvider(t, rt)
+
+	draftMR := makeMR("not_approved")
+	draftMR.Draft = true
+	ev := p.observedFromMR(draftMR)
+
+	// Two cycles: both should produce zero signals and no baseline entry.
+	for cycle := range 2 {
+		out, _ := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+		if approved, _ := countVerdictEvents(out); approved != 0 {
+			t.Errorf("cycle %d: draft emitted %d signal.approved, want 0", cycle+1, approved)
+		}
+	}
+	if _, ok := p.verdictBaseline["acme/api!7"]; ok {
+		t.Error("draft MR should not appear in verdictBaseline")
+	}
+}
+
+// TestVerdictSignalsChangesRequested verifies the changes_requested variant:
+// second cycle with a new REQUESTED_CHANGES reviewer → one notes fetch →
+// signal.changes_requested with OccurredAt = note's created_at.
+func TestVerdictSignalsChangesRequested(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlChanges: []string{},
+		notesBody:      `[]`,
+	}
+	p := newVerdictProvider(t, rt)
+
+	ev := p.observedFromMR(makeMR("not_approved"))
+
+	// First sight.
+	p.graphqlJoin(context.Background(), []sdk.Event{ev})
+
+	// Second cycle: carol requests changes.
+	rt.graphqlChanges = []string{"carol"}
+	rt.notesBody = changesNote(201, "carol", "2026-07-17T08:00:00Z")
+
+	out, _ := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	_, changes := countVerdictEvents(out)
+	if changes != 1 {
+		t.Errorf("changes_requested: got %d signal.changes_requested, want 1", changes)
+	}
+	for _, e := range out {
+		if e.EventType != signalChangesRequested {
+			continue
+		}
+		if e.Actor != "carol" {
+			t.Errorf("changes actor = %q, want carol", e.Actor)
+		}
+		if e.DedupeKey != "signal.changes_requested:note:201" {
+			t.Errorf("dedupe = %q, want signal.changes_requested:note:201", e.DedupeKey)
+		}
+		wantTime, _ := time.Parse(time.RFC3339, "2026-07-17T08:00:00Z")
+		if e.OccurredAt == nil || !e.OccurredAt.Equal(wantTime) {
+			t.Errorf("OccurredAt = %v, want %v", e.OccurredAt, wantTime)
+		}
+	}
+}
+
+// TestVerdictSignalsReapprovalAfterUnapprove verifies the unapprove → re-approve
+// sequence: the actor is evicted from the baseline on disappearance, then a new
+// note ID on re-approval produces a second distinct event.
+func TestVerdictSignalsReapprovalAfterUnapprove(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlApprovers: []string{},
+		notesBody:        `[]`,
+	}
+	p := newVerdictProvider(t, rt)
+
+	ev := p.observedFromMR(makeMR("not_approved"))
+
+	// First sight: no approvers.
+	p.graphqlJoin(context.Background(), []sdk.Event{ev})
+
+	// Second cycle: alice approves, note 101.
+	rt.graphqlApprovers = []string{"alice"}
+	rt.notesBody = approvalNote(101, "alice", "2026-07-16T10:00:00Z")
+	p.graphqlJoin(context.Background(), []sdk.Event{ev})
+
+	// Third cycle: alice unapproves (disappears from approvedBy) → evict from baseline.
+	rt.graphqlApprovers = []string{}
+	p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	if _, ok := p.verdictBaseline["acme/api!7"]["alice"]; ok {
+		t.Error("alice should be evicted from baseline after unapproving")
+	}
+
+	// Fourth cycle: alice re-approves with a NEW note ID (202).
+	rt.graphqlApprovers = []string{"alice"}
+	rt.notesBody = approvalNote(202, "alice", "2026-07-17T11:00:00Z")
+
+	out, _ := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	approved, _ := countVerdictEvents(out)
+	if approved != 1 {
+		t.Errorf("re-approval: got %d signal.approved, want 1", approved)
+	}
+	for _, e := range out {
+		if e.EventType == signalApproved && e.DedupeKey != "signal.approved:note:202" {
+			t.Errorf("re-approval dedupe = %q, want signal.approved:note:202", e.DedupeKey)
+		}
+	}
+}
+
+// TestVerdictSignalsOpenSetRefresh verifies that the FastPoll open-set refresh
+// path also applies the baseline-diff logic (same as graphqlJoin).
+func TestVerdictSignalsOpenSetRefresh(t *testing.T) {
+	rt := &verdictBaselineRT{
+		graphqlApprovers: []string{"alice"},
+		notesBody:        approvalNote(301, "alice", "2026-07-17T10:00:00Z"),
+	}
+	p := newVerdictProvider(t, rt)
+	p.openSnapshots["acme/api!7"] = sdk.ItemObservedPayload{
+		Title: "cached MR", State: stateOpen, Author: "jdoe",
+		ProviderUpdatedAt: "2026-07-10T00:00:00Z",
+	}
+
+	// First refresh: baseline stored, no emission.
+	out, _ := p.openSetRefresh(context.Background(), nil, map[string]bool{})
+	if approved, _ := countVerdictEvents(out); approved != 0 {
+		t.Errorf("first open-set refresh: got %d signal.approved, want 0", approved)
+	}
+
+	// Second refresh: same approvers, no change.
+	out, _ = p.openSetRefresh(context.Background(), nil, map[string]bool{})
+	if approved, _ := countVerdictEvents(out); approved != 0 {
+		t.Errorf("unchanged: got %d signal.approved, want 0", approved)
+	}
+
+	// Third refresh: bob added as approver → notes fetch → signal.
+	rt.graphqlApprovers = []string{"alice", "bob"}
+	rt.notesBody = "[" +
+		glNoteJSON(302, glNoteBodyApproved, "bob", "2026-07-17T10:30:00Z") + "," +
+		glNoteJSON(301, glNoteBodyApproved, "alice", "2026-07-17T10:00:00Z") + "]"
+
+	out, _ = p.openSetRefresh(context.Background(), nil, map[string]bool{})
+	approved, _ := countVerdictEvents(out)
+	if approved != 1 {
+		t.Errorf("new approver in open-set refresh: got %d signal.approved, want 1", approved)
+	}
+	for _, e := range out {
+		if e.EventType == signalApproved && e.Actor != "bob" {
+			t.Errorf("approved actor = %q, want bob", e.Actor)
+		}
 	}
 }

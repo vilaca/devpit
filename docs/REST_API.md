@@ -82,8 +82,10 @@ Each item carries:
 - `stale` — true when idle more than 7 days (and not old).
 - `old` — true when idle more than 30 days; mutually exclusive with stale.
 - `updated_at` — the item's ranking timestamp (newest signal or provider time).
-- `signal_counts` — present only when a signal type has count > 1 (drives "×N"
-  tags).
+- `signal_counts` — per-signal-type occurrence count, keyed by wire name, for
+  types with count > 1. The UI renders "×N" only for `mentioned`; other keys
+  (including the rank-only `approved` / `changes_requested` verdict signals) are
+  counted for completeness but not shown as a tag.
 - **Markers** (diagnostic booleans, never affect state):
   - `draft` — item is in draft/WIP mode (pre-existing; also listed under item
     identity above).

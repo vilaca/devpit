@@ -26,7 +26,7 @@ a provider needs no internal locking.
   connection's life. The engine never asks a provider to produce a bucket it
   declared unavailable; such buckets simply yield no items from that provider.
 - **Two poll tiers.** `FastPoll` (~60 s) is the lightweight change-signal tier;
-  `Reconcile` (~15 min) is the full identity-scoped sweep that self-heals
+  `Reconcile` (~3 min) is the full identity-scoped sweep that self-heals
   anything the fast tier missed. Both take an opaque `PollState` cursor map — one
   shared map with namespaced keys — that the engine persists; `FastPoll` advances
   it, while `Reconcile` is a cursorless full sweep that reads and returns none and

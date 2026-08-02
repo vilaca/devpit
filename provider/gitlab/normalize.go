@@ -17,6 +17,15 @@ const objectType = "merge_request"
 // (docs/Event_Taxonomy_and_Storage.md).
 const eventItemObserved = "item.observed"
 
+// Rank-advancing review-verdict signals (the signal stream in
+// docs/Event_Taxonomy_and_Storage.md). Emitted from the GraphQL join's
+// approvedBy set and reviewers reviewState; rank-only — they advance the fold's
+// ranking clock but add no chip (ADR-0016).
+const (
+	signalApproved         = "signal.approved"
+	signalChangesRequested = "signal.changes_requested"
+)
+
 // Normalized gate and detailed_merge_status values.
 const (
 	dmsMergeable      = "mergeable"

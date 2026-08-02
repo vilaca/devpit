@@ -155,9 +155,13 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
   fresh, then stale, then old last. Fresh work stays on top; rot sinks.
 - **Within a band: most-recent-update-first**, where an item's timestamp is its
   newest signal (falling back to the latest snapshot's provider-updated time).
-  Item ID is the stable final tiebreak. Neither signal precedence nor the
-  reviewed-done mute reorders a band — a stateless or muted item sorts by recency
-  like any other; signals survive only as chips (precedence orders the chips).
+  Review verdicts count as recency here: `signal.approved` and
+  `signal.changes_requested` are rank-only signals that advance this timestamp
+  without adding a chip (`ADR/ADR-0016_Presentation_And_Ranking.md`,
+  `docs/Event_Taxonomy_and_Storage.md`). Item ID is the stable final tiebreak.
+  Neither signal precedence nor the reviewed-done mute reorders a band — a
+  stateless or muted item sorts by recency like any other; signals survive only
+  as chips (precedence orders the chips).
 - Two age tiers, both constants in `fold.go`, mutually exclusive
   (`!old && stale` guards the stale tier): `stale` once an item's age exceeds
   7 days, `old` once idle more than 30 days. Both render the muted **"Stale"**

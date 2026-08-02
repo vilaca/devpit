@@ -17,8 +17,9 @@ muting (display-only) and the "you + N approved" meta-row (populating
 `MyReviewState` from provider approval data) are **Implemented (v0.1.5)**.
 Age-band-then-recency ranking (signal precedence no longer ranks; muting no
 longer demotes) is **Implemented (v0.1.5)**. Blocked-chip suppression when a
-visible marker names the gate's reason is **Implemented (v0.1.6)**. See
-`docs/Roadmap.md`.
+visible marker names the gate's reason is **Implemented (v0.1.6)**.
+Rank-advancing review-verdict signals (`signal.approved`,
+`signal.changes_requested`) are **Implemented (v0.1.6)**. See `docs/Roadmap.md`.
 
 ## Context
 
@@ -209,6 +210,49 @@ so it would make the chip vanish even when the operative blocker is something
 no marker shows (GitHub's opaque `mergeable_state: "blocked"`, GitLab tier
 gates like `jira_association_missing`) — exactly the cases where the chip and
 its `provider says: …` hover earn their keep.
+
+#### Review verdicts advance the ranking clock (2026-07-17)
+
+`signal.approved` and `signal.changes_requested` join the signal stream
+(`docs/Event_Taxonomy_and_Storage.md`) as **rank-only** signals. They advance an
+item's ranking timestamp — the newest `signal.*` (see Ranking above) — so an MR
+that gains an approval or a requested-changes verdict resurfaces by recency
+instead of freezing at its last mention/CI signal. Before this, a review verdict
+was captured only as an `item.observed` fact (approvals count, `review_decision`)
+that drives chips but emits no signal, and GitLab does not bump the MR's
+`updated_at` on approval — so an approved MR could sink to the bottom of the
+fresh band.
+
+They add **no chip**: the nine-signal precedence table is unchanged, and the
+existing `changes_requested` chip (from the `review_decision` fact) and the "N
+approved" meta-row remain the only visual surface. This is consistent with the
+2026-07-13 revision, not a reversal of it — precedence still never ranks;
+**recency** does, and these two verdicts are recency-bearing activity the clock
+previously ignored.
+
+Both providers emit these signals with **real provider-reported timestamps** so
+ranking reflects when the verdict actually occurred:
+
+- **GitLab** has no verdict timestamp on `approvedBy`/`reviewState`, but every
+  approval or requested-changes verdict writes a **system note** with
+  `author` + `created_at`. The provider keeps an in-memory per-MR verdict
+  baseline (actor → verdict). First sight of an MR stores the baseline without
+  emitting — pre-existing verdicts are history and rank by `updated_at`. Only a
+  verdict *appearing on an already-baselined MR* triggers one REST notes fetch
+  (page 1, newest-first) and emits with `OccurredAt` = the note's `created_at`.
+  Dedupe key: `signal.approved:note:<note_id>` / `signal.changes_requested:note:<note_id>`.
+  An unapprove → re-approve produces a new note, so a re-verdict re-ranks.
+  Verdicts during DevPit downtime or predating first sight never advance the
+  GitLab ranking clock — a bounded, honest design, replacing the prior
+  "transient self-correcting over-promotion" consequence.
+
+- **GitHub** `latestReviews` nodes carry `submittedAt` — a real provider
+  timestamp — so no baseline or extra API call is needed. Dedupe key:
+  `signal.approved:review:<login>:<submittedAt>`. A reviewer's latest
+  non-dismissed review per login is exactly "when they last approved".
+
+Both providers implement draft suppression and emit signals via the
+`sdk.SignalApprovedPayload` / `sdk.SignalChangesRequestedPayload` types.
 
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 

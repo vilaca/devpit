@@ -30,6 +30,7 @@ const (
 const (
 	dmsMergeable      = "mergeable"
 	dmsCIMustPass     = "ci_must_pass"
+	dmsConflict       = "conflict"
 	dmsPolicyDenied   = "policies_denied"
 	dmsSecurityPolicy = "security_policy_violations"
 	gateReady         = "ready"
@@ -137,7 +138,15 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		Gate:          gate,
 		GateDetail:    mr.DetailedMergeStatus,
 		FailingChecks: mr.DetailedMergeStatus == dmsCIMustPass, // GraphQL join refines via headPipeline.status
-		MergeConflict: mr.HasConflicts,                         // GraphQL join overrides via conflicts
+		// The conflict marker is GitLab's own verdict, not its has_conflicts
+		// boolean: has_conflicts (and the GraphQL conflicts scalar) is defined as
+		// merge_status != can_be_merged, so it reads true while mergeability is
+		// merely uncomputed (detailed_merge_status "checking"/"unchecked") and on
+		// any branch a fast-forward-only project cannot merge without a rebase.
+		// detailed_merge_status names the operative blocker instead, so "conflict"
+		// means GitLab is telling the user to resolve a conflict. The GraphQL join
+		// overrides this and additionally drops it when shouldBeRebased.
+		MergeConflict: mr.DetailedMergeStatus == dmsConflict,
 		// GraphQL join overrides via shouldBeRebased + divergedFromTargetBranch.
 		NeedsRebase:           mr.DetailedMergeStatus == "need_rebase",
 		NeedsApproval:         mr.DetailedMergeStatus == "not_approved",

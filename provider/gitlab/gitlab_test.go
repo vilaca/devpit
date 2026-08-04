@@ -247,7 +247,6 @@ func makeMR(detailedStatus string) glMergeRequest {
 		WebURL:                      "https://gitlab.com/acme/api/-/merge_requests/7",
 		State:                       "opened",
 		DetailedMergeStatus:         detailedStatus,
-		HasConflicts:                false,
 		BlockingDiscussionsResolved: &t,
 		UpdatedAt:                   "2026-07-10T00:00:00Z",
 		Author:                      glUser{Username: "octocat"},
@@ -374,10 +373,10 @@ func TestRateRemaining(t *testing.T) {
 
 func TestNormalizeMarkers(t *testing.T) {
 	p := &Provider{handle: "octocat"}
-	// FailingChecks (ci_must_pass), NeedsRebase (need_rebase), and NeedsApproval (not_approved) are set
-	// from detailed_merge_status by observedFromMR as a REST fallback; the GraphQL join refines them with
-	// the authoritative headPipeline.status / shouldBeRebased / approved fields when available.
-	// MergeConflict comes from has_conflicts REST field; the makeMR helper defaults it to false.
+	// FailingChecks (ci_must_pass), NeedsRebase (need_rebase), NeedsApproval (not_approved), and
+	// MergeConflict (conflict) are set from detailed_merge_status by observedFromMR as a REST fallback;
+	// the GraphQL join refines them with the authoritative headPipeline.status / shouldBeRebased /
+	// approved / detailedMergeStatus fields when available.
 	// UnresolvedDiscussions uses blocking_discussions_resolved (*bool); makeMR defaults to true (resolved).
 	cases := []struct {
 		status           string
@@ -390,8 +389,10 @@ func TestNormalizeMarkers(t *testing.T) {
 		wantPolicyDenied bool
 	}{
 		{"ci_must_pass", "blocked", true, false, false, false, false, false},
-		{"conflict", "blocked", false, false, false, false, false, false},
+		{"conflict", "blocked", false, true, false, false, false, false},
 		{"need_rebase", "blocked", false, false, true, false, false, false},
+		// Mergeability not computed yet: no marker may be asserted from it.
+		{"checking", "unknown", false, false, false, false, false, false},
 		{"mergeable", "ready", false, false, false, false, false, false},
 		{"not_approved", "blocked", false, false, false, true, false, false},
 		{"policies_denied", "blocked", false, false, false, false, false, true},
@@ -575,20 +576,42 @@ func TestApplyGraphQLNeedsRebaseOverride(t *testing.T) {
 		t.Error("NeedsRebase should be false: GraphQL override clears stale true")
 	}
 
-	// (b) conflicts:true sets MergeConflict; conflicts:false clears a true input
-	mr := glGraphQLMR{Conflicts: true}
+	// (b) detailedMergeStatus CONFLICT sets MergeConflict; any other status clears
+	// a true input
+	mr := glGraphQLMR{DMS: glDMSConflict}
 	if pl := applyGraphQL(sdk.ItemObservedPayload{MergeConflict: false}, mr, "octocat"); !pl.MergeConflict {
-		t.Error("MergeConflict should be true when conflicts:true")
+		t.Error("MergeConflict should be true when detailedMergeStatus is CONFLICT")
 	}
-	mr.Conflicts = false
+	mr.DMS = "NOT_APPROVED"
 	if pl := applyGraphQL(sdk.ItemObservedPayload{MergeConflict: true}, mr, "octocat"); pl.MergeConflict {
-		t.Error("MergeConflict should be false when conflicts:false (override clears stale true)")
+		t.Error("MergeConflict should be false when GitLab names another blocker (override clears stale true)")
 	}
 
 	// (c) MergeConflict is updated even when Draft:true
-	mr.Conflicts = true
+	mr.DMS = glDMSConflict
 	if pl := applyGraphQL(sdk.ItemObservedPayload{Draft: true, MergeConflict: false}, mr, "octocat"); !pl.MergeConflict {
 		t.Error("MergeConflict should be set even on a draft (not draft-suppressed)")
+	}
+
+	// (d) shouldBeRebased drops the conflict marker: on a fast-forward-only
+	// project a behind branch reports CONFLICT whether or not one exists, and the
+	// rebase GitLab offers is the action either way. divergedFromTargetBranch
+	// alone must NOT drop it — nearly every open MR is diverged.
+	rebasable := glGraphQLMR{DMS: glDMSConflict, ShouldRebase: true, Diverged: true}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{MergeConflict: true}, rebasable, "octocat"); pl.MergeConflict {
+		t.Error("MergeConflict should be false when shouldBeRebased: the rebase marker owns this row")
+	}
+	diverged := glGraphQLMR{DMS: glDMSConflict, Diverged: true}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{}, diverged, "octocat"); !pl.MergeConflict {
+		t.Error("MergeConflict should survive divergedFromTargetBranch alone")
+	}
+
+	// (e) mergeability not computed yet ("checking"/"unchecked") is not a
+	// conflict — GitLab's has_conflicts/conflicts booleans read true there, which
+	// is what put a Conflict chip on months-idle MRs.
+	unchecked := glGraphQLMR{DMS: "CHECKING"}
+	if pl := applyGraphQL(sdk.ItemObservedPayload{MergeConflict: true}, unchecked, "octocat"); pl.MergeConflict {
+		t.Error("MergeConflict should be false while GitLab is still computing mergeability")
 	}
 }
 
@@ -652,8 +675,11 @@ func TestGraphQLJoinMultiReason(t *testing.T) {
 		if !ok {
 			t.Fatal("payload type assertion failed")
 		}
-		if !pl.MergeConflict {
-			t.Error("merge_conflict should be true (has_conflicts=true)")
+		// GitLab names one operative blocker, and here it is not_approved — the
+		// has_conflicts:true alongside it only means "merge_status is not
+		// can_be_merged", so no Conflict chip may be claimed from it.
+		if pl.MergeConflict {
+			t.Error("merge_conflict should be false: GitLab reports not_approved as the blocker")
 		}
 		if !pl.UnresolvedDiscussions {
 			t.Error("unresolved_discussions should be true (blocking_discussions_resolved=false)")
@@ -678,7 +704,7 @@ func TestFastPollOpenSetRefresh(t *testing.T) {
 	p := newTestProvider(t, "fastpoll_open_set_refresh", "octocat")
 
 	// Seed the cache as Reconcile would have — but with stale badge state that the
-	// cassette will clear (shouldBeRebased:false, conflicts:false).
+	// cassette will clear (shouldBeRebased:false, detailedMergeStatus:CI_MUST_PASS).
 	p.openSnapshots["acme/api!7"] = sdk.ItemObservedPayload{
 		Title:         "cached MR",
 		URL:           "https://gitlab.com/acme/api/-/merge_requests/7",
@@ -690,7 +716,7 @@ func TestFastPollOpenSetRefresh(t *testing.T) {
 		Gate:          gateBlocked,
 		GateDetail:    "ci_must_pass",
 		FailingChecks: false,
-		MergeConflict: true, // stale — cassette returns conflicts:false; must clear
+		MergeConflict: true, // stale — cassette names ci_must_pass, not conflict; must clear
 		NeedsRebase:   true, // stale — cassette returns shouldBeRebased:false; must clear
 		NeedsApproval: false,
 	}
@@ -719,7 +745,7 @@ func TestFastPollOpenSetRefresh(t *testing.T) {
 			t.Error("needs_rebase should be false: GraphQL override clears stale true (shouldBeRebased:false in cassette)")
 		}
 		if pl.MergeConflict {
-			t.Error("merge_conflict should be false: GraphQL override clears stale true (conflicts:false in cassette)")
+			t.Error("merge_conflict should be false: GraphQL override clears stale true (ci_must_pass in cassette)")
 		}
 		// Non-GraphQL REST field must survive the merge unchanged
 		if pl.Title != "cached MR" {

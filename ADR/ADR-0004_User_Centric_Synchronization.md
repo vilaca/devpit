@@ -161,3 +161,20 @@ Reconcile. Three root causes, all in `provider/gitlab`:
   FastPoll. At 3 min it still runs 3× less often; pushing it toward the 60 s
   cadence collapses the tiers into constant full-sweeping for a latency win the
   fast tier already delivers for most items.
+
+## Amendment — v0.1.6: conflict marker reads the named blocker (2026-08-03)
+
+Corrects item 2 of the badge-clearing amendment above. Sourcing `merge_conflict`
+from GitLab's `has_conflicts` / `conflicts` booleans was wrong regardless of
+freshness: neither is a conflict test (`merge_conflict` note in
+`docs/Provider_API_Analysis.md`). Observed live on a fast-forward-only project —
+5 MRs idle for months carried a Conflict chip off a `checking` status, and one
+lost it by pressing GitLab's own Rebase button.
+
+- The marker now reads `detailed_merge_status` naming `conflict` as the operative
+  blocker, and is dropped when `shouldBeRebased` — GitLab's conflict verdict
+  cannot be separated from "behind on a fast-forward-only project", where the
+  rebase it already offers is the action either way.
+- The freshness decision that amendment made **stands**: the marker is still
+  overridden from the GraphQL join (now the `detailedMergeStatus` scalar in place
+  of `conflicts`), so the ~60 s open-set refresh still clears it.

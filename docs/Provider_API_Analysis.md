@@ -215,6 +215,18 @@ in `ADR/ADR-0016` and `docs/Event_Taxonomy_and_Storage.md`.
 | Draft | `draft_status` | never Blocked/RTM (drafts) |
 | Gate-blocked | `conflict`, `need_rebase`, `not_approved`, `requested_changes`, `ci_must_pass`, `discussions_not_resolved`, `merge_request_blocked`, `status_checks_must_pass`, `commits_status`, `not_open`, plus tier-specific (`jira_association_missing`, `security_policy_*`, `locked_paths`, `locked_lfs_files`, `title_regex`, `merge_time`) | Blocked |
 
+Conflict note: `has_conflicts` (REST) and `conflicts` (GraphQL) are **not** a
+conflict test — both are defined as `merge_status != can_be_merged`, so they read
+`true` while mergeability is merely uncomputed (`checking`, `unchecked`) and on
+every branch a fast-forward-only project cannot merge until it is rebased. The
+`conflict` value of `detailed_merge_status` is what GitLab shows the user as the
+operative blocker, so DevPit's `merge_conflict` marker reads that instead — and
+still drops it when `shouldBeRebased` says the offered action is a rebase, which
+in a fast-forward/semi-linear project GitLab's conflict verdict cannot be
+separated from. Consequence: because `detailed_merge_status` names only the
+*first* failing check, an MR blocked on approvals or discussions reports those
+and the conflict stays hidden until they clear.
+
 Staleness note: list endpoints "might not proactively update"
 merge status — `unchecked` is common on lists. For items stuck
 transient, do a targeted single-MR GET; use

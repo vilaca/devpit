@@ -2,7 +2,7 @@
 
 ## Scope
 
-Implemented — every gate runs through `scripts/check.sh`, locally and in CI
+Implemented (v0.1) — every gate runs through `scripts/check.sh`, locally and in CI
 (`.github/workflows/ci.yml`, one job per gate). See `docs/Roadmap.md`.
 
 ## Context
@@ -99,7 +99,7 @@ local git worktrees under `.claude/` are excluded in `.go-arch-lint.yml`
 (`exclude:`); the gofmt gate checks tracked files only for the same reason. A
 fresh CI checkout has no worktrees.
 
-## Amendment — v0.1.6: frontend lint parity, tidy/actionlint/links gates, scheduled govulncheck (2026-07-16)
+## Amendment — v0.1.6: frontend lint parity, tidy/actionlint/links gates, scheduled govulncheck
 
 The frontend reaches the same lint stance as `.golangci.yml`: eslint
 (`typescript-eslint` `recommendedTypeChecked` + `eslint-plugin-svelte`
@@ -140,7 +140,7 @@ scans the raw filesystem regardless of module boundaries, so it needed its
 own `frontend/node_modules` entry in `.go-arch-lint.yml`'s `exclude:`,
 alongside the existing `.claude` worktree exclusion.
 
-## Amendment — frontend test gate (2026-07-16)
+## Amendment — v0.1.6: frontend test gate
 
 `gate_frontend` now also runs `npm run test` (Vitest), so the frontend has an
 executable-test gate on par with Go's `go test`, not just type/lint checks.
@@ -152,7 +152,7 @@ the SSE reconnect state machine, `toggleFlag`) plus one drift guard that asserts
 the frontend state precedence equals Go's `internal/attention/states.go` — no
 component-DOM harness, matching the "smallest thing that works" stance.
 
-## Amendment — Go coverage floor (2026-07-16)
+## Amendment — v0.1.6: Go coverage floor
 
 `gate_test` now runs `go test -race -coverprofile=... ./...`, reads the total
 statement-coverage percentage off `go tool cover -func`'s last line, and fails

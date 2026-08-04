@@ -37,29 +37,33 @@ a role (see Role scope below).
 Highest precedence first (index 0 is the leading chip; precedence orders chips,
 not item ranking — see Ranking):
 
-| # | wire value | label | condition |
-|---|---|---|---|
-| 1 | `changes_requested` | Changes Requested | `roles[author] && ReviewDecision == "changes_requested"` |
-| 2 | `review_requested`  | Review Requested  | `(roles[reviewer] && MyReviewState == "requested") \|\| (roles[sole_approver] && !Draft && !reviewIsDone(MyReviewState))` |
-| 3 | `blocked`           | Blocked           | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "blocked"` |
-| 4 | `mentioned`         | Mentioned         | `hasMention` |
-| 5 | `ready_to_merge`    | Ready to Merge    | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "ready"` |
-| 6 | `auto_merge_armed`  | Auto-merge Armed  | `(roles[author] \|\| roles[sole_approver]) && !Draft && AutoMergeArmed` |
-| 7 | `checks_running`    | Checks Running    | `(roles[author] \|\| roles[sole_approver]) && !Draft && ChecksRunning` |
-| 8 | `checking`          | Checking          | `Gate == "unknown"` (role-neutral — the backstop) |
-| 9 | `review_submitted`  | Review Submitted  | `roles[reviewer] && reviewIsDone(MyReviewState)` |
+| # | wire value | label |
+|---|---|---|
+| 1 | `changes_requested` | Changes Requested |
+| 2 | `review_requested`  | Review Requested  |
+| 3 | `blocked`           | Blocked           |
+| 4 | `mentioned`         | Mentioned         |
+| 5 | `ready_to_merge`    | Ready to Merge    |
+| 6 | `auto_merge_armed`  | Auto-merge Armed  |
+| 7 | `checks_running`    | Checks Running    |
+| 8 | `checking`          | Checking          |
+| 9 | `review_submitted`  | Review Submitted  |
 
-An item carries **every** signal that applies; its highest (lowest-numbered)
-signal sets its rank, the rest ride as additional tags. The precedence order and
-conditions are direct code (`internal/attention/states.go`).
+The exact firing condition for each signal is **direct code** — the `matches`
+switch in `internal/attention/states.go`; the plain-language meaning and role
+scope are below. An item carries **every** signal that applies; its highest
+(lowest-numbered) signal sets its rank, the rest ride as additional tags.
 
 ### Role scope
 
 The gate signals (Blocked, Ready to Merge, Auto-merge Armed, Checks Running)
 describe an MR that **cannot progress without you** — you authored it, or you
 are its `sole_approver` (the only account that can merge; always-on, never
-muted — `ADR/ADR-0016_Presentation_And_Ranking.md`). Changes Requested stays
-author-only. Review Requested is reviewer-relative and also fires for a sole
+muted — `ADR/ADR-0016_Presentation_And_Ranking.md`). Changes Requested fires
+both author-side (a reviewer's verdict on your MR) and reviewer-side (your own
+"changes requested" verdict on someone else's MR); the shared chip's row
+brightness conveys whose court the ball is in. Review Requested is
+reviewer-relative and also fires for a sole
 approver whose review isn't done — an implicit review obligation, no explicit
 request needed. Review Submitted is reviewer-relative. Mentioned is any-role.
 **Checking (#8) is role-neutral**: it

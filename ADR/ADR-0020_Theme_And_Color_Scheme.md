@@ -2,7 +2,7 @@
 
 ## Scope
 
-Implemented — theme toggle, OS-preference default, and `localStorage`
+Implemented (v0.1) — theme toggle, OS-preference default, and `localStorage`
 persistence live in `frontend/` (`frontend/src/lib/theme.svelte.ts`). See
 `docs/Roadmap.md`.
 

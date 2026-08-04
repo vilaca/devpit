@@ -2,10 +2,9 @@
 
 ## Scope
 
-Planned — ships as DevPit's first public release. Implemented across the v0.1.6
-release work (runtime update check + `listen:` key, maintenance scripts, demo
-forge, release pipeline). See `docs/Roadmap.md` for timing and the release
-checklist.
+Planned — ships as DevPit's first public release. The pipeline is built and
+committed; cutting the release is the remaining step. See `docs/Roadmap.md` for
+timing and the release checklist.
 
 ## Context
 

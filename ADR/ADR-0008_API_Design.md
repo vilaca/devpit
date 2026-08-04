@@ -2,7 +2,7 @@
 
 ## Scope
 
-**Implemented** — the REST surface and SSE stream are built in `internal/api`
+**Implemented (v0.1)** — the REST surface and SSE stream are built in `internal/api`
 and wired up in `cmd/devpit`. See `docs/Roadmap.md`.
 
 ## Context

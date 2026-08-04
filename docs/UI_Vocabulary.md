@@ -5,7 +5,7 @@ show. Seed for future user documentation. Decision record:
 `ADR/ADR-0016_Presentation_And_Ranking.md`; exact signal conditions and
 ranking semantics: `docs/Attention_Engine.md`; wire shapes: `docs/REST_API.md`.
 
-**Status:** all items below are live (v0.1.1–v0.1.5).
+**Status:** all items below are live (v0.1.1–v0.1.6).
 
 ## Anatomy of the list
 

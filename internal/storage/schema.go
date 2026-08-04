@@ -8,7 +8,9 @@ import (
 )
 
 // migrations are applied in order at Open time. Each entry's index+1 is its
-// version; schema_version stores the highest applied version.
+// version; schema_version stores the highest applied version. Pre-1.0 the whole
+// schema is a single migration (version 1); post-release, every schema change
+// appends a new entry rather than editing this one.
 var migrations = []string{
 	`CREATE TABLE events (
 		id            INTEGER PRIMARY KEY,
@@ -51,9 +53,9 @@ var migrations = []string{
 	CREATE TABLE handle_next (
 		item_id    TEXT PRIMARY KEY,
 		flagged_at TEXT NOT NULL
-	);`,
+	);
 
-	`CREATE TABLE jira_tickets (
+	CREATE TABLE jira_tickets (
 		key         TEXT PRIMARY KEY,
 		status      TEXT NOT NULL DEFAULT '',
 		summary     TEXT NOT NULL DEFAULT '',
@@ -61,9 +63,9 @@ var migrations = []string{
 		url         TEXT NOT NULL DEFAULT '',
 		fetched_at  TEXT NOT NULL,
 		fetch_error TEXT
-	);`,
+	);
 
-	`CREATE TABLE repo_approvers (
+	CREATE TABLE repo_approvers (
 		connection_id    TEXT NOT NULL,
 		repo             TEXT NOT NULL,
 		is_sole_approver INTEGER NOT NULL,

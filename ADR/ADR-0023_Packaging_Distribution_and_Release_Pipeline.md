@@ -104,7 +104,7 @@ cross-reference on every point, so they live here as one ADR.
 
 - Retention in this release is three maintainer-operated raw-SQL scripts under
   `scripts/`, run with the instance stopped and requiring the `sqlite3` CLI:
-  `db-trim.sh` (retention pass), `db-cleanup.sh <connection-id>` (purge one
+  `db-trim.sh` (retention pass), `db-cleanup.sh <db> <connection-id>` (purge one
   source), and `db-reset.sh` (empties every table — enumerated from
   `sqlite_master`, so schema-agnostic — rather than deleting the file, so a
   bind-mounted DB keeps its inode; `storage.Open` migrates unconditionally

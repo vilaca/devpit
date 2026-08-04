@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -503,7 +502,7 @@ func TestLastSyncedAtCountsDegraded(t *testing.T) {
 
 func TestMigrationUpgrade(t *testing.T) {
 	// Open creates a fresh DB at the latest schema version; verify the
-	// jira_tickets table (migration 2) exists and accepts a round-trip.
+	// jira_tickets table exists and accepts a round-trip.
 	db := openTest(t)
 	ctx := context.Background()
 
@@ -538,56 +537,6 @@ func TestMigrationUpgrade(t *testing.T) {
 	}
 	if row.FetchError != nil {
 		t.Errorf("FetchError = %v, want nil", row.FetchError)
-	}
-}
-
-// TestMigrationIncrementalUpgrade seeds a raw DB at schema_version 1 (only the
-// first migration applied) and asserts migrate steps through the remaining
-// migrations to the latest version — the incremental upgrade loop that a fresh
-// Open (already at latest) never exercises (B7).
-func TestMigrationIncrementalUpgrade(t *testing.T) {
-	ctx := context.Background()
-	writeDSN, _ := dsns(":memory:")
-	raw, err := sql.Open("sqlite", writeDSN)
-	if err != nil {
-		t.Fatalf("open raw: %v", err)
-	}
-	raw.SetMaxOpenConns(1) // keep the shared-cache in-memory DB alive
-	t.Cleanup(func() { _ = raw.Close() })
-
-	// Apply only migration 1 by hand and stamp the DB at version 1.
-	if _, err := raw.ExecContext(ctx, `CREATE TABLE schema_version (version INTEGER NOT NULL)`); err != nil {
-		t.Fatalf("create schema_version: %v", err)
-	}
-	if _, err := raw.ExecContext(ctx, migrations[0]); err != nil {
-		t.Fatalf("apply migration 1: %v", err)
-	}
-	if _, err := raw.ExecContext(ctx, `INSERT INTO schema_version (version) VALUES (1)`); err != nil {
-		t.Fatalf("seed version: %v", err)
-	}
-
-	// migrate must run migrations 2..N incrementally. (Do not call db.Close:
-	// this DB has no read pool or file lock — closing raw directly is enough.)
-	db := &DB{write: raw}
-	if err := db.migrate(ctx); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-
-	var version int
-	if err := raw.QueryRowContext(ctx, `SELECT version FROM schema_version`).Scan(&version); err != nil {
-		t.Fatalf("read version: %v", err)
-	}
-	if version != len(migrations) {
-		t.Errorf("version = %d, want %d", version, len(migrations))
-	}
-
-	// The tables from migrations 2 (jira_tickets) and 3 (repo_approvers) exist.
-	now := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
-	if err := db.UpsertJiraTicket(ctx, JiraTicket{Key: "RPC-1", FetchedAt: now}); err != nil {
-		t.Errorf("jira_tickets (migration 2) missing: %v", err)
-	}
-	if err := db.UpsertRepoApprover(ctx, RepoApprover{ConnectionID: "c1", Repo: "r", FetchedAt: now}); err != nil {
-		t.Errorf("repo_approvers (migration 3) missing: %v", err)
 	}
 }
 

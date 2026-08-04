@@ -16,7 +16,7 @@ ranking semantics: `docs/Attention_Engine.md`; wire shapes: `docs/REST_API.md`.
 ├─ fresh (idle < 7d) ───────────────────────────────────────────────┤
 │    Add rate limiter           [review_requested]                   │  ← signal precedence,
 │    Retry queue draining       [changes_requested] [checks failing] │    newest first
-│    Bump SDK                   [ready to merge · optional checks    │
+│    Bump SDK                   [ready to merge] [optional checks    │
 │                                red]                                │
 ├─ stale (idle 7–30d) ──────────────────────────────────────────────┤
 │    Migrate CI config          [blocked] [rebase] [stale]           │
@@ -90,7 +90,7 @@ renders.
 |---|---|---|---|---|
 | `conflict` | manual conflict resolution needed | ✓ `mergeable_state == dirty` | ⚠ `detailed_merge_status == conflict`, dropped when `shouldBeRebased` (conflict note in `docs/Provider_API_Analysis.md`) | {N} |
 | `rebase` | mechanical rebase unlocks it | ⚠ `behind` — only when repo requires up-to-date branches | ✓ `shouldBeRebased` (GraphQL) | {N} |
-| `checks failing` | CI / pipeline red | ⚠ non-gating CI only (`unstable`); gating-CI failures hide inside `blocked` | ✓ `headPipeline` (GraphQL, any pipeline) | {N} |
+| `checks failing` | CI / pipeline red (reads **`optional checks red`** when the item is also `ready_to_merge` — the reds are non-required) | ⚠ non-gating CI only (`unstable`); gating-CI failures hide inside `blocked` | ✓ `headPipeline` (GraphQL, any pipeline) | {N} |
 | `draft` | provider draft; merge gate suspended | draft flag | draft flag | {N} |
 | `missing approvals` | required approvals not met | ✓ `reviewDecision` (GraphQL) | ✓ `approved` (GraphQL) | {N} |
 | `discussions` | unresolved threads gate the merge | ✗ gate rule unreadable for non-admins | ✓ `blocking_discussions_resolved` (REST) | {N} |

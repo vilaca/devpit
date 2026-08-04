@@ -54,7 +54,9 @@
     return onset ? relativeTime(onset) : undefined;
   }
 
-  // When ready_to_merge + failing_checks co-occur, render them as one combined phrase.
+  // When ready_to_merge + failing_checks co-occur, the red checks are non-required:
+  // the ready chip renders as usual and the failing-checks marker softens its label
+  // to "optional checks red" (two badges, not one combined phrase).
   const readyButRed = $derived(
     item.states.includes("ready_to_merge") && item.failing_checks,
   );
@@ -83,9 +85,9 @@
     behind: "needs_rebase",
     unstable: "failing_checks",
   };
-  // Every mapped field renders its marker badge unconditionally except
-  // failing_checks, which readyButRed hides — but that requires ready_to_merge
-  // (gate `ready`), which cannot co-occur with blocked (gate `blocked`).
+  // Every mapped field renders its marker badge unconditionally (readyButRed only
+  // relabels failing_checks, never hides it), so a suppressed `blocked` chip is
+  // always backed by a visible marker naming the reason.
   const blockedSuppressed = $derived.by(() => {
     const marker = item.gate_detail
       ? GATE_DETAIL_MARKER[item.gate_detail]
@@ -109,15 +111,7 @@
   {#each chips as s (s)}
     {#if s === "blocked" && blockedSuppressed}
       <!-- suppressed: the matching marker badge below already names the reason -->
-    {:else if s === "ready_to_merge" && readyButRed}
-      <!-- Combined "ready · optional checks red" phrase — shown once -->
-      <span
-        class="tag"
-        style:color={stateCSSVar(s)}
-        style:border-color={stateCSSVar(s)}
-        title={titleForState(s)}>Ready to Merge · optional checks red</span
-      >
-    {:else if s !== "ready_to_merge" || !readyButRed}
+    {:else}
       <span
         class="tag"
         style:color={stateCSSVar(s)}
@@ -140,10 +134,12 @@
         >Rebase</span
       >
     {/if}
-    {#if item.failing_checks && !readyButRed}
-      <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016) -->
+    {#if item.failing_checks}
+      <!-- failing_checks is a marker, not a state — never in item.states (ADR-0016).
+           When the item is ready_to_merge the red checks are non-required, so the
+           badge softens its label to "optional checks red". -->
       <span class="tag marker-conflict" title={titleForMarker("failing_checks")}
-        >Failing Checks</span
+        >{readyButRed ? "optional checks red" : "Failing Checks"}</span
       >
     {/if}
     {#if item.needs_approval}

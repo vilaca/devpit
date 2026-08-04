@@ -47,20 +47,22 @@ aimed-at-you **signal stream** (`signal.mentioned`, `signal.review_requested`,
 
 Nine signals in precedence order, highest first (index 0 is the leading chip;
 precedence orders chips within a row, not the ranking of items — see Ranking). These
-are the `State` constants and their wire strings
-(`internal/attention/states.go`):
+are the `State` constants and their wire strings; the exact firing condition for
+each is **direct code** — the `matches` switch in
+`internal/attention/states.go`. Role scope (D2, below) is the plain-language
+reading of those conditions.
 
-| # | wire value | label | condition |
-|---|---|---|---|
-| 1 | `changes_requested` | Changes Requested | `(roles[author] && ReviewDecision == "changes_requested") \|\| (roles[reviewer] && MyReviewState == "changes_requested")` |
-| 2 | `review_requested`  | Review Requested  | `(roles[reviewer] && MyReviewState == "requested") \|\| (roles[sole_approver] && !Draft && !reviewIsDone(MyReviewState))` |
-| 3 | `blocked`           | Blocked           | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "blocked"` |
-| 4 | `mentioned`         | Mentioned         | `hasMention` |
-| 5 | `ready_to_merge`    | Ready to Merge    | `(roles[author] \|\| roles[sole_approver]) && !Draft && Gate == "ready"` |
-| 6 | `auto_merge_armed`  | Auto-merge Armed  | `(roles[author] \|\| roles[sole_approver]) && !Draft && AutoMergeArmed` |
-| 7 | `checks_running`    | Checks Running    | `(roles[author] \|\| roles[sole_approver]) && !Draft && ChecksRunning` |
-| 8 | `checking`          | Checking          | `Gate == "unknown"` (role-neutral — the backstop) |
-| 9 | `review_submitted`  | Review Submitted  | `roles[reviewer] && reviewIsDone(MyReviewState)` |
+| # | wire value | label |
+|---|---|---|
+| 1 | `changes_requested` | Changes Requested |
+| 2 | `review_requested`  | Review Requested  |
+| 3 | `blocked`           | Blocked           |
+| 4 | `mentioned`         | Mentioned         |
+| 5 | `ready_to_merge`    | Ready to Merge    |
+| 6 | `auto_merge_armed`  | Auto-merge Armed  |
+| 7 | `checks_running`    | Checks Running    |
+| 8 | `checking`          | Checking          |
+| 9 | `review_submitted`  | Review Submitted  |
 
 An item carries **every** signal that applies; its **highest** (lowest-numbered)
 signal sets its rank, the rest ride as additional tags. `draft` and the approval

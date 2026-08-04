@@ -185,7 +185,7 @@ requiring the `sqlite3` CLI, apply these rules:
   snapshot of a still-open item; purge, once they too age past the cutoff, items
   whose latest state is merged/closed/removed, and rows whose `connection_id` no
   longer exists in the config; bound `sync_log`.
-- `scripts/db-cleanup.sh <connection-id>` — purge every row for one source.
+- `scripts/db-cleanup.sh <db> <connection-id>` — purge every row for one source.
 - `scripts/db-reset.sh` — empty every table.
 
 The scripts are named here with their contract; their internals live with the

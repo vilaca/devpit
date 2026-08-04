@@ -111,7 +111,7 @@ is required because FastPoll and Reconcile are serialised per connection.
 `isSole: false` in the cache — no collaborator probe needed on the next cycle.
 
 **Architecture note:** providers cannot import `internal/storage`; the
-`repo_approvers` DB table added in migration 3 is populated only by explicit
+`repo_approvers` DB table is populated only by explicit
 `UpsertRepoApprover` storage calls (future batch export), never from within a
 provider. The in-memory cache is the authoritative hot path.
 

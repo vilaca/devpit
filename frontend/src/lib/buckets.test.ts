@@ -5,6 +5,7 @@ import {
   matchesFilter,
   visibleBuckets,
   parseFilter,
+  partitionVisible,
 } from "./buckets";
 import { makeItem, makeConnection } from "./fixtures";
 
@@ -119,6 +120,26 @@ describe("visibleBuckets", () => {
       makeItem({ id: "a", flagged: true, states: ["review_requested"] }),
     ];
     expect(visibleBuckets(items, conns)).toEqual([]);
+  });
+});
+
+describe("partitionVisible", () => {
+  const items = [
+    makeItem({ id: "p", flagged: true, states: ["blocked"] }),
+    makeItem({ id: "a", states: ["blocked"] }),
+    makeItem({ id: "b", states: ["review_requested"] }),
+  ];
+
+  it("on the All view lifts flagged items into the pinned zone", () => {
+    const { pinned, ranked } = partitionVisible(items, null, []);
+    expect(pinned.map((i) => i.id)).toEqual(["p"]);
+    expect(ranked.map((i) => i.id)).toEqual(["a", "b"]);
+  });
+
+  it("under a filter hides the pinned zone and folds matching pins into ranked", () => {
+    const { pinned, ranked } = partitionVisible(items, "blocked", []);
+    expect(pinned).toEqual([]);
+    expect(ranked.map((i) => i.id)).toEqual(["p", "a"]);
   });
 });
 

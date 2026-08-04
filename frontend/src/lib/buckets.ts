@@ -112,10 +112,15 @@ export function partitionVisible(
   filter: Filter | null,
   connections: Connection[],
 ): { pinned: AttentionItem[]; ranked: AttentionItem[] } {
+  // The "Handle next" pinned zone exists only on the unfiltered "All" view. Under
+  // a specific bucket filter the zone is hidden and a matching pinned item folds
+  // into the ranked list at its natural rank (losing its flag-order placement).
+  if (filter) {
+    const ranked = items.filter((i) => matchesFilter(i, filter, connections));
+    return { pinned: [], ranked };
+  }
   const pinned = items.filter((i) => i.flagged);
-  const ranked = items.filter(
-    (i) => !i.flagged && matchesFilter(i, filter, connections),
-  );
+  const ranked = items.filter((i) => !i.flagged);
   return { pinned, ranked };
 }
 

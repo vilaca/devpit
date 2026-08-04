@@ -279,10 +279,12 @@ approved/commented reviewed-done cases (computed, hidden by the mute).
 
 - **A single ranked list**, one row per WorkItem, with signals shown as tags.
   Buckets are optional client-side filters, not the primary layout.
-- **A pinned "Handle next" zone** at the top: user-flagged items in flag order,
-  lifted out of the auto-ranked list (never shown twice). The flag is
-  local-only and never written back to the provider
-  (`ADR/ADR-0017_Read_Only_Action_Model.md`).
+- **A pinned "Handle next" zone** at the top of the unfiltered "All" view:
+  user-flagged items in flag order, lifted out of the auto-ranked list (never
+  shown twice). Under a specific bucket filter the zone is hidden and a matching
+  pinned item folds into the ranked list at its natural rank — the zone is a
+  whole-list triage aid, not a per-bucket one. The flag is local-only and never
+  written back to the provider (`ADR/ADR-0017_Read_Only_Action_Model.md`).
 - **Ranking is age band then recency** — no numeric score, no configuration
   (revised 2026-07-13; formerly fixed signal-precedence + age tiebreak). Three
   tiers (fresh, stale, old); within a tier, most-recent-update-first. The "stale"

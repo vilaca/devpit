@@ -20,9 +20,10 @@
     onFocus: (id: string) => void;
   } = $props();
 
-  // Pinned items float above the ranked list in flag order, never filtered by
-  // bucket — they're the user's explicit priority regardless of state. Split via
-  // the shared helper so keyboard nav (App) sees exactly these rows.
+  // Pinned items float above the ranked list in flag order in the "Handle next"
+  // zone — but only on the unfiltered "All" view; under a bucket filter the zone
+  // is hidden and matching pins fold into the ranked list (partitionVisible).
+  // Split via the shared helper so keyboard nav (App) sees exactly these rows.
   const split = $derived(partitionVisible(items, activeFilter, connections));
   const pinned = $derived(split.pinned);
   const ranked = $derived(split.ranked);

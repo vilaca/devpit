@@ -1,5 +1,12 @@
 package storage
 
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+)
+
 // migrations are applied in order at Open time. Each entry's index+1 is its
 // version; schema_version stores the highest applied version.
 var migrations = []string{
@@ -63,4 +70,46 @@ var migrations = []string{
 		fetched_at       TEXT NOT NULL,
 		PRIMARY KEY (connection_id, repo)
 	);`,
+}
+
+// migrate brings the database schema up to the latest version by applying any
+// pending entries in migrations, one transaction each, and bumping
+// schema_version. It is idempotent: already-applied migrations are skipped.
+func (db *DB) migrate(ctx context.Context) error {
+	if _, err := db.write.ExecContext(ctx,
+		`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);`); err != nil {
+		return fmt.Errorf("create schema_version: %w", err)
+	}
+
+	var current int
+	err := db.write.QueryRowContext(ctx, `SELECT version FROM schema_version LIMIT 1`).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, err := db.write.ExecContext(ctx, `INSERT INTO schema_version (version) VALUES (0)`); err != nil {
+			return fmt.Errorf("seed schema_version: %w", err)
+		}
+		current = 0
+	} else if err != nil {
+		return fmt.Errorf("read schema_version: %w", err)
+	}
+
+	for i := current; i < len(migrations); i++ {
+		tx, err := db.write.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("migration %d begin: %w", i+1, err)
+		}
+		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+		// Scope the bump to the row we just read (single-row invariant): a WHERE
+		// stops a stray second row from being clobbered to the same version.
+		if _, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ? WHERE version = ?`, i+1, i); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("migration %d bump version: %w", i+1, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("migration %d commit: %w", i+1, err)
+		}
+	}
+	return nil
 }

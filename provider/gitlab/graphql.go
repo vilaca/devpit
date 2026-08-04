@@ -15,7 +15,7 @@ import (
 )
 
 const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
-	`approved shouldBeRebased divergedFromTargetBranch conflicts ` +
+	`approved shouldBeRebased divergedFromTargetBranch detailedMergeStatus ` +
 	`headPipeline{status} approvedBy{count nodes{username}} ` +
 	`reviewers{nodes{username mergeRequestInteraction{reviewState}}}}}`
 
@@ -46,6 +46,10 @@ const (
 	glReviewStateChangesRequested = "REQUESTED_CHANGES"
 	decisionChangesRequested      = "changes_requested"
 )
+
+// glDMSConflict is the detailedMergeStatus enum value naming a conflict as the
+// operative merge blocker (the GraphQL enum is the uppercased REST dmsConflict).
+const glDMSConflict = "CONFLICT"
 
 // graphQLError is returned by doGraphQL when the server responds HTTP 200 but
 // includes a non-empty errors array with null data (e.g. complexity-ceiling rejection).
@@ -123,7 +127,7 @@ type glGraphQLMR struct {
 	Approved     bool        `json:"approved"`
 	ShouldRebase bool        `json:"shouldBeRebased"`
 	Diverged     bool        `json:"divergedFromTargetBranch"`
-	Conflicts    bool        `json:"conflicts"`
+	DMS          string      `json:"detailedMergeStatus"`
 	HeadPipeline *glPipeline `json:"headPipeline"`
 	ApprovedBy   struct {
 		Count int `json:"count"`
@@ -149,8 +153,9 @@ type glGraphQLMR struct {
 // the output, enriched or carried forward. The engine derives the reconcile swept
 // set from the result's events (ADR-0024) and relies on this; preserve it.
 // Draft suppression: NeedsApproval, NeedsRebase, FailingChecks, ChecksRunning,
-// ApprovalsCount, and MyReviewState are zeroed for draft MRs. MergeConflict is
-// not draft-suppressed (mirrors REST has_conflicts behavior).
+// ApprovalsCount, and MyReviewState are zeroed for draft MRs. MergeConflict
+// needs no suppression — GitLab reports DRAFT_STATUS as a draft's blocker, so
+// its detailedMergeStatus is never CONFLICT.
 // glBatchItem identifies one MR to enrich via GraphQL: evIdx is its index in the
 // caller's events slice; fullPath/iid locate it; draft gates suppression.
 type glBatchItem struct {
@@ -499,8 +504,8 @@ func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPay
 // applyGraphQL merges the GraphQL-derived booleans onto a payload.
 // Draft items have NeedsApproval, NeedsRebase, FailingChecks, ChecksRunning,
 // ApprovalsCount, and MyReviewState suppressed (forced false/zero/empty).
-// MergeConflict is NOT draft-suppressed (REST records has_conflicts on drafts
-// too; GraphQL conflicts keeps parity). handle is the authenticated user's
+// MergeConflict needs no draft suppression: a draft's detailedMergeStatus is
+// DRAFT_STATUS, never CONFLICT. handle is the authenticated user's
 // username; MyReviewState records the user's own submitted verdict, derived
 // from their reviewers.mergeRequestInteraction entry (changes_requested /
 // reviewed / approved) and overridden to "approved" whenever they appear in
@@ -521,9 +526,17 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 			}
 		}
 	}
-	// MergeConflict is overridden from the GraphQL conflicts scalar regardless of
-	// draft status — REST records has_conflicts on drafts too; keep parity.
-	pl.MergeConflict = mr.Conflicts
+	// MergeConflict is overridden regardless of draft status, from the same
+	// detailed status the REST fallback uses (see observedFromMR) — the fresh
+	// GraphQL copy, so the fast-tier open-set refresh can clear the marker.
+	// shouldBeRebased additionally drops it: that flag means the project is
+	// fast-forward/semi-linear and the branch is behind, in which case GitLab's
+	// conflict verdict cannot separate a real conflict from a merge base the
+	// rebase GitLab is already offering would move — so DevPit shows the rebase
+	// marker and lets that action decide. Only shouldBeRebased qualifies here,
+	// never divergedFromTargetBranch: divergence is true of nearly every open MR
+	// and would erase the marker outright.
+	pl.MergeConflict = mr.DMS == glDMSConflict && !mr.ShouldRebase
 	// review_decision drives the author's changes-requested chip; it is not a
 	// merge-gate fact, so (like GitHub) it is recorded regardless of draft.
 	pl.ReviewDecision = reviewDecisionFromReviewers(mr)

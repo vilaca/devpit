@@ -32,7 +32,6 @@ type glMergeRequest struct {
 	Draft                       bool     `json:"draft"`
 	MergeWhenPipelineSucceeds   bool     `json:"merge_when_pipeline_succeeds"` // auto-merge armed (in list payload)
 	DetailedMergeStatus         string   `json:"detailed_merge_status"`
-	HasConflicts                bool     `json:"has_conflicts"`
 	BlockingDiscussionsResolved *bool    `json:"blocking_discussions_resolved"`
 	UpdatedAt                   string   `json:"updated_at"`
 	Author                      glUser   `json:"author"`

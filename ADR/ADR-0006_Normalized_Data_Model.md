@@ -3,7 +3,7 @@
 ## Scope
 
 Implemented (v0.1) for two object types — `merge_request` (covers GitHub PRs)
-and `issue`. Broader entity coverage is **Planned/future**. See
+and `issue`. Broader entity coverage is **Planned**. See
 `docs/Roadmap.md`.
 
 ## Context

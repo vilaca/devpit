@@ -44,7 +44,7 @@ token-only promise (no provider-side webhook configuration).
 - The full adaptive rate-budget controller is deferred to avoid gold-plating
   before real usage data exists (`docs/Roadmap.md`).
 
-## Amendment — v0.1.3: fast_poll open-set refresh (2026-07-10)
+## Amendment — v0.1.3: fast_poll open-set refresh
 
 FastPoll now also refreshes the three volatile GraphQL-derived booleans
 (`failing_checks`, `needs_approval`, `needs_rebase`) for the full known-open
@@ -63,7 +63,7 @@ No lock is needed: FastPoll and Reconcile are serialised on the same goroutine
 per connection (`internal/engine/connection.go`). Cache is populated by the
 startup reconcile before any FastPoll runs.
 
-## Amendment — v0.1.5: FastPoll drops watched-only notifications (2026-07-14)
+## Amendment — v0.1.5: FastPoll drops watched-only notifications
 
 The GitHub notifications feed is not identity-scoped: watching a repo delivers
 notifications for *any* PR activity in it (reason `subscribed`/`state_change`),
@@ -79,7 +79,7 @@ neither actionable nor mine, so it is never snapshotted
 (`provider/github/fastpoll.go`). Notifications that do carry a signal (mention,
 review_requested, assign, ci_activity) or a role are unaffected.
 
-## Amendment — v0.1.5: sole-approver discovery scope (2026-07-14)
+## Amendment — v0.1.5: sole-approver discovery scope
 
 Reconcile now includes a fourth search scope for each provider that surfaces PRs
 and MRs on repos where the authenticated user is the **only account with
@@ -115,7 +115,7 @@ is required because FastPoll and Reconcile are serialised per connection.
 `UpsertRepoApprover` storage calls (future batch export), never from within a
 provider. The in-memory cache is the authoritative hot path.
 
-## Amendment — v0.1.6: open-set refresh clears badges (2026-07-16)
+## Amendment — v0.1.6: open-set refresh clears badges
 
 Supersedes part of the v0.1.3 amendment. Observed live: an MR
 (planning-cloud!30046) kept showing `needs_rebase` + `merge_conflict` after
@@ -144,7 +144,7 @@ Reconcile. Three root causes, all in `provider/gitlab`:
 
 `carryForwardEnrichment` is unchanged (fail-closed OR on degraded batches, B3).
 
-## Amendment — v0.1.6: reconcile cadence 15 min → 3 min (2026-07-17)
+## Amendment — v0.1.6: reconcile cadence 15 min → 3 min
 
 - `defaultReconEvery` lowered from 15 min to 3 min (`internal/engine/engine.go`).
 - Why: since the v0.1.3 open-set refresh, FastPoll (~60 s) already refreshes the
@@ -162,7 +162,7 @@ Reconcile. Three root causes, all in `provider/gitlab`:
   cadence collapses the tiers into constant full-sweeping for a latency win the
   fast tier already delivers for most items.
 
-## Amendment — v0.1.6: conflict marker reads the named blocker (2026-08-03)
+## Amendment — v0.1.6: conflict marker reads the named blocker
 
 Corrects item 2 of the badge-clearing amendment above. Sourcing `merge_conflict`
 from GitLab's `has_conflicts` / `conflicts` booleans was wrong regardless of

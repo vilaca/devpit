@@ -128,7 +128,7 @@ type Provider interface {
 	// the previous result. An empty result is valid (nothing changed).
 	FastPoll(ctx context.Context, state PollState) (PollResult, error)
 
-	// Reconcile runs the full identity-scoped sweep (~15 min cadence).
+	// Reconcile runs the full identity-scoped sweep (~3 min cadence).
 	// Self-heals anything the fast tier may have missed. It is a full
 	// authoritative sweep of every open roled item with no incremental cursor,
 	// so it ignores the passed state and returns none; it sets Complete so the

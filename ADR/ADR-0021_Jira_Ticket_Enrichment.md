@@ -71,7 +71,7 @@ persisted cache; presentation is a status prefix on the item title.**
 - A second enricher (e.g. Linear) would generalize this shape; we deliberately
   do not build the abstraction now (one concrete case first).
 
-## Amendment — v0.1.6: 5-minute unconditional refresh (2026-07-16)
+## Amendment — v0.1.6: 5-minute unconditional refresh
 
 - Cadence 15 min → 5 min; it no longer mirrors the reconcile tier — the tiers
   serve different budgets (forge rate budget vs. Jira staleness), and Jira

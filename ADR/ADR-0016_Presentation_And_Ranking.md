@@ -2,24 +2,14 @@
 
 ## Scope
 
-Covers the signal model shipped in v0.1.5 (formerly a separate signal-design
-ADR, folded here per ADR-0014's mutate-by-default convention and the log
-renumbered; git history preserves the original text). Fold and ranking
-**Implemented (v0.1)** (`internal/attention`); the user-facing
-presentation (pinned zone, tags, filters) is **Implemented (v0.1)** — the full
-UI is built in `frontend/`. The marker vocabulary and age bands (decision
-2026-07-10, below) are **Implemented (v0.1.1)**. Blocked diagnostic badges
-(`needs_approval`, `unresolved_discussions`, `policy_denied`) are **Implemented
-(v0.1.2)**. Showing all involved open items regardless of state is **Implemented
-(v0.1.4)**. Signal-based presentation (nine neutral provider signals replacing
-the former six attention states) is **Implemented (v0.1.5)**. Reviewed-done
-muting (display-only) and the "you + N approved" meta-row (populating
-`MyReviewState` from provider approval data) are **Implemented (v0.1.5)**.
-Age-band-then-recency ranking (signal precedence no longer ranks; muting no
-longer demotes) is **Implemented (v0.1.5)**. Blocked-chip suppression when a
-visible marker names the gate's reason is **Implemented (v0.1.6)**.
-Rank-advancing review-verdict signals (`signal.approved`,
-`signal.changes_requested`) are **Implemented (v0.1.6)**. See `docs/Roadmap.md`.
+**Implemented**, evolving across the v0.1.x line (formerly a separate
+signal-design ADR, folded here per ADR-0014's mutate-by-default convention and
+the log renumbered; git history preserves the original text). The fold and
+ranking, the presentation (pinned zone, tags, filters), the marker vocabulary
+and age bands, the blocked diagnostic badges, and the nine-signal model with
+reviewed-done muting and age-band-then-recency ranking are built in
+`internal/attention` and `frontend/`. See `docs/Roadmap.md` for the per-version
+timeline.
 
 ## Context
 

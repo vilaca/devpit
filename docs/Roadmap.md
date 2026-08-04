@@ -239,7 +239,7 @@ Noted, not committed to any release.
   config file. Today these are **deliberately constants, not config** — poll
   intervals and the staleness/old thresholds are engine constants (ADR-0004;
   `internal/config/config.go` states this explicitly, and config is static per
-  `ADR/ADR-0015_Static_Connection_Configuration.md`), and the other cadences are
+  `ADR/ADR-0015_Multi_Account_Connections.md`), and the other cadences are
   hardcoded too: the update check (24h, `internal/update`), the Jira refresh
   sweep (5m, `internal/jira`), and the sole-approver cache TTL (15m). Letting
   users tune them needs sane bounds and validation — too-frequent polling burns

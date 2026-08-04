@@ -47,7 +47,7 @@ func (c *conn) resolveIdentity(ctx context.Context) error {
 }
 
 // run drives the connection until ctx is cancelled. It seeds with one
-// reconcile so the first render isn't empty while waiting ~15 min for the slow
+// reconcile so the first render isn't empty while waiting ~3 min for the slow
 // tier, then loops on both tickers. Go tickers drop ticks when the receiver is
 // busy, so a cycle that overruns its interval simply skips the missed tick —
 // no overlap, no queue buildup.

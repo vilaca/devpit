@@ -163,9 +163,9 @@ data: **GitLab** sets `approved` when the authenticated user appears in
 `approvedBy.nodes` (GitLab exposes no cheap per-user state for comment-only
 reviews, so only approval is detected); **GitHub** maps the user's entry in
 `latestReviews` (`APPROVED`→`approved`, `CHANGES_REQUESTED`→`changes_requested`,
-`COMMENTED`→`reviewed`). `review_requested` (#2) remains driven by
-`MyReviewState == "requested"` and is still not populated — a known gap, not in
-scope here. Wire fields: `my_review_state` (string) and `muted` (bool).
+`COMMENTED`→`reviewed`). `review_requested` (#2) is driven separately — see the
+2026-08-05 amendment below. Wire fields: `my_review_state` (string) and `muted`
+(bool).
 
 #### Sole-approver role and state mappings (2026-07-14)
 
@@ -266,6 +266,22 @@ providers (GitHub `latestReviews`, GitLab own reviewer `reviewState`), and it
 clears itself when the provider drops the verdict (e.g. the author re-requests
 review), needing no dismissal state. `review_submitted` (#9) still fires for the
 approved/commented reviewed-done cases (computed, hidden by the mute).
+
+#### `review_requested` fires on a pending reviewer (2026-08-05)
+
+The `review_requested` reviewer arm was gated on `MyReviewState == "requested"`
+— a value no provider ever emits (a requested-but-not-yet-reviewed reviewer maps
+to an empty `my_review_state`; the wire vocabulary is `approved` /
+`changes_requested` / `reviewed` / empty, never `"requested"`). The arm was
+therefore dead: a plain requested reviewer's MR showed as a bare row with no
+`review_requested` chip and was absent from the bucket. This closes that gap
+(noted above under the 2026-07-13 muting amendment): the trigger is now "review
+not yet done" — `!reviewIsDone(MyReviewState)` — the same predicate the
+sole-approver arm already used, so the two arms are identical and folded into one
+`(reviewer || sole_approver) && !draft && !reviewIsDone(...)`. The `!draft` guard,
+previously carried only by the sole-approver arm, now covers reviewers too: a
+draft MR isn't ready for review and never fires here. Pure read-layer change; the
+predicate lives in `internal/attention/states.go`.
 
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 
@@ -397,8 +413,8 @@ approved/commented reviewed-done cases (computed, hidden by the mute).
     is untouched, so no extra chip appears on reviewer rows. Reviewer-ness is read
     from the new **`my_roles`** wire field (contains `"reviewer"`), falling back
     to a non-empty `my_review_state`. `my_roles` is required because a
-    requested-but-not-yet-reviewed reviewer has an empty `my_review_state` (the
-    known `review_requested` gap) and no other wire signal of the reviewer role.
+    requested-but-not-yet-reviewed reviewer has an empty `my_review_state` and no
+    other wire signal of the reviewer role.
     `my_roles` is a faithful projection of the item's `MyRoles` fact.
 
 ## Rationale

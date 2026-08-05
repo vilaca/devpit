@@ -42,12 +42,10 @@ type connectionItem struct {
 	Health   healthInfo `json:"health"`
 }
 
-// healthInfo carries the rolling-window health metrics for one connection.
+// healthInfo carries the health metrics for one connection.
 type healthInfo struct {
-	Status               string     `json:"status"` // ok | degraded | failing
-	LastSyncedAt         *time.Time `json:"last_synced_at"`
-	FailureCount         int        `json:"failure_count"`
-	FailureWindowMinutes int        `json:"failure_window_minutes"`
+	Status       string     `json:"status"` // ok | degraded | failing
+	LastSyncedAt *time.Time `json:"last_synced_at"`
 }
 
 // handleConnections serves GET /connections.
@@ -79,12 +77,31 @@ func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// outcomeStatus maps a sync_log outcome to ok / degraded / failing.
+func outcomeStatus(outcome string) string {
+	switch outcome {
+	case "ok":
+		return healthOK
+	case "degraded":
+		return healthDegraded
+	default:
+		return healthFailing
+	}
+}
+
+// worstStatus returns the more severe of two health status values.
+func worstStatus(a, b string) string {
+	rank := map[string]int{healthOK: 0, healthDegraded: 1, healthFailing: 2}
+	if rank[a] >= rank[b] {
+		return a
+	}
+	return b
+}
+
 // computeHealth derives the health status for one connection from the sync_log.
-// It counts failure rows within the last failureWindowMinutes and classifies
-// status as ok / degraded / failing (ADR-0018).
+// The dot reflects the worst of each operation's latest outcome (ADR-0018).
 func (s *Server) computeHealth(ctx context.Context, connID string) (healthInfo, error) {
-	window := time.Now().UTC().Add(-failureWindowMinutes * time.Minute)
-	rows, err := s.db.ReadSyncLogSince(ctx, connID, window)
+	latest, err := s.db.LatestOutcomesPerOperation(ctx, connID)
 	if err != nil {
 		return healthInfo{}, err
 	}
@@ -94,19 +111,9 @@ func (s *Server) computeHealth(ctx context.Context, connID string) (healthInfo, 
 		return healthInfo{}, err
 	}
 
-	failureCount := 0
-	for _, row := range rows {
-		if row.Outcome != "ok" {
-			failureCount++
-		}
-	}
-
 	status := healthOK
-	switch {
-	case len(rows) > 0 && failureCount == len(rows):
-		status = healthFailing
-	case failureCount > 0:
-		status = healthDegraded
+	for _, row := range latest {
+		status = worstStatus(status, outcomeStatus(row.Outcome))
 	}
 
 	var lastSyncedAt *time.Time
@@ -115,9 +122,7 @@ func (s *Server) computeHealth(ctx context.Context, connID string) (healthInfo, 
 	}
 
 	return healthInfo{
-		Status:               status,
-		LastSyncedAt:         lastSyncedAt,
-		FailureCount:         failureCount,
-		FailureWindowMinutes: failureWindowMinutes,
+		Status:       status,
+		LastSyncedAt: lastSyncedAt,
 	}, nil
 }

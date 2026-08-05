@@ -123,9 +123,9 @@ Each item carries:
 Each connection reports id, type, base_url, label (never empty — config
 defaults it to the id), resolved `identity` (`null`
 while pending/failed), and a `health` object: `status`
-(`ok` | `degraded` | `failing`), `last_synced_at`, `failure_count`, and the
-fixed `failure_window_minutes` (60). The token is never returned. Drives the
-health dot (`ADR/ADR-0018_Sync_Observability.md`).
+(`ok` | `degraded` | `failing`) and `last_synced_at`. The token is never
+returned. Drives the health dot (`ADR/ADR-0018_Sync_Observability.md`);
+derivation in `docs/Synchronization_Engine.md` § "Health dot derivation".
 
 The envelope also carries `update` — the self-update hint
 (`ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md`): `available`

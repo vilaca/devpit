@@ -284,10 +284,31 @@ func TestConnectionsIdentityNullWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestConnectionsHealthOK(t *testing.T) {
+func TestConnectionsHealthEmpty(t *testing.T) {
+	// No sync rows: dot must be ok with null last_synced_at.
+	s := newTestServer(t, openTestDB(t))
+	w := do(t, s, "GET", "/connections")
+	var resp connectionsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	h := resp.Connections[0].Health
+	if h.Status != healthOK {
+		t.Errorf("status = %q, want ok", h.Status)
+	}
+	if h.LastSyncedAt != nil {
+		t.Errorf("last_synced_at = %v, want null (no sync yet)", h.LastSyncedAt)
+	}
+}
+
+func TestConnectionsHealthAllOK(t *testing.T) {
 	db := openTestDB(t)
-	_ = db.WriteSyncLog(context.Background(), storage.SyncLogEntry{
-		Ts: time.Now(), ConnectionID: "gh", Operation: "fast_poll", Outcome: "ok",
+	ctx := context.Background()
+	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
+		Ts: time.Now(), ConnectionID: "gh", Operation: "fastpoll", Outcome: "ok",
+	})
+	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
+		Ts: time.Now(), ConnectionID: "gh", Operation: "reconcile", Outcome: "ok",
 	})
 	s := newTestServer(t, db)
 	w := do(t, s, "GET", "/connections")
@@ -299,25 +320,21 @@ func TestConnectionsHealthOK(t *testing.T) {
 	if h.Status != healthOK {
 		t.Errorf("status = %q, want ok", h.Status)
 	}
-	if h.FailureCount != 0 {
-		t.Errorf("failure_count = %d, want 0", h.FailureCount)
-	}
 	if h.LastSyncedAt == nil {
 		t.Error("last_synced_at should be non-null after a successful sync")
 	}
-	if h.FailureWindowMinutes != failureWindowMinutes {
-		t.Errorf("failure_window_minutes = %d, want %d", h.FailureWindowMinutes, failureWindowMinutes)
-	}
 }
 
-func TestConnectionsHealthDegraded(t *testing.T) {
+func TestConnectionsHealthDegradedReconcileOKFastpoll(t *testing.T) {
+	// Key case: latest reconcile = degraded, later fastpoll = ok → dot must stay degraded.
 	db := openTestDB(t)
 	ctx := context.Background()
+	base := time.Now()
 	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
-		Ts: time.Now(), ConnectionID: "gh", Operation: "fast_poll", Outcome: "ok",
+		Ts: base, ConnectionID: "gh", Operation: "reconcile", Outcome: "degraded",
 	})
 	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
-		Ts: time.Now(), ConnectionID: "gh", Operation: "fast_poll", Outcome: "network",
+		Ts: base.Add(time.Second), ConnectionID: "gh", Operation: "fastpoll", Outcome: "ok",
 	})
 	s := newTestServer(t, db)
 	w := do(t, s, "GET", "/connections")
@@ -327,21 +344,15 @@ func TestConnectionsHealthDegraded(t *testing.T) {
 	}
 	h := resp.Connections[0].Health
 	if h.Status != healthDegraded {
-		t.Errorf("status = %q, want degraded", h.Status)
-	}
-	if h.FailureCount != 1 {
-		t.Errorf("failure_count = %d, want 1", h.FailureCount)
+		t.Errorf("status = %q, want degraded (reconcile still owes full data)", h.Status)
 	}
 }
 
-func TestConnectionsHealthFailing(t *testing.T) {
+func TestConnectionsHealthFailingHardFault(t *testing.T) {
+	// Latest fastpoll = auth failure → dot must be failing with null last_synced_at.
 	db := openTestDB(t)
-	ctx := context.Background()
-	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
-		Ts: time.Now(), ConnectionID: "gh", Operation: "fast_poll", Outcome: "auth",
-	})
-	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
-		Ts: time.Now(), ConnectionID: "gh", Operation: "fast_poll", Outcome: "network",
+	_ = db.WriteSyncLog(context.Background(), storage.SyncLogEntry{
+		Ts: time.Now(), ConnectionID: "gh", Operation: "fastpoll", Outcome: "auth",
 	})
 	s := newTestServer(t, db)
 	w := do(t, s, "GET", "/connections")

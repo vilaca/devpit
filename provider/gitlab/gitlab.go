@@ -60,12 +60,7 @@ func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 
 // Capabilities implements sdk.Provider.
 func (p *Provider) Capabilities() sdk.Capabilities {
-	return sdk.Capabilities{
-		FastSignal:       true,
-		MergeGate:        true,
-		ChangesRequested: true,
-		ConditionalReqs:  false,
-	}
+	return sdk.Capabilities{FastSignal: true}
 }
 
 // Close implements sdk.Provider.

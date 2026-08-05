@@ -1,0 +1,11 @@
+# Synthetic INV-7 case: re-introduces the 2026-08-05 bug — deriving NeedsRebase
+# from raw divergedFromTargetBranch, which reconstructs a fast-forward-only merge
+# policy the provider never stated. Expected: VIOLATED (workflow inference).
+# The audit + skeptic should corroborate via the self-contradiction with the
+# MergeConflict block below (which deliberately refuses divergence).
+--- a/provider/gitlab/graphql.go
++++ b/provider/gitlab/graphql.go
+@@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk.ItemObservedPayload {
+ 		pl.NeedsApproval = !mr.Approved
+-		pl.NeedsRebase = mr.ShouldRebase
++		pl.NeedsRebase = mr.ShouldRebase || mr.Diverged

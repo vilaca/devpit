@@ -258,6 +258,18 @@ Noted, not committed to any release.
   design question is presentation: inline diff indicators on list rows
   vs. a dedicated "new" section vs. a per-item detail panel.
 
+- Actor attribution & activity timeline (backed by already-captured data): the
+  event log already records *who* did each thing — `Event.Actor`, plus the
+  `Reviewer` / `Approver` / `Assigner` fields on the review, approval, and
+  assignment signal payloads (`sdk/provider.go`) — and persists it, but the read
+  layer does not yet surface it. Two near-term features fall out with **no new
+  provider work**: (a) a **"who approved / who requested changes" tooltip** on the
+  approval meta-row and review chips, reading the stored actor instead of only the
+  count; and (b) an **all-events-by-timestamp activity view**, the global
+  chronological complement to the item-scoped changelog idea above. These fields
+  are deliberately retained as pre-wiring for this, not dead surface — see the
+  retained-history carve-out in `docs/Semantic_Invariants.md` (INV-4).
+
 - Activity-based decay for the Mentioned state: clear the mention once the
   provider observes the user's own reply/review after it. Requires a new
   own-activity signal from providers; preferred over time decay or a local

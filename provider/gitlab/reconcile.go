@@ -179,7 +179,6 @@ func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResu
 	return sdk.PollResult{
 		Events:        events,
 		RateRemaining: rate,
-		ItemsChanged:  len(events),
 		Degraded:      degraded,
 		Complete:      complete,
 	}, nil

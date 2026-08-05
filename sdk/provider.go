@@ -26,13 +26,14 @@ type Identity struct {
 	DisplayName string // optional; for UI only
 }
 
-// Capabilities declares which buckets and optimisations a provider supports.
-// The engine never asks a provider to produce what it declared false for.
+// Capabilities declares which optimisations a provider supports. Only the fast
+// change-signal tier is gated on this today: a provider that leaves FastSignal
+// false is served by Reconcile alone. Capability-gated bucket production (an
+// "unsupported" marker for buckets a provider cannot feed) is deferred until a
+// forge actually cannot feed a bucket the others can — see
+// ADR/ADR-0003_Provider_Plugin_Model.md.
 type Capabilities struct {
-	FastSignal       bool // cheap change-signal tier (notifications/todos)
-	MergeGate        bool // can determine Blocked / Ready to Merge
-	ChangesRequested bool // can determine Changes Requested bucket
-	ConditionalReqs  bool // ETag / If-Modified-Since (GitHub only)
+	FastSignal bool // cheap change-signal tier (notifications/todos)
 }
 
 // PollState is opaque cursor state carried across poll cycles.
@@ -57,7 +58,6 @@ type PollResult struct {
 	Events        []Event
 	State         PollState // updated cursors; engine writes to sync_cursors
 	RateRemaining *int      // from provider rate-limit headers; nil if unknown
-	ItemsChanged  int       // for sync_log
 	Degraded      bool      // true when enrichment partially failed (e.g. GraphQL complexity ceiling)
 	// Complete is true iff this was a full authoritative sweep: every role-scope's
 	// REST identity enumeration succeeded, including sole-approver discovery. It
@@ -194,7 +194,6 @@ type SignalReviewRequestedPayload struct {
 
 // SignalReviewSubmittedPayload is the payload for event_type "signal.review_submitted".
 type SignalReviewSubmittedPayload struct {
-	Verdict  string `json:"verdict"` // approved | changes_requested | commented
 	Reviewer string `json:"reviewer"`
 }
 
@@ -203,10 +202,10 @@ type SignalAssignedPayload struct {
 	Assigner string `json:"assigner,omitempty"`
 }
 
-// SignalCIFailedPayload is the payload for event_type "signal.ci_failed".
-type SignalCIFailedPayload struct {
-	CheckName string `json:"check_name,omitempty"`
-}
+// SignalCIFailedPayload is the payload for event_type "signal.ci_failed". It
+// carries no fields today — the signal's meaning is in its event type; providers
+// emit SignalCIFailedPayload{}.
+type SignalCIFailedPayload struct{}
 
 // SignalApprovedPayload is the payload for event_type "signal.approved" — a
 // reviewer's approval verdict on the item. Rank-only: it advances the item's

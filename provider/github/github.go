@@ -56,12 +56,7 @@ func apiBase(baseURL string) string {
 
 // Capabilities implements sdk.Provider.
 func (p *Provider) Capabilities() sdk.Capabilities {
-	return sdk.Capabilities{
-		FastSignal:       true,
-		MergeGate:        true,
-		ChangesRequested: true,
-		ConditionalReqs:  true,
-	}
+	return sdk.Capabilities{FastSignal: true}
 }
 
 // Close implements sdk.Provider.

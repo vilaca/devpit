@@ -295,5 +295,8 @@ watermark gaps, GitHub search lag).
   search polling is the baseline (`ADR/ADR-0004_User_Centric_Synchronization.md`).
 - Conditional ETag requests apply to GitHub only; GitLab uses `updated_after`
   watermarks (`docs/Synchronization_Engine.md`).
-- The capability table above is the source for each provider's declared
-  `sdk.Capabilities` (`docs/Provider_SDK.md`).
+- The capability table above is provider-API research — what each forge *can*
+  do. Only the "Notifications fast-signal" row maps to a declared
+  `sdk.Capabilities` field today (`FastSignal`); the other rows are not gated
+  capabilities, since capability-gated bucket production is deferred
+  (`ADR/ADR-0003_Provider_Plugin_Model.md`, `docs/Provider_SDK.md`).

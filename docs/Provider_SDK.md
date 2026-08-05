@@ -23,8 +23,11 @@ a provider needs no internal locking.
   when both fail (bot/deploy tokens). The engine classifies a no-handle or
   bad-token result as *permanent* and any other error as *transient*.
 - **Capabilities.** Declared once after identity resolution and stable for the
-  connection's life. The engine never asks a provider to produce a bucket it
-  declared unavailable; such buckets simply yield no items from that provider.
+  connection's life. Today this gates only the fast change-signal tier
+  (`FastSignal`): a provider that declares it false is served by `Reconcile`
+  alone. Capability-gated *bucket* production (an "unsupported" marker for
+  buckets a provider cannot feed) is deferred until a forge needs it
+  (`ADR/ADR-0003_Provider_Plugin_Model.md`).
 - **Two poll tiers.** `FastPoll` (~60 s) is the lightweight change-signal tier;
   `Reconcile` (~3 min) is the full identity-scoped sweep that self-heals
   anything the fast tier missed. Both take an opaque `PollState` cursor map — one

@@ -17,9 +17,11 @@ Each source system is a provider plugin implementing a common interface
 self-hosted, a base URL) is enough — no webhooks, callback URLs, or
 provider-side configuration. Identity is auto-detected via the provider's
 `/user` endpoint, with a required manual fallback when the token cannot resolve
-a usable handle (bot/deploy tokens). Plugins **declare their capabilities**;
-buckets a provider cannot feed simply produce no items, surfaced as a scoped
-"unsupported" marker rather than an error.
+a usable handle (bot/deploy tokens). Where a provider **cannot feed a bucket**
+the others can, the intended degradation is a scoped "unsupported" marker rather
+than an error — but capability-gated bucket production is **deferred** (see
+Scope): with only GitHub and GitLab, both feed every bucket, so `sdk.Capabilities`
+today declares only the `FastSignal` optimisation tier.
 
 Providers are kept **independently evolvable**: near-identical helper code (JSON
 decoding, time parsing, dedupe-key construction, HTTP status mapping) is
@@ -32,9 +34,11 @@ otherwise import in common.
 
 A common interface keeps the core provider-agnostic and lets new providers be
 added independently. Token-only setup honors the "a token is enough" promise
-(`ADR/ADR-0001_Local_First_Web_Application.md`); capability declaration lets a
-provider degrade gracefully instead of failing when its token or API version
-cannot serve a bucket. Duplication over a shared helper is chosen so a change
+(`ADR/ADR-0001_Local_First_Web_Application.md`); capability-gated degradation
+would let a provider degrade gracefully instead of failing when its token or API
+version cannot serve a bucket — deferred until a forge actually needs it, to
+avoid carrying a gating mechanism no current provider exercises. Duplication over
+a shared helper is chosen so a change
 driven by one forge's API cannot regress another provider: each plugin evolves
 in isolation, and forge APIs diverge enough (merge-gate vocabularies, ID shapes,
 rate-limit headers) that a shared abstraction would accrete conditionals anyway.
@@ -44,8 +48,11 @@ rate-limit headers) that a shared abstraction would accrete conditionals anyway.
 - The contract is `sdk/provider.go`; its semantics are specified in
   `docs/Provider_SDK.md`, and the per-provider API research (call sets, token
   guidance, merge-gate mappings) lives in `docs/Provider_API_Analysis.md`.
-- The capability set is direct code (`sdk.Capabilities`); the engine never asks
-  a provider to produce a bucket it declared unavailable.
+- The capability set is direct code (`sdk.Capabilities`), today only
+  `FastSignal` (which gates the fast change-signal poll tier). Forward
+  dependency: reintroduce capability-gated bucket production and the
+  "unsupported" marker when a third forge (e.g. Forgejo/Gitea) cannot feed a
+  bucket GitHub/GitLab do — revisit then, not before.
 - Providers may import neither `internal/*` nor each other — enforced in CI
   (`ADR/ADR-0013_Linting_and_Architecture_Enforcement.md`).
 - Accepted cost: a fix to genuinely shared logic must be applied to each

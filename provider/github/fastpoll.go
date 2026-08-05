@@ -91,7 +91,6 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		Events:        events,
 		State:         out,
 		RateRemaining: rate,
-		ItemsChanged:  len(events),
 		Degraded:      degraded,
 	}, nil
 }

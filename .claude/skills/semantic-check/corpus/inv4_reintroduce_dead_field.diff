@@ -1,0 +1,20 @@
+# Synthetic INV-4 case: adds an sdk field that one provider populates and no
+# downstream reader (internal/attention, internal/api) consumes. Expected: VIOLATED
+# (produced-but-unread, and one-sided — the other provider cannot populate it).
+--- a/sdk/provider.go
++++ b/sdk/provider.go
+@@ type ItemObservedPayload struct {
+ 	// Labels are the provider-side labels on the item (names only).
+ 	Labels []string
++	// ReviewerCount is the number of reviewers assigned to the item.
++	ReviewerCount int
+ }
+--- a/provider/gitlab/normalize.go
++++ b/provider/gitlab/normalize.go
+@@ func (p *Provider) observed(mr glMR) sdk.ItemObservedPayload {
+ 	pl.Labels = labelNames(mr.Labels)
++	pl.ReviewerCount = len(mr.Reviewers.Nodes)
+ 	return pl
+ }
+# No assignment in provider/github/normalize.go and no read in
+# internal/attention/fold.go or internal/api — the field is dead on arrival.

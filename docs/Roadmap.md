@@ -26,8 +26,7 @@ The complete single-user product for two providers.
   (ADR-0004).
 - Read-only: deep-link out; no snooze/dismiss; local "Handle next" flag
   (ADR-0017).
-- Graceful failure UX: per-provider health + rolling 60m failure count
-  (ADR-0018).
+- Graceful failure UX: per-provider health (ADR-0018).
 - User-facing sync/poll log with progressive disclosure (ADR-0018).
 - Frontend: Svelte SPA over REST + SSE (ADR-0008, ADR-0010).
 - Secrets: plaintext config with 0600 + least-privilege scopes (ADR-0019).

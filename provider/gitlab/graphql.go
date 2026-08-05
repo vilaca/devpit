@@ -15,7 +15,7 @@ import (
 )
 
 const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
-	`approved shouldBeRebased divergedFromTargetBranch detailedMergeStatus ` +
+	`approved shouldBeRebased detailedMergeStatus ` +
 	`headPipeline{status} approvedBy{count nodes{username}} ` +
 	`reviewers{nodes{username mergeRequestInteraction{reviewState}}}}}`
 
@@ -126,7 +126,6 @@ type glPipeline struct {
 type glGraphQLMR struct {
 	Approved     bool        `json:"approved"`
 	ShouldRebase bool        `json:"shouldBeRebased"`
-	Diverged     bool        `json:"divergedFromTargetBranch"`
 	DMS          string      `json:"detailedMergeStatus"`
 	HeadPipeline *glPipeline `json:"headPipeline"`
 	ApprovedBy   struct {
@@ -514,7 +513,12 @@ func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPay
 func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk.ItemObservedPayload {
 	if !pl.Draft {
 		pl.NeedsApproval = !mr.Approved
-		pl.NeedsRebase = mr.ShouldRebase || mr.Diverged
+		// Only shouldBeRebased — GitLab's own verdict that a rebase is required.
+		// We deliberately do not derive "needs rebase" from branch divergence
+		// (divergedFromTargetBranch, not fetched): nearly every open MR is behind
+		// its target, and divergence implies a rebase only under a fast-forward-only
+		// merge policy DevPit must not assume (same reasoning as MergeConflict below).
+		pl.NeedsRebase = mr.ShouldRebase
 		pl.FailingChecks = isPipelineRed(mr.HeadPipeline)
 		pl.ChecksRunning = isPipelineRunning(mr.HeadPipeline)
 		pl.ApprovalsCount = mr.ApprovedBy.Count
@@ -533,9 +537,9 @@ func applyGraphQL(pl sdk.ItemObservedPayload, mr glGraphQLMR, handle string) sdk
 	// fast-forward/semi-linear and the branch is behind, in which case GitLab's
 	// conflict verdict cannot separate a real conflict from a merge base the
 	// rebase GitLab is already offering would move — so DevPit shows the rebase
-	// marker and lets that action decide. Only shouldBeRebased qualifies here,
-	// never divergedFromTargetBranch: divergence is true of nearly every open MR
-	// and would erase the marker outright.
+	// marker and lets that action decide. Only shouldBeRebased qualifies here; we
+	// likewise never let branch divergence erase the marker — nearly every open
+	// MR is diverged, so it would erase the marker outright.
 	pl.MergeConflict = mr.DMS == glDMSConflict && !mr.ShouldRebase
 	// review_decision drives the author's changes-requested chip; it is not a
 	// merge-gate fact, so (like GitHub) it is recorded regardless of draft.

@@ -595,15 +595,10 @@ func TestApplyGraphQLNeedsRebaseOverride(t *testing.T) {
 
 	// (d) shouldBeRebased drops the conflict marker: on a fast-forward-only
 	// project a behind branch reports CONFLICT whether or not one exists, and the
-	// rebase GitLab offers is the action either way. divergedFromTargetBranch
-	// alone must NOT drop it — nearly every open MR is diverged.
-	rebasable := glGraphQLMR{DMS: glDMSConflict, ShouldRebase: true, Diverged: true}
+	// rebase GitLab offers is the action either way.
+	rebasable := glGraphQLMR{DMS: glDMSConflict, ShouldRebase: true}
 	if pl := applyGraphQL(sdk.ItemObservedPayload{MergeConflict: true}, rebasable, "octocat"); pl.MergeConflict {
 		t.Error("MergeConflict should be false when shouldBeRebased: the rebase marker owns this row")
-	}
-	diverged := glGraphQLMR{DMS: glDMSConflict, Diverged: true}
-	if pl := applyGraphQL(sdk.ItemObservedPayload{}, diverged, "octocat"); !pl.MergeConflict {
-		t.Error("MergeConflict should survive divergedFromTargetBranch alone")
 	}
 
 	// (e) mergeability not computed yet ("checking"/"unchecked") is not a
@@ -878,11 +873,10 @@ func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, err
 	for i := range count {
 		data[fmt.Sprintf("a%d", i)] = map[string]any{
 			"mergeRequest": map[string]any{
-				"approved":                 true,
-				"shouldBeRebased":          false,
-				"divergedFromTargetBranch": false,
-				"headPipeline":             nil,
-				"approvedBy":               map[string]any{"count": 1, "nodes": []any{map[string]any{"username": "octocat"}}},
+				"approved":        true,
+				"shouldBeRebased": false,
+				"headPipeline":    nil,
+				"approvedBy":      map[string]any{"count": 1, "nodes": []any{map[string]any{"username": "octocat"}}},
 			},
 		}
 	}
@@ -1357,12 +1351,11 @@ func (rt *verdictBaselineRT) RoundTrip(req *http.Request) (*http.Response, error
 			}
 			data[fmt.Sprintf("a%d", i)] = map[string]any{
 				"mergeRequest": map[string]any{
-					"approved":                 len(rt.graphqlApprovers) > 0,
-					"shouldBeRebased":          false,
-					"divergedFromTargetBranch": false,
-					"draft":                    rt.graphqlDraft,
-					"approvedBy":               map[string]any{"count": len(rt.graphqlApprovers), "nodes": approvedNodes},
-					"reviewers":                map[string]any{"nodes": reviewerNodes},
+					"approved":        len(rt.graphqlApprovers) > 0,
+					"shouldBeRebased": false,
+					"draft":           rt.graphqlDraft,
+					"approvedBy":      map[string]any{"count": len(rt.graphqlApprovers), "nodes": approvedNodes},
+					"reviewers":       map[string]any{"nodes": reviewerNodes},
 				},
 			}
 		}

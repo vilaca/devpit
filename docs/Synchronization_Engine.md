@@ -95,6 +95,26 @@ classification the engine applies:
 | storage | local write failure | Local storage error |
 | unexpected | any other odd status | Unexpected status |
 
+## Health dot derivation
+
+The connection health dot (served by `internal/api`) reflects the **worst of
+each operation's latest outcome**: for each distinct operation (`fastpoll`,
+`reconcile`), the engine reads the most-recent sync_log row and maps its
+outcome to a status; the worst across all operations wins.
+
+| Latest outcome for an operation | Dot contribution |
+|---|---|
+| `ok` | ok (green) |
+| `degraded` | degraded (amber) — enrichment incomplete, will re-poll |
+| anything else (`auth`, `rate_limited`, `storage`, `network`, …) | failing (red) |
+
+When no rows exist yet (never synced), the dot is `ok` with `last_synced_at: null`.
+
+Worst-of-**per-operation** (not single-last-row) is the whole point: a
+`degraded` reconcile holds the dot amber through interleaved `ok` fastpolls
+until the *next reconcile* succeeds — it still owes full data. Single-last-row
+would flicker green↔amber as the two cadences interleave.
+
 **Shutdown is not a failure**: when the context is cancelled the cycle writes
 no row and applies no backoff — it is a clean exit. Per-call detail rows (a
 child row per HTTP call under a failed cycle) are **Deferred**; v0.1 records

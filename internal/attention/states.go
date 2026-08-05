@@ -51,7 +51,6 @@ const (
 	roleSoleApprover         = "sole_approver"
 
 	// my_review_state values.
-	reviewStateRequested        = "requested"
 	reviewStateReviewed         = "reviewed"
 	reviewStateApproved         = "approved"
 	reviewStateChangesRequested = "changes_requested"
@@ -86,8 +85,11 @@ func matches(s State, f sdk.ItemObservedPayload, roles map[string]bool, hasMenti
 		return (roles[roleAuthor] && f.ReviewDecision == decisionChangesRequested) ||
 			(roles[roleReviewer] && f.MyReviewState == reviewStateChangesRequested)
 	case StateReviewRequested:
-		return (roles[roleReviewer] && f.MyReviewState == reviewStateRequested) ||
-			(roles[roleSoleApprover] && !f.Draft && !reviewIsDone(f.MyReviewState))
+		// A pending reviewer (or sole approver) is owed a review. Providers emit an
+		// empty my_review_state for a requested-but-not-yet-reviewed reviewer (they
+		// never emit a literal "requested"), so the trigger is "not yet done", not a
+		// specific value. A draft isn't ready for review, so it never fires here.
+		return (roles[roleReviewer] || roles[roleSoleApprover]) && !f.Draft && !reviewIsDone(f.MyReviewState)
 	case StateBlocked:
 		return (roles[roleAuthor] || roles[roleSoleApprover]) && !f.Draft && f.Gate == gateBlocked
 	case StateMentioned:

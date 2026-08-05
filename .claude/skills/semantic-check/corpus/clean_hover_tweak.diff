@@ -1,0 +1,8 @@
+# RESTRAINT case: a benign hover-text change. It touches no signal condition, no
+# ranking input, no sdk field, no provider query. Expected: HOLDS across every
+# invariant — the audit must stay silent.
+--- a/frontend/src/lib/StateTags.svelte
++++ b/frontend/src/lib/StateTags.svelte
+@@ hover text for the age tag
+-	title={`stale for ${onset}`}
++	title={`stale for ${onset} — idle since ${lastUpdated}`}

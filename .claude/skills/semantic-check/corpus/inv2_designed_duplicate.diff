@@ -1,0 +1,24 @@
+# RESTRAINT case: adds an identical small helper to BOTH providers rather than a
+# shared provider/* package. This is the ADR-0003 duplication-by-design pattern.
+# Expected: HOLDS — the audit must NOT flag identical copies as WEAKENED; a
+# shared helper is what the ADR forbids, so duplicating is the correct move.
+--- a/provider/github/normalize.go
++++ b/provider/github/normalize.go
+@@
++// shortSHA truncates a commit SHA to its first 8 characters for display.
++func shortSHA(sha string) string {
++	if len(sha) < 8 {
++		return sha
++	}
++	return sha[:8]
++}
+--- a/provider/gitlab/normalize.go
++++ b/provider/gitlab/normalize.go
+@@
++// shortSHA truncates a commit SHA to its first 8 characters for display.
++func shortSHA(sha string) string {
++	if len(sha) < 8 {
++		return sha
++	}
++	return sha[:8]
++}

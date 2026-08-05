@@ -1,0 +1,46 @@
+# Regression corpus for /semantic-check. See README.md.
+# Each case pins a verdict the audit must reproduce.
+cases:
+  # The 2026-08-05 audit's two VIOLATED findings are now FIXED in-tree — so they
+  # are pinned as synthetic `diff` regression fixtures rather than `live` cases.
+  # The tree currently has no known live violation.
+  - id: inv4-reintroduce-dead-field
+    invariant: INV-4
+    kind: diff
+    file: inv4_reintroduce_dead_field.diff
+    expect: VIOLATED
+    note: >
+      Adds an sdk field one provider populates and nothing downstream reads —
+      the canonical produced-but-unread shape (the shape of the pruned
+      ItemsChanged / capability flags). Guards against the Hunt going blind to
+      new dead surface.
+
+  - id: inv7-reintroduce-diverged-or
+    invariant: INV-7
+    kind: diff
+    file: inv7_reintroduce_diverged_or.diff
+    expect: VIOLATED
+    note: >
+      Re-introduces the 2026-08-05 needs_rebase bug (NeedsRebase from raw
+      divergedFromTargetBranch = fast-forward-only policy inference). Pins the
+      exact regression the fix closed.
+
+  - id: inv2-designed-duplicate
+    invariant: INV-2
+    kind: diff
+    file: inv2_designed_duplicate.diff
+    expect: HOLDS
+    note: >
+      RESTRAINT test. Adds an identical helper to BOTH providers rather than a
+      shared provider/* package — the ADR-0003 duplication-by-design pattern.
+      The audit must NOT flag this WEAKENED just because the copies are
+      identical; if it does, the skeptic pass is too eager.
+
+  - id: clean-hover-tweak
+    invariant: ALL
+    kind: diff
+    file: clean_hover_tweak.diff
+    expect: HOLDS
+    note: >
+      RESTRAINT test. A benign hover-text change that touches no invariant's
+      meaning. The audit must stay silent across every invariant.

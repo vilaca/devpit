@@ -98,7 +98,7 @@ classification the engine applies:
 ## Health dot derivation
 
 The connection health dot (served by `internal/api`) reflects the **worst of
-each operation's latest outcome**: for each distinct operation (`fastpoll`,
+each operation's latest outcome**: for each distinct operation (`fast_poll`,
 `reconcile`), the engine reads the most-recent sync_log row and maps its
 outcome to a status; the worst across all operations wins.
 
@@ -111,8 +111,8 @@ outcome to a status; the worst across all operations wins.
 When no rows exist yet (never synced), the dot is `ok` with `last_synced_at: null`.
 
 Worst-of-**per-operation** (not single-last-row) is the whole point: a
-`degraded` reconcile holds the dot amber through interleaved `ok` fastpolls
-until the *next reconcile* succeeds — it still owes full data. Single-last-row
+`degraded` reconcile holds the dot amber through interleaved `ok` `fast_poll`
+cycles until the *next reconcile* succeeds — it still owes full data. Single-last-row
 would flicker green↔amber as the two cadences interleave.
 
 **Shutdown is not a failure**: when the context is cancelled the cycle writes

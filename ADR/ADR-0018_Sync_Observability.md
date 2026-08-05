@@ -24,7 +24,7 @@ provider last failed.
   failure (`auth`, `rate_limited`, `storage`, or other non-ok/non-degraded
   outcome). Worst-of-per-operation (not single-last-row) makes green mean "all
   degraded resolved": a `degraded` reconcile holds the dot amber through
-  interleaved `ok` fastpolls until the next reconcile succeeds.
+  interleaved `ok` `fast_poll` cycles until the next reconcile succeeds.
 - **Graceful degradation**: on failure keep showing the last good data marked
   *stale*, plus a non-blocking banner naming the provider and cause. One
   provider failing never blanks the others.
@@ -35,8 +35,8 @@ provider last failed.
   connection; on failure the individual calls, statuses, retries, and
   next-retry are captured and shown on expand. Bounded by user-initiated
   cleanup plus an optional cap.
-- **Progressive disclosure**: health dot → rolling failure count → per-cycle
-  log → expanded per-call detail.
+- **Progressive disclosure**: health dot → per-cycle log → expanded per-call
+  detail.
 
 ## Rationale
 

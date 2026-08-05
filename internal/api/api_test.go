@@ -305,7 +305,7 @@ func TestConnectionsHealthAllOK(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
 	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
-		Ts: time.Now(), ConnectionID: "gh", Operation: "fastpoll", Outcome: "ok",
+		Ts: time.Now(), ConnectionID: "gh", Operation: "fast_poll", Outcome: "ok",
 	})
 	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
 		Ts: time.Now(), ConnectionID: "gh", Operation: "reconcile", Outcome: "ok",
@@ -326,7 +326,7 @@ func TestConnectionsHealthAllOK(t *testing.T) {
 }
 
 func TestConnectionsHealthDegradedReconcileOKFastpoll(t *testing.T) {
-	// Key case: latest reconcile = degraded, later fastpoll = ok → dot must stay degraded.
+	// Key case: latest reconcile = degraded, later fast_poll = ok → dot must stay degraded.
 	db := openTestDB(t)
 	ctx := context.Background()
 	base := time.Now()
@@ -334,7 +334,7 @@ func TestConnectionsHealthDegradedReconcileOKFastpoll(t *testing.T) {
 		Ts: base, ConnectionID: "gh", Operation: "reconcile", Outcome: "degraded",
 	})
 	_ = db.WriteSyncLog(ctx, storage.SyncLogEntry{
-		Ts: base.Add(time.Second), ConnectionID: "gh", Operation: "fastpoll", Outcome: "ok",
+		Ts: base.Add(time.Second), ConnectionID: "gh", Operation: "fast_poll", Outcome: "ok",
 	})
 	s := newTestServer(t, db)
 	w := do(t, s, "GET", "/connections")
@@ -349,10 +349,10 @@ func TestConnectionsHealthDegradedReconcileOKFastpoll(t *testing.T) {
 }
 
 func TestConnectionsHealthFailingHardFault(t *testing.T) {
-	// Latest fastpoll = auth failure → dot must be failing with null last_synced_at.
+	// Latest fast_poll = auth failure → dot must be failing with null last_synced_at.
 	db := openTestDB(t)
 	_ = db.WriteSyncLog(context.Background(), storage.SyncLogEntry{
-		Ts: time.Now(), ConnectionID: "gh", Operation: "fastpoll", Outcome: "auth",
+		Ts: time.Now(), ConnectionID: "gh", Operation: "fast_poll", Outcome: "auth",
 	})
 	s := newTestServer(t, db)
 	w := do(t, s, "GET", "/connections")

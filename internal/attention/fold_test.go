@@ -78,6 +78,19 @@ func TestFoldStateConditions(t *testing.T) {
 			want: []State{StateReviewRequested},
 		},
 		{
+			// Pending reviewer as providers actually emit it: a requested-but-not-
+			// yet-reviewed reviewer maps to an empty my_review_state (GitLab UNREVIEWED/
+			// REVIEW_STARTED, GitHub no verdict), never the literal "requested". This
+			// must still surface as review_requested.
+			name: "reviewer pending (empty my_review_state): review_requested",
+			facts: func(f sdk.ItemObservedPayload) sdk.ItemObservedPayload {
+				f.MyRoles = []string{"reviewer"}
+				f.MyReviewState = ""
+				return f
+			},
+			want: []State{StateReviewRequested},
+		},
+		{
 			name: "changes requested",
 			facts: func(f sdk.ItemObservedPayload) sdk.ItemObservedPayload {
 				f.MyRoles = []string{"author"}

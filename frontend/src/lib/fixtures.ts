@@ -49,8 +49,6 @@ export function makeConnection(
     health: {
       status,
       last_synced_at: "2026-07-16T00:00:00Z",
-      failure_count: 0,
-      failure_window_minutes: 60,
     },
     ...overrides,
   };

@@ -66,20 +66,29 @@ func (db *DB) ReadSyncLog(ctx context.Context, connectionID string, limit int) (
 	return scanSyncLogRows(rows)
 }
 
-// ReadSyncLogSince returns all cycle rows for connectionID with ts >= since,
-// newest first. Used by internal/api to compute per-connection health.
-func (db *DB) ReadSyncLogSince(ctx context.Context, connectionID string, since time.Time) ([]SyncLogEntry, error) {
-	rows, err := db.read.QueryContext(ctx, `
-		SELECT id, ts, connection_id, operation, outcome, http_status,
-			items_changed, rate_remaining, retries, next_retry, error
-		FROM sync_log WHERE connection_id = ? AND ts >= ?
-		ORDER BY id DESC`,
-		connectionID, since.UTC().Format(timeFormat))
+// LatestOutcomesPerOperation returns the outcome of the most recent sync_log
+// row for each distinct operation for connectionID. Returns an empty slice when
+// no rows exist. Used by internal/api to compute per-connection health.
+func (db *DB) LatestOutcomesPerOperation(ctx context.Context, connectionID string) ([]SyncLogEntry, error) {
+	// SQLite guarantees that non-aggregated columns come from the row that
+	// holds the MAX value, making outcome deterministic here.
+	rows, err := db.read.QueryContext(ctx,
+		`SELECT operation, outcome, MAX(id) FROM sync_log WHERE connection_id = ? GROUP BY operation`,
+		connectionID)
 	if err != nil {
-		return nil, fmt.Errorf("read sync_log since: %w", err)
+		return nil, fmt.Errorf("latest outcomes per operation: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	return scanSyncLogRows(rows)
+	var entries []SyncLogEntry
+	for rows.Next() {
+		var e SyncLogEntry
+		var maxID int64
+		if err := rows.Scan(&e.Operation, &e.Outcome, &maxID); err != nil {
+			return nil, fmt.Errorf("scan latest outcomes: %w", err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }
 
 // LastSyncedAt returns the timestamp of the most recent successful poll cycle

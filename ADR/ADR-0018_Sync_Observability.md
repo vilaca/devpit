@@ -16,9 +16,15 @@ provider last failed.
 
 ## Decision
 
-- **Per-provider health**: a health dot, "last synced X ago", and a rolling
-  failure count over a fixed recent window (60 minutes), derived from the sync
-  log. The window is a fixed constant, not user-configurable.
+- **Per-provider health**: a health dot and "last synced X ago", derived from
+  the sync log. The dot reflects the **worst of each operation's latest
+  outcome**: `ok` when all operations' most-recent rows are `ok`; `degraded`
+  (amber) when any operation's latest row is `degraded` (enrichment incomplete,
+  will re-poll); `failing` (red) when any operation's latest row is a hard
+  failure (`auth`, `rate_limited`, `storage`, or other non-ok/non-degraded
+  outcome). Worst-of-per-operation (not single-last-row) makes green mean "all
+  degraded resolved": a `degraded` reconcile holds the dot amber through
+  interleaved `ok` fastpolls until the next reconcile succeeds.
 - **Graceful degradation**: on failure keep showing the last good data marked
   *stale*, plus a non-blocking banner naming the provider and cause. One
   provider failing never blanks the others.

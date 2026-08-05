@@ -9,10 +9,6 @@ import (
 	"github.com/vilaca/devpit/internal/web"
 )
 
-// failureWindowMinutes is the rolling window used to compute connection health.
-// Fixed at 60 minutes per ADR-0018; not user-configurable.
-const failureWindowMinutes = 60
-
 // syncLogReadLimit caps how many sync_log rows GET /sync-log returns.
 // The table is user-bounded (no automatic compaction), so this is a safety cap.
 const syncLogReadLimit = 10_000

@@ -82,8 +82,6 @@ export type HealthStatus = "ok" | "degraded" | "failing";
 export interface HealthInfo {
   status: HealthStatus;
   last_synced_at: string | null;
-  failure_count: number;
-  failure_window_minutes: number;
 }
 
 export interface Connection {

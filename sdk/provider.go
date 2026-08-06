@@ -58,12 +58,12 @@ type PollResult struct {
 	Events        []Event
 	State         PollState // updated cursors; engine writes to sync_cursors
 	RateRemaining *int      // from provider rate-limit headers; nil if unknown
-	Degraded      bool      // true when enrichment partially failed (e.g. GraphQL complexity ceiling)
+	Degraded      bool      // true when enrichment partially failed (partial result; engine logs the cause)
 	// Complete is true iff this was a full authoritative sweep: every role-scope's
 	// REST identity enumeration succeeded, including sole-approver discovery. It
 	// gates the engine's reap of items that left the sweep (ADR-0024) and is
 	// independent of Degraded — the reap set is the REST identity set, so a
-	// GraphQL enrichment failure never suppresses a removal. Only Reconcile sets
+	// an enrichment failure never suppresses a removal. Only Reconcile sets
 	// it; FastPoll leaves it false (a partial change-signal poll never reaps).
 	Complete bool
 }
@@ -177,7 +177,7 @@ type ItemObservedPayload struct {
 	ApprovalsCount        int      `json:"approvals_count,omitempty"` // -1=unknown, 0=none/hide, N=show
 	ProviderUpdatedAt     string   `json:"provider_updated_at"`
 	TicketKeys            []string `json:"ticket_keys,omitempty"`
-	Labels                []string `json:"labels,omitempty"` // provider label names (GitLab MR / GitHub PR)
+	Labels                []string `json:"labels,omitempty"` // forge-assigned label names
 }
 
 // item.removed carries no payload (Payload: nil).

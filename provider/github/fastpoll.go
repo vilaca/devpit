@@ -139,11 +139,11 @@ func (p *Provider) signalsFromNotification(n ghNotification, nid string) []sdk.E
 	}
 	switch n.Reason {
 	case "mention":
-		return []sdk.Event{base("signal.mentioned", sdk.SignalMentionedPayload{Direct: true})}
+		return []sdk.Event{base("signal.mentioned", sdk.SignalMentionedPayload{})}
 	case "team_mention":
-		return []sdk.Event{base("signal.mentioned", sdk.SignalMentionedPayload{Direct: false})}
+		return []sdk.Event{base("signal.mentioned", sdk.SignalMentionedPayload{})}
 	case "review_requested":
-		return []sdk.Event{base("signal.review_requested", sdk.SignalReviewRequestedPayload{Direct: true})}
+		return []sdk.Event{base("signal.review_requested", sdk.SignalReviewRequestedPayload{})}
 	case "assign":
 		return []sdk.Event{base("signal.assigned", sdk.SignalAssignedPayload{})}
 	case "ci_activity":

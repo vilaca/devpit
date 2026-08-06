@@ -183,14 +183,10 @@ type ItemObservedPayload struct {
 // item.removed carries no payload (Payload: nil).
 
 // SignalMentionedPayload is the payload for event_type "signal.mentioned".
-type SignalMentionedPayload struct {
-	Direct bool `json:"direct"`
-}
+type SignalMentionedPayload struct{}
 
 // SignalReviewRequestedPayload is the payload for event_type "signal.review_requested".
-type SignalReviewRequestedPayload struct {
-	Direct bool `json:"direct"`
-}
+type SignalReviewRequestedPayload struct{}
 
 // SignalReviewSubmittedPayload is the payload for event_type "signal.review_submitted".
 type SignalReviewSubmittedPayload struct {

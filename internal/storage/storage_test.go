@@ -627,9 +627,9 @@ func TestLatestItemFacts(t *testing.T) {
 		{ObjectType: "merge_request", NativeID: "g/p#4", EventType: "item.observed",
 			DedupeKey: "o4", Payload: sdk.ItemObservedPayload{State: "open"}}, // role-less
 		{ObjectType: "merge_request", NativeID: "g/p#4", EventType: "signal.mentioned",
-			DedupeKey: "s4", Payload: sdk.SignalMentionedPayload{Direct: true}},
+			DedupeKey: "s4", Payload: sdk.SignalMentionedPayload{}},
 		{ObjectType: "merge_request", NativeID: "g/p#5", EventType: "signal.mentioned",
-			DedupeKey: "s5", Payload: sdk.SignalMentionedPayload{Direct: true}},
+			DedupeKey: "s5", Payload: sdk.SignalMentionedPayload{}},
 	}
 	if _, err := db.WriteEvents(ctx, "c1", events); err != nil {
 		t.Fatalf("WriteEvents: %v", err)

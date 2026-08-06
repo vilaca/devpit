@@ -145,11 +145,11 @@ func signalFromTodo(t glTodo, nid string) *sdk.Event {
 	}
 	switch t.ActionName {
 	case "mentioned":
-		return base("signal.mentioned", sdk.SignalMentionedPayload{Direct: false})
+		return base("signal.mentioned", sdk.SignalMentionedPayload{})
 	case "directly_addressed":
-		return base("signal.mentioned", sdk.SignalMentionedPayload{Direct: true})
+		return base("signal.mentioned", sdk.SignalMentionedPayload{})
 	case "review_requested":
-		return base("signal.review_requested", sdk.SignalReviewRequestedPayload{Direct: true})
+		return base("signal.review_requested", sdk.SignalReviewRequestedPayload{})
 	case "review_submitted":
 		return base("signal.review_submitted", sdk.SignalReviewSubmittedPayload{Reviewer: t.Author.Username})
 	case "assigned":

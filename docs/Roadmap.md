@@ -268,7 +268,17 @@ Noted, not committed to any release.
   count; and (b) an **all-events-by-timestamp activity view**, the global
   chronological complement to the item-scoped changelog idea above. These fields
   are deliberately retained as pre-wiring for this, not dead surface — see the
-  retained-history carve-out in `docs/Semantic_Invariants.md` (INV-4).
+  pre-wiring carve-out in `docs/Semantic_Invariants.md` (INV-4).
+
+- Show the resolved account display name (backed by already-captured data):
+  `ResolveIdentity` already returns each connection's real name via
+  `sdk.Identity.DisplayName` (`sdk/provider.go`) — e.g. "Ada Lovelace" rather
+  than the `alovelace` handle — populated by both providers but currently
+  discarded by the engine, which keeps only the handle. A near-term feature
+  surfaces it to label connections by real name (sidebar / account chip / handle
+  tooltip), with **no new provider work**. The field is deliberately retained as
+  pre-wiring for this, not dead surface — see the pre-wiring carve-out in
+  `docs/Semantic_Invariants.md` (INV-4).
 
 - Activity-based decay for the Mentioned state: clear the mention once the
   provider observes the user's own reply/review after it. Requires a new

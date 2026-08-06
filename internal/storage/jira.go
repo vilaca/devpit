@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -48,16 +47,14 @@ func (db *DB) GetJiraTickets(ctx context.Context, keys []string) (map[string]Jir
 	if len(keys) == 0 {
 		return map[string]JiraTicket{}, nil
 	}
-	placeholders := strings.Repeat("?,", len(keys))
-	placeholders = placeholders[:len(placeholders)-1]
 	args := make([]any, len(keys))
 	for i, k := range keys {
 		args[i] = k
 	}
-	//nolint:gosec // placeholders is built from len(keys) "?" literals, not user input
+	//nolint:gosec // inClause builds "?" literals, not user input
 	rows, err := db.read.QueryContext(ctx,
 		`SELECT key, status, summary, assignee, url, fetched_at, fetch_error
-		 FROM jira_tickets WHERE key IN (`+placeholders+`)`, args...)
+		 FROM jira_tickets WHERE key IN (`+inClause(len(keys))+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("get jira tickets: %w", err)
 	}
@@ -96,15 +93,13 @@ func (db *DB) PruneJiraTickets(ctx context.Context, keep []string) error {
 		}
 		return nil
 	}
-	placeholders := strings.Repeat("?,", len(keep))
-	placeholders = placeholders[:len(placeholders)-1]
 	args := make([]any, len(keep))
 	for i, k := range keep {
 		args[i] = k
 	}
-	//nolint:gosec // placeholders is built from len(keep) "?" literals, not user input
+	//nolint:gosec // inClause builds "?" literals, not user input
 	if _, err := db.write.ExecContext(ctx,
-		`DELETE FROM jira_tickets WHERE key NOT IN (`+placeholders+`)`, args...); err != nil {
+		`DELETE FROM jira_tickets WHERE key NOT IN (`+inClause(len(keep))+`)`, args...); err != nil {
 		return fmt.Errorf("prune jira tickets: %w", err)
 	}
 	return nil

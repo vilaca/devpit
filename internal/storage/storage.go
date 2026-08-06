@@ -134,3 +134,9 @@ func nullStr(p *string) any {
 	}
 	return *p
 }
+
+// inClause returns n comma-separated "?" placeholders for a SQL IN (...) list.
+func inClause(n int) string {
+	s := strings.Repeat("?,", n)
+	return s[:len(s)-1]
+}

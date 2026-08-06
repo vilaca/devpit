@@ -23,7 +23,7 @@ export type State =
 export type Filter = State | "mine";
 
 // Canonical highest-first precedence, matching internal/attention/states.go.
-// Used for bucket ordering and as a client-side sort fallback.
+// Used for bucket filter ordering and ?bucket= validation.
 export const STATE_PRECEDENCE: State[] = [
   "changes_requested",
   "review_requested",

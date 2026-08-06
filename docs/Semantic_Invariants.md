@@ -154,15 +154,18 @@ standard library.
 write-only surface (set, never read), no read-never surface (declared, never
 populated), no capability flag no provider honors.
 
-**Accepted exception — retained event-log history.** An event-log field a
-provider populates but the read layer does not yet consume is *not* dead surface
-**iff** it is deliberately retained as pre-wiring for a feature in
-`docs/Roadmap.md` and links there. The events-first model
-(`ADR/ADR-0006_Normalized_Data_Model.md`) keeps richer history than the current
-fold reads on purpose. This carve-out is falsifiable, not a loophole: a
-populated-but-unread field with **no** Roadmap link is still a finding. (Current
-holders: `Event.Actor` and the review/approval/assignment payload actor fields —
-see the "Actor attribution & activity timeline" roadmap entry.)
+**Accepted exception — pre-wiring for a Roadmap feature.** A field a provider
+populates but the read layer does not yet consume is *not* dead surface **iff**
+it is deliberately retained as pre-wiring for a feature in `docs/Roadmap.md` and
+links there. Two shapes qualify: (1) retained event-log history — the
+events-first model (`ADR/ADR-0006_Normalized_Data_Model.md`) keeps richer history
+than the current fold reads on purpose; and (2) a connection fact that is
+resolved but not yet surfaced, awaiting its UI consumer. This carve-out is
+falsifiable, not a loophole: a populated-but-unread field with **no** Roadmap
+link is still a finding. (Current holders: `Event.Actor` and the
+review/approval/assignment payload actor fields — see the "Actor attribution &
+activity timeline" roadmap entry; and `Identity.DisplayName` — see the "Show the
+resolved account display name" roadmap entry.)
 
 **Home:** `ADR/ADR-0003_Provider_Plugin_Model.md` (capabilities are direct code,
 "the engine never asks a provider to produce a bucket it declared unavailable");

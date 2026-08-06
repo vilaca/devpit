@@ -49,8 +49,8 @@ type WorkItem struct {
 	Repo                  string               `json:"repo"`
 	Author                string               `json:"author"`
 	Draft                 bool                 `json:"draft"`
-	States                []State              `json:"states"`          // precedence order; States[0] ranks the item
-	Muted                 bool                 `json:"muted,omitempty"` // reviewed-done: demoted + de-emphasized
+	States                []State              `json:"states"`          // chip order only; States[0] leads (ADR-0016)
+	Muted                 bool                 `json:"muted,omitempty"` // de-emphasized only; rank unaffected (ADR-0016)
 	Flagged               bool                 `json:"flagged"`         // pinned in the "Handle next" zone
 	Stale                 bool                 `json:"stale"`
 	Old                   bool                 `json:"old"`

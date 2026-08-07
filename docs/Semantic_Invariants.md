@@ -189,9 +189,13 @@ resolved account display name" roadmap entry.)
 ## INV-5 — Signals mean attention, markers mean diagnosis
 
 **Claim:** A signal answers "does this need *me* now"; a marker/diagnostic badge
-explains data state (why an item is blocked, how stale it is). No signal encodes
-a gate diagnostic, and no marker moves an item in the ranking — the single
-exception being the deliberate age-band tiering.
+explains data state (why an item is blocked, how stale it is). No signal renders
+a gate diagnostic as a *chip*, and nothing moves an item in the ranking except
+two deliberate, ADR-0016-sanctioned levers: the age-band tiering (a marker that
+tiers the list) and `signal.ci_failed` (a chip-less rank-only nudge that
+resurfaces a broken build's PR by recency, and is suppressed once the item is
+old — ADR-0016 2026-08-07). Any *other* signal carrying a gate reason, or any
+*other* diagnostic feeding the ranking, is a violation.
 
 **Home:** `ADR/ADR-0016_Presentation_And_Ranking.md` ("Markers carry gate
 diagnostics; signals never do"; "cosmetic markers never move items").
@@ -200,9 +204,12 @@ diagnostics; signals never do"; "cosmetic markers never move items").
 
 **Hunt:**
 - (a) A marker/diagnostic value read inside the ranking sort (`sortItems` in
-  `fold.go`) or feeding an item's rank timestamp — other than the age band.
+  `fold.go`) or feeding an item's rank timestamp — other than the age band and
+  the sanctioned `signal.ci_failed` nudge (gated by `rankingTimeExcludingCIFailed`
+  so it never resurrects an old item).
 - (b) A signal's firing condition or payload carrying a gate *reason* (conflict,
-  missing-approval, policy) that belongs on a marker.
+  missing-approval, policy) that belongs on a marker — `signal.ci_failed` is the
+  one sanctioned exception, and only because it adds no chip or reason surface.
 - (c) A new sort key, tiebreak, or promotion/demotion driven by a cosmetic fact.
 - (d) A diagnostic badge that fires without a provider-reported verdict —
   reconstructed from raw facts plus org rules (the parity principle).

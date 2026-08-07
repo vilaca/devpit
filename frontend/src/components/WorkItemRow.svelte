@@ -51,6 +51,7 @@
   class:mine
   class:muted={item.muted}
   class:old={item.old}
+  class:checking={item.states.includes("checking")}
   onclick={() => onFocus(item.id)}
   onkeydown={(e) => {
     // Keyboard parity with the click handler (satisfies the a11y lint rule).
@@ -147,6 +148,8 @@
     margin-bottom: 5px;
     cursor: default;
     transition: border-color 0.1s;
+    position: relative;
+    overflow: hidden;
   }
   .row:hover {
     border-color: var(--border-strong);
@@ -181,6 +184,32 @@
   .pin:hover,
   .pin.is-flagged {
     color: var(--marker-stale);
+  }
+  .row.checking::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--state-checking),
+      transparent
+    );
+    background-size: 50% 100%;
+    background-repeat: no-repeat;
+    opacity: 0.22;
+    animation: checking-bar 2.5s ease-in-out infinite;
+  }
+  @keyframes checking-bar {
+    from {
+      background-position: -50% 0;
+    }
+    to {
+      background-position: 150% 0;
+    }
   }
   .body {
     flex: 1;

@@ -1726,3 +1726,23 @@ func TestVerdictSignalsOpenSetRefresh(t *testing.T) {
 		}
 	}
 }
+
+// TestBranchPassthrough verifies source_branch and target_branch flow from
+// the MR REST payload into the observed event payload.
+func TestBranchPassthrough(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+
+	mr := makeMR("mergeable")
+	mr.SourceBranch = "feat/rate-limit"
+	mr.TargetBranch = "main"
+	pl, ok := p.observedFromMR(mr).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
+	if pl.SourceBranch != "feat/rate-limit" {
+		t.Errorf("source_branch = %q, want feat/rate-limit", pl.SourceBranch)
+	}
+	if pl.TargetBranch != "main" {
+		t.Errorf("target_branch = %q, want main", pl.TargetBranch)
+	}
+}

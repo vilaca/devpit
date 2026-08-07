@@ -95,6 +95,15 @@
         <span class="repo">{item.repo}</span>
         <span class="sep">·</span>
       {/if}
+      {#if item.target_branch}
+        <span
+          class="branch"
+          title={`${item.source_branch ?? ""} → ${item.target_branch}`}
+          >{#if item.source_branch}{item.source_branch}
+          {/if}→ {item.target_branch}</span
+        >
+        <span class="sep">·</span>
+      {/if}
       <span class="conn">{item.connection_label}</span>
       <span class="sep">·</span>
       <span class="time" title={item.updated_at}
@@ -228,6 +237,15 @@
   .repo {
     font-family: var(--font-mono);
     font-size: 11px;
+  }
+  .branch {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 1;
   }
   .sep {
     opacity: 0.5;

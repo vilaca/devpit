@@ -111,6 +111,8 @@
   {#each chips as s (s)}
     {#if s === "blocked" && blockedSuppressed}
       <!-- suppressed: the matching marker badge below already names the reason -->
+    {:else if s === "checking"}
+      <!-- gate unknown/transient — visual cue lives on the pin column in WorkItemRow -->
     {:else}
       <span
         class="tag"

@@ -425,6 +425,58 @@ func TestFoldRankingTimeAdvancesOnVerdictSignal(t *testing.T) {
 	}
 }
 
+// TestFoldCIFailedResurfacesNonOldItem: signal.ci_failed is rank-only — a broken
+// build advances the ranking clock, so a PR whose real activity has gone stale
+// (but not old) floats back to the fresh band. ADR-0016 (2026-08-07), INV-5.
+func TestFoldCIFailedResurfacesNonOldItem(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	// Real activity is 10 days stale; the only recent event is the broken build.
+	staleActivity := baseTime.Add(-10 * 24 * time.Hour)
+	f.ProviderUpdatedAt = staleActivity.Format(time.RFC3339)
+
+	ciTime := baseTime // build just broke
+	items := fold([]storage.StoredEvent{
+		obs(1, "c", "acme/api#1", f),
+		sig(2, "acme/api#1", "signal.ci_failed", ciTime),
+	})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if !items[0].UpdatedAt.Equal(ciTime) {
+		t.Errorf("UpdatedAt = %v, want the ci_failed time %v (a broken build resurfaces a non-old PR)",
+			items[0].UpdatedAt, ciTime)
+	}
+	if items[0].Stale || items[0].Old {
+		t.Errorf("Stale=%v Old=%v, want both false (resurfaced into the fresh band)", items[0].Stale, items[0].Old)
+	}
+}
+
+// TestFoldCIFailedSuppressedWhenOld: past the old threshold a broken build must
+// not resurrect an abandoned PR — ci_failed is dropped from the ranking clock, so
+// the item stays old at its real-activity time. ADR-0016 (2026-08-07), INV-5.
+func TestFoldCIFailedSuppressedWhenOld(t *testing.T) {
+	f := openFacts()
+	f.MyRoles = []string{"author"}
+	oldActivity := baseTime.Add(-40 * 24 * time.Hour) // >30d: old on real activity alone
+	f.ProviderUpdatedAt = oldActivity.Format(time.RFC3339)
+
+	items := fold([]storage.StoredEvent{
+		obs(1, "c", "acme/api#1", f),
+		sig(2, "acme/api#1", "signal.ci_failed", baseTime), // build just broke
+	})
+	if len(items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(items))
+	}
+	if !items[0].UpdatedAt.Equal(oldActivity) {
+		t.Errorf("UpdatedAt = %v, want the real-activity time %v (ci_failed suppressed on an old item)",
+			items[0].UpdatedAt, oldActivity)
+	}
+	if !items[0].Old {
+		t.Error("Old = false, want true (an old PR is not resurrected by a broken build)")
+	}
+}
+
 func TestFoldRankingTimeFallsBackToProviderUpdatedAt(t *testing.T) {
 	f := openFacts()
 	f.MyRoles = []string{"reviewer"}

@@ -56,7 +56,7 @@ role-aware where the fact is inherently about a role (see role scope notes).
 | `ready_to_merge`    | author / sole approver | gate satisfied, mergeable now | {N}; with red checks: · a non-required check is red |
 | `auto_merge_armed`  | author / sole approver | provider auto-merge / merge-when-pipeline-succeeds is armed | {N} |
 | `checks_running`    | author / sole approver | a pipeline is in progress | {N} |
-| `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; replaces the bare row | {N} |
+| `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; rendered as a subtle animated loading bar along the row's bottom edge (not a chip), no hover text |
 | `review_submitted`  | reviewer | you already reviewed (approved / commented); ball with author. Computed but never shown — the reviewed-done row is muted and suppresses its chips. The one exception is a reviewer-side changes-requested verdict, which surfaces as the `changes_requested` chip above | {N} |
 
 `blocked` defers entirely to the provider's merge gate — DevPit never

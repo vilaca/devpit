@@ -65,7 +65,8 @@ interactions:
         "user": {"login": "jdoe"},
         "requested_reviewers": [{"login": "octocat"}],
         "assignees": [],
-        "base": {"repo": {"full_name": "acme/api"}}
+        "head": {"ref": "feat/sync-fix"},
+        "base": {"ref": "main", "repo": {"full_name": "acme/api"}}
       }
 - id: 2
   request:

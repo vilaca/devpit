@@ -178,6 +178,8 @@ type ItemObservedPayload struct {
 	ProviderUpdatedAt     string   `json:"provider_updated_at"`
 	TicketKeys            []string `json:"ticket_keys,omitempty"`
 	Labels                []string `json:"labels,omitempty"` // forge-assigned label names
+	SourceBranch          string   `json:"source_branch,omitempty"`
+	TargetBranch          string   `json:"target_branch,omitempty"`
 }
 
 // item.removed carries no payload (Payload: nil).

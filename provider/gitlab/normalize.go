@@ -159,6 +159,8 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		ProviderUpdatedAt: mr.UpdatedAt,
 		TicketKeys:        sdk.ExtractTicketKeys(mr.Title, mr.SourceBranch, mr.Description),
 		Labels:            mr.Labels,
+		SourceBranch:      mr.SourceBranch,
+		TargetBranch:      mr.TargetBranch,
 	}
 
 	return sdk.Event{

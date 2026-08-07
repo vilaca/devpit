@@ -38,6 +38,7 @@ type ghPull struct {
 	Assignees          []ghUser `json:"assignees"`
 	RequestedReviewers []ghUser `json:"requested_reviewers"`
 	Base               struct {
+		Ref  string `json:"ref"`
 		Repo struct {
 			FullName string `json:"full_name"`
 		} `json:"repo"`

@@ -16,7 +16,7 @@ import (
 )
 
 const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
-	`{pullRequest(number:%d){reviewDecision ` +
+	`{pullRequest(number:%d){reviewDecision headRefName baseRefName ` +
 	`latestReviews{nodes{state submittedAt author{login}}} autoMergeRequest{enabledAt}}}`
 
 const (
@@ -49,6 +49,8 @@ type ghResult struct {
 	approvalsCount int
 	autoMergeArmed bool
 	myReviewState  string
+	sourceBranch   string
+	targetBranch   string
 	verdictSigs    []sdk.Event // verdict signals to append after the enriched events
 }
 
@@ -59,6 +61,8 @@ type ghPRNode struct {
 	// with zeros (A3).
 	PullRequest *struct {
 		ReviewDecision string `json:"reviewDecision"`
+		HeadRefName    string `json:"headRefName"`
+		BaseRefName    string `json:"baseRefName"`
 		LatestReviews  struct {
 			Nodes []struct {
 				State       string `json:"state"`
@@ -142,9 +146,13 @@ func mergeGHBatchResults(
 			}
 		}
 		results[it.evIdx] = ghResult{
-			node.PullRequest.ReviewDecision, count,
-			node.PullRequest.AutoMergeRequest != nil, myReviewState,
-			verdictSigs,
+			reviewDecision: node.PullRequest.ReviewDecision,
+			approvalsCount: count,
+			autoMergeArmed: node.PullRequest.AutoMergeRequest != nil,
+			myReviewState:  myReviewState,
+			sourceBranch:   node.PullRequest.HeadRefName,
+			targetBranch:   node.PullRequest.BaseRefName,
+			verdictSigs:    verdictSigs,
 		}
 	}
 	return degraded
@@ -382,6 +390,8 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 		pl.ApprovalsCount = r.approvalsCount
 		pl.AutoMergeArmed = r.autoMergeArmed
 		pl.MyReviewState = r.myReviewState
+		pl.SourceBranch = r.sourceBranch
+		pl.TargetBranch = r.targetBranch
 
 		// Opportunistic downgrade: if approvals exist beyond the user's own,
 		// another account can approve — mark the repo as not-sole-approver immediately.

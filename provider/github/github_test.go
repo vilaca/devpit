@@ -1092,3 +1092,55 @@ func TestGHVerdictSignalsCommentedDismissedSkipped(t *testing.T) {
 		}
 	}
 }
+
+// TestBranchesFromPullREST verifies observedFromPull populates source_branch
+// (head.ref) and target_branch (base.ref) from the REST PR payload.
+func TestBranchesFromPullREST(t *testing.T) {
+	p := &Provider{handle: "octocat"}
+	pr := makePR("clean")
+	pr.Head.Ref = "feat/rate-limit"
+	pr.Base.Ref = "main"
+	pl, ok := p.observedFromPull(pr).Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatal("payload type assertion failed")
+	}
+	if pl.SourceBranch != "feat/rate-limit" {
+		t.Errorf("source_branch = %q, want feat/rate-limit", pl.SourceBranch)
+	}
+	if pl.TargetBranch != "main" {
+		t.Errorf("target_branch = %q, want main", pl.TargetBranch)
+	}
+}
+
+// TestBranchesFromGraphQLJoin verifies the GraphQL join populates branches
+// (headRefName/baseRefName) and that a degraded join leaves them empty.
+func TestBranchesFromGraphQLJoin(t *testing.T) {
+	good := `{"data":{"a0":{"pullRequest":` +
+		`{"reviewDecision":null,"headRefName":"feat/rate-limit","baseRefName":"main",` +
+		`"latestReviews":{"nodes":[]}}}}}`
+	p := newGHVerdictProvider(t, good)
+	pr := makePR("clean")
+	pr.Head.Ref = ""
+	pr.Base.Ref = ""
+
+	out, degraded, err := p.graphqlJoin(context.Background(), []sdk.Event{p.observedFromPull(pr)})
+	if err != nil || degraded {
+		t.Fatalf("graphqlJoin: err=%v degraded=%v", err, degraded)
+	}
+	pl, _ := out[0].Payload.(sdk.ItemObservedPayload)
+	if pl.SourceBranch != "feat/rate-limit" {
+		t.Errorf("source_branch = %q, want feat/rate-limit (from graphql join)", pl.SourceBranch)
+	}
+	if pl.TargetBranch != "main" {
+		t.Errorf("target_branch = %q, want main (from graphql join)", pl.TargetBranch)
+	}
+
+	// Degraded join: null node — branches stay empty.
+	degradedBody := `{"data":{"a0":{"pullRequest":null}}}`
+	p2 := newGHVerdictProvider(t, degradedBody)
+	out2, _, _ := p2.graphqlJoin(context.Background(), []sdk.Event{p2.observedFromPull(pr)})
+	pl2, _ := out2[0].Payload.(sdk.ItemObservedPayload)
+	if pl2.SourceBranch != "" || pl2.TargetBranch != "" {
+		t.Errorf("degraded join: got branches %q/%q, want empty", pl2.SourceBranch, pl2.TargetBranch)
+	}
+}

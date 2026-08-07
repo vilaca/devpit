@@ -31,7 +31,9 @@ interactions:
           "author": {"username": "jdoe"},
           "assignees": [{"username": "octocat"}],
           "reviewers": [],
-          "references": {"full": "acme/api!7"}
+          "references": {"full": "acme/api!7"},
+          "source_branch": "feat/sync-fix",
+          "target_branch": "main"
         }
       ]
 - id: 1

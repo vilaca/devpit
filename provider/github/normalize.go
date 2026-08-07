@@ -116,6 +116,8 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 		ProviderUpdatedAt: pr.UpdatedAt,
 		TicketKeys:        sdk.ExtractTicketKeys(pr.Title, pr.Head.Ref, pr.Body),
 		Labels:            labelsFromGH(pr.Labels),
+		SourceBranch:      pr.Head.Ref,
+		TargetBranch:      pr.Base.Ref,
 	}
 
 	nid := nativeID(repo, pr.Number)

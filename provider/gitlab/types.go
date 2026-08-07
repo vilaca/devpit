@@ -41,6 +41,7 @@ type glMergeRequest struct {
 		Full string `json:"full"` // "group/project!iid"
 	} `json:"references"`
 	SourceBranch string   `json:"source_branch"`
+	TargetBranch string   `json:"target_branch"`
 	Description  string   `json:"description"`
 	Labels       []string `json:"labels"` // GitLab returns label names as a plain []string
 }

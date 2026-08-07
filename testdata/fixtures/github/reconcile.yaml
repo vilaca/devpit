@@ -109,4 +109,4 @@ interactions:
       Content-Type:
       - application/json
     body: |
-      {"data":{"a0":{"pullRequest":{"reviewDecision":null}}}}
+      {"data":{"a0":{"pullRequest":{"reviewDecision":null,"headRefName":"feat/sync-fix","baseRefName":"main","latestReviews":{"nodes":[]}}}}}

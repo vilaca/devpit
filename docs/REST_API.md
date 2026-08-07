@@ -111,6 +111,10 @@ Each item carries:
   labels, GitHub PR labels). Array of strings. Refreshed on reconcile only. The
   UI renders these as plain text on a dedicated row — provider metadata, distinct
   from the outline signal chips (ADR-0016).
+- `source_branch` / `target_branch` — optional; the MR/PR's source and target
+  branch names. GitLab: from the REST MR payload. GitHub: from the GraphQL join
+  (`headRefName`/`baseRefName`), with the PR-detail REST refs as a fastpoll
+  fallback; omitted when a degraded read can't supply them.
 - `jira` — optional; present when the item's first recognized Jira ticket key
   has a cached row with a non-empty status. Shape:
   `{ key: string, status: string, url: string }`.

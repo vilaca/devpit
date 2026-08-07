@@ -283,6 +283,25 @@ previously carried only by the sole-approver arm, now covers reviewers too: a
 draft MR isn't ready for review and never fires here. Pure read-layer change; the
 predicate lives in `internal/attention/states.go`.
 
+#### Broken builds resurface non-old items, but not old ones (2026-08-07)
+
+`signal.ci_failed` — a broken build on an authored PR — is a **rank-only** signal
+like the review verdicts above: it advances the item's ranking clock so a PR
+whose build just broke floats back into view. It adds **no chip**; the CI-red
+*state* remains the `failing_checks` marker, and this signal is only the *event*
+"go look, it broke". This is the deliberate resolution of the tension with
+"signals never carry gate diagnostics" above — the signal carries no diagnostic
+surface, only recency.
+
+One guard: a broken build must not resurrect work the user has already let go. So
+`ci_failed` is **dropped from the ranking clock once the item is `old`** (idle
+past the old threshold) on its *real activity* — every signal except `ci_failed`,
+plus the provider snapshot. Fresh and stale items resurface as before; only past
+the old threshold does a broken build stop nudging. Staleness is measured from
+real activity, never from the CI event itself — otherwise a failure would always
+read as fresh activity and the guard could never fire. Read-layer change in
+`internal/attention/fold.go`; the `failing_checks` marker is untouched.
+
 ### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
 
 - **A single ranked list**, one row per WorkItem, with signals shown as tags.
@@ -306,7 +325,8 @@ predicate lives in `internal/attention/states.go`.
   `failing_checks` means exactly "CI/checks red"; `merge_conflict` and
   `needs_rebase` are distinct because they demand different author effort.
   Markers are provider-normalized booleans in the item snapshot, like the gate
-  itself.
+  itself. (One rank-only exception: `signal.ci_failed` is a chip-less recency
+  nudge on a broken build — no diagnostic chip — see the 2026-08-07 amendment.)
 - **Hover text must add information beyond the tag label** (2026-07-10) —
   never a paraphrase of the tag name. The universal payload is the tag's onset
   duration ("for 3d"), derived from the item's snapshot history at fold time;

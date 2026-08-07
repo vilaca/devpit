@@ -20,6 +20,7 @@ const (
 	eventItemRemoved  = "item.removed"
 	signalPrefix      = "signal."
 	signalMentioned   = "signal.mentioned"
+	signalCIFailed    = "signal.ci_failed"
 )
 
 // DefaultStaleThreshold is the age past which an item earns the "stale" badge
@@ -200,6 +201,20 @@ func foldItem(
 
 	updatedAt := rankingTime(signals, facts, latestObserved.ObservedAt)
 
+	// signal.ci_failed is a rank-only signal: a broken build resurfaces the PR by
+	// advancing its ranking clock. But it must not resurrect work the user has
+	// already let go — so once an item is *old* on real activity alone (every
+	// signal except ci_failed, plus the provider snapshot), ci_failed is dropped
+	// from the ranking time and the item stays put. Fresh and stale items are
+	// unaffected: only past the old threshold does a broken build stop nudging.
+	// (ADR-0016 2026-08-07 amendment; docs/Semantic_Invariants.md INV-5.)
+	if oldThreshold > 0 {
+		base := rankingTimeExcludingCIFailed(signals, facts, latestObserved.ObservedAt)
+		if now.Sub(base) > oldThreshold {
+			updatedAt = base
+		}
+	}
+
 	idle := now.Sub(updatedAt)
 	old := oldThreshold > 0 && idle > oldThreshold
 	stale := !old && staleThreshold > 0 && idle > staleThreshold
@@ -374,8 +389,27 @@ func rolesSet(roles []string) map[string]bool {
 // snapshot's provider_updated_at, falling back to that snapshot's observed_at
 // when the provider time is absent or unparseable.
 func rankingTime(signals []storage.StoredEvent, facts sdk.ItemObservedPayload, snapshotObservedAt time.Time) time.Time {
+	return newestSignalTime(signals, facts, snapshotObservedAt, false)
+}
+
+// rankingTimeExcludingCIFailed is rankingTime computed as if the item had no
+// signal.ci_failed events — the item's "real activity" clock. foldItem compares
+// it to the old threshold to decide whether a broken build may resurface the
+// item (see the ci_failed note in foldItem; ADR-0016 2026-08-07 amendment).
+func rankingTimeExcludingCIFailed(
+	signals []storage.StoredEvent, facts sdk.ItemObservedPayload, snapshotObservedAt time.Time,
+) time.Time {
+	return newestSignalTime(signals, facts, snapshotObservedAt, true)
+}
+
+func newestSignalTime(
+	signals []storage.StoredEvent, facts sdk.ItemObservedPayload, snapshotObservedAt time.Time, excludeCIFailed bool,
+) time.Time {
 	var newest time.Time
 	for _, s := range signals {
+		if excludeCIFailed && s.EventType == signalCIFailed {
+			continue
+		}
 		t := s.ObservedAt
 		if s.OccurredAt != nil {
 			t = *s.OccurredAt

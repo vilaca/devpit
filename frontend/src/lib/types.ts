@@ -70,6 +70,8 @@ export interface AttentionItem {
   flagged_at?: string; // RFC 3339 UTC; present only when pinned
   since?: Record<string, string>; // tag key → RFC 3339 onset time; active tags only
   labels?: string[]; // provider label names (GitLab MR / GitHub PR)
+  source_branch?: string;
+  target_branch?: string;
   jira?: { key: string; status: string; url: string };
 }
 

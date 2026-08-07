@@ -73,6 +73,8 @@ type WorkItem struct {
 	Since                 map[string]time.Time `json:"since,omitempty"` // onset of each active tag
 	TicketKeys            []string             `json:"ticket_keys,omitempty"`
 	Labels                []string             `json:"labels,omitempty"` // provider label names
+	SourceBranch          string               `json:"source_branch,omitempty"`
+	TargetBranch          string               `json:"target_branch,omitempty"`
 }
 
 // itemKey is the identity triple that groups events into one WorkItem.
@@ -260,6 +262,8 @@ func foldItem(
 		Since:                 computeSince(allObserved, states, facts, hasMention, mentionSigs),
 		TicketKeys:            facts.TicketKeys,
 		Labels:                facts.Labels,
+		SourceBranch:          facts.SourceBranch,
+		TargetBranch:          facts.TargetBranch,
 	}, true
 }
 

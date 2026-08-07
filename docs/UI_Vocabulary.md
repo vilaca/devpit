@@ -131,6 +131,7 @@ Facts a row carries without a tag:
 | blue row tint | whole row | you authored the item (the connection's identity matches the author) — the only mark of authorship; the tag vocabulary is the same whatever your role |
 | amber row tint | whole row | the `old` age tier (idle > 30 days) — see Age tags above |
 | de-emphasized row | whole row | reviewed-done (`muted`): you are a reviewer — not the author or sole approver — who has submitted your review, so nothing is left for you — the row dims and suppresses its chips (a display cue only; muting does not change its position, which is age band + recency); full opacity on hover |
+| source → target branch | meta-row (after repo) | which branch the MR/PR is from and where it merges; raw provider fact, never ranks. Full `source → target` names on hover. GitHub: sourced via the GraphQL join; omitted when a degraded read can't supply them. |
 | "N approved" / "you + N approved" | meta-row (last field) | count of reviewers who approved; informational only (never moves the item), shown when N > 0, hidden on drafts. When you are an approver (`my_review_state == "approved"`) it reads "you approved" or "you + N approved" |
 
 ## Hover-text rule

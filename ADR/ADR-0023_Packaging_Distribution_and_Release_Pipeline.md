@@ -42,7 +42,7 @@ cross-reference on every point, so they live here as one ADR.
   note only, untested.
 - **Docker image** `ghcr.io/vilaca/devpit` (linux amd64+arm64), tags `latest`
   plus the version. This realizes the container half of
-  `ADR/ADR-0011_Deployment_Model.md`, which left it Planned with no Dockerfile.
+  `ADR/ADR-0011_Deployment_Model.md`.
 
 ### Homebrew
 

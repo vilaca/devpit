@@ -11,8 +11,27 @@ vi.mock("./api", () => ({
 }));
 
 import { dashboard } from "./dashboard.svelte";
-import { setFlag, clearFlag } from "./api";
-import { makeItem } from "./fixtures";
+import {
+  setFlag,
+  clearFlag,
+  getAttention,
+  getConnections,
+  getSyncLog,
+} from "./api";
+import { makeConnection, makeItem } from "./fixtures";
+import type {
+  AttentionResponse,
+  ConnectionsResponse,
+  SyncLogResponse,
+} from "./types";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe("dashboard.toggleFlag", () => {
   beforeEach(() => {
@@ -47,5 +66,55 @@ describe("dashboard.toggleFlag", () => {
     const item = makeItem({ id: "d", flagged: true });
     await dashboard.toggleFlag(item);
     expect(item.flagged).toBe(true);
+  });
+});
+
+describe("dashboard.hydrate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps the newest snapshot when an earlier hydration finishes last", async () => {
+    const firstAttention = deferred<AttentionResponse>();
+    const firstConnections = deferred<ConnectionsResponse>();
+    const firstSyncLog = deferred<SyncLogResponse>();
+    const secondAttention = deferred<AttentionResponse>();
+    const secondConnections = deferred<ConnectionsResponse>();
+    const secondSyncLog = deferred<SyncLogResponse>();
+
+    vi.mocked(getAttention)
+      .mockReturnValueOnce(firstAttention.promise)
+      .mockReturnValueOnce(secondAttention.promise);
+    vi.mocked(getConnections)
+      .mockReturnValueOnce(firstConnections.promise)
+      .mockReturnValueOnce(secondConnections.promise);
+    vi.mocked(getSyncLog)
+      .mockReturnValueOnce(firstSyncLog.promise)
+      .mockReturnValueOnce(secondSyncLog.promise);
+
+    const first = dashboard.hydrate();
+    const second = dashboard.hydrate();
+
+    secondAttention.resolve({ items: [makeItem({ id: "new" })] });
+    secondConnections.resolve({
+      connections: [makeConnection({ label: "New connection" })],
+      update: { available: false, in_container: false },
+    });
+    secondSyncLog.resolve({ entries: [] });
+    await second;
+
+    firstAttention.resolve({ items: [makeItem({ id: "old" })] });
+    firstConnections.resolve({
+      connections: [makeConnection({ label: "Old connection" })],
+      update: { available: true, in_container: true },
+    });
+    firstSyncLog.resolve({ entries: [] });
+    await first;
+
+    expect(dashboard.items.map((item) => item.id)).toEqual(["new"]);
+    expect(dashboard.connections.map((connection) => connection.label)).toEqual(
+      ["New connection"],
+    );
+    expect(dashboard.update).toEqual({ available: false, in_container: false });
   });
 });

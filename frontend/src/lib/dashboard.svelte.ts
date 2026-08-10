@@ -49,6 +49,9 @@ class Dashboard {
   #disposeSse: (() => void) | null = null;
   // Coalesce bursts of attention.changed into a single re-fetch.
   #attentionTimer: ReturnType<typeof setTimeout> | null = null;
+  // A reconnect can start a newer hydrate before an earlier request completes.
+  // Only the latest snapshot may replace the dashboard state.
+  #hydrateGeneration = 0;
 
   // start hydrates everything, then opens the live stream. Returns a disposer
   // for onDestroy. Idempotent guards are unnecessary — App calls it once.
@@ -87,21 +90,24 @@ class Dashboard {
   }
 
   async hydrate(): Promise<void> {
+    const generation = ++this.#hydrateGeneration;
     try {
       const [attention, connections, syncLog] = await Promise.all([
         getAttention(),
         getConnections(),
         getSyncLog(),
       ]);
+      if (generation !== this.#hydrateGeneration) return;
       this.items = attention.items;
       this.connections = connections.connections;
       this.update = connections.update;
       this.syncLog = syncLog.entries;
       this.loadError = null;
     } catch (err) {
+      if (generation !== this.#hydrateGeneration) return;
       this.loadError = err instanceof Error ? err.message : "failed to load";
     } finally {
-      this.loading = false;
+      if (generation === this.#hydrateGeneration) this.loading = false;
     }
   }
 

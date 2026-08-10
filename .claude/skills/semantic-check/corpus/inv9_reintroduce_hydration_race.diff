@@ -1,0 +1,30 @@
+# Synthetic INV-9 case: re-introduces the dashboard race fixed in b7eb466.
+# An initial hydration can resolve after an SSE reconnect hydration and overwrite
+# newer items, connection data, errors, or loading state. Expected: VIOLATED.
+--- a/frontend/src/lib/dashboard.svelte.ts
++++ b/frontend/src/lib/dashboard.svelte.ts
+@@ class Dashboard {
+-  #hydrateGeneration = 0;
+@@
+   async hydrate(): Promise<void> {
+-    const generation = ++this.#hydrateGeneration;
+     try {
+       const [attention, connections, syncLog] = await Promise.all([
+         getAttention(),
+         getConnections(),
+         getSyncLog(),
+       ]);
+-      if (generation !== this.#hydrateGeneration) return;
+       this.items = attention.items;
+       this.connections = connections.connections;
+       this.update = connections.update;
+       this.syncLog = syncLog.entries;
+       this.loadError = null;
+     } catch (err) {
+-      if (generation !== this.#hydrateGeneration) return;
+       this.loadError = err instanceof Error ? err.message : "failed to load";
+     } finally {
+-      if (generation === this.#hydrateGeneration) this.loading = false;
++      this.loading = false;
+     }
+   }

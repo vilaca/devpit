@@ -555,30 +555,42 @@ func TestMergeGHBatchResultsMyReviewState(t *testing.T) {
 }
 
 func TestGraphQLJoinReviewRequired(t *testing.T) {
-	p := newTestProvider(t, "graphql_join_review_required", "octocat")
-	res, err := p.FastPoll(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("FastPoll: %v", err)
+	for _, c := range []struct {
+		name         string
+		cassette     string
+		wantApproval bool
+	}{
+		{name: "blocked gate", cassette: "graphql_join_review_required", wantApproval: true},
+		{name: "ready gate", cassette: "graphql_join_review_required_ready", wantApproval: false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := newTestProvider(t, c.cassette, "octocat")
+			res, err := p.FastPoll(context.Background(), nil)
+			if err != nil {
+				t.Fatalf("FastPoll: %v", err)
+			}
+			for _, e := range res.Events {
+				if e.EventType != eventItemObserved || e.NativeID != "acme/api#42" {
+					continue
+				}
+				pl, ok := e.Payload.(sdk.ItemObservedPayload)
+				if !ok {
+					t.Fatal("payload type assertion failed")
+				}
+				if pl.NeedsApproval != c.wantApproval {
+					t.Errorf("needs_approval = %v, want %v", pl.NeedsApproval, c.wantApproval)
+				}
+				if pl.ReviewDecision != normalizedReviewRequired {
+					t.Errorf("review_decision = %q, want review_required", pl.ReviewDecision)
+				}
+				if c.wantApproval && pl.AutoMergeArmed {
+					t.Error("auto_merge_armed should be false when autoMergeRequest is absent")
+				}
+				return
+			}
+			t.Fatal("missing item.observed for acme/api#42")
+		})
 	}
-	for _, e := range res.Events {
-		if e.EventType == "item.observed" && e.NativeID == "acme/api#42" {
-			pl, ok := e.Payload.(sdk.ItemObservedPayload)
-			if !ok {
-				t.Fatal("payload type assertion failed")
-			}
-			if !pl.NeedsApproval {
-				t.Error("needs_approval should be true for REVIEW_REQUIRED blocked non-draft PR")
-			}
-			// autoMergeRequest is absent from this GraphQL response — the field
-			// reads as nil and AutoMergeArmed degrades to false with no crash
-			// (the fine-grained-PAT-cannot-read-the-field path).
-			if pl.AutoMergeArmed {
-				t.Error("auto_merge_armed should be false when autoMergeRequest is absent")
-			}
-			return
-		}
-	}
-	t.Fatal("missing item.observed for acme/api#42")
 }
 
 // TestGraphQLJoinReviewRequiredBoundaryCases pins the guard that prevents

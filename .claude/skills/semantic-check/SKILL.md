@@ -3,7 +3,8 @@ name: semantic-check
 description: >
   Audit DevPit against its semantic invariants — intent from the ADRs that no
   linter can enforce (read-only, provider isolation, sdk neutrality/honesty,
-  signals-vs-markers, one ranked list, no workflow inference, user-centric sync).
+  signals-vs-markers, one ranked list, no workflow inference, user-centric sync,
+  monotonic live client state).
   Two modes: default routes a diff to the invariants its files touch; `audit`
   scans the whole tree, one invariant at a time. Each finding is adversarial —
   construct a concrete scenario where the claim breaks — then verified by a
@@ -138,12 +139,13 @@ the runnable regression corpus (`corpus/cases.yaml`) whenever this skill's promp
 or the model changes, so judge drift (an upgrade silently making the audit
 lenient) is visible.
 
-The 2026-08-05 first audit found two VIOLATED — a dead / one-sided `sdk` surface
-(INV-4) and a `needs_rebase` computed from raw branch divergence (INV-7). **Both
-are now fixed in-tree** and pinned as synthetic `diff` fixtures
-(`inv4_reintroduce_dead_field.diff`, `inv7_reintroduce_diverged_or.diff`) that the
-audit must flag VIOLATED — guarding against the exact regressions. The tree has no
-known live violation.
+The audit has found three VIOLATED findings — a dead / one-sided `sdk` surface
+(INV-4), a `needs_rebase` computed from raw branch divergence (INV-7), and an
+older dashboard hydration overwriting newer state (INV-9). **All are now fixed
+in-tree** and pinned as synthetic `diff` fixtures
+(`inv4_reintroduce_dead_field.diff`, `inv7_reintroduce_diverged_or.diff`,
+`inv9_reintroduce_hydration_race.diff`) that the audit must flag VIOLATED —
+guarding against the exact regressions. The tree has no known live violation.
 
 The corpus also includes **restraint** cases that must stay HOLDS; if the audit
 flags one, the skeptic pass is too eager:

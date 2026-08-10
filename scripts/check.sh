@@ -152,12 +152,44 @@ gate_gofmt() {
 gate_build() { go build ./...; }
 gate_vet()   { go vet ./...; }
 gate_test()  {
-  local profile="$TOOLS/coverage.out" total
-  go test -race -covermode=atomic -coverprofile="$profile" ./... || return 1
+  local profile="$TOOLS/coverage.out" total pkgout failed=0
+  pkgout="$(go test -race -covermode=atomic -coverprofile="$profile" ./... 2>&1)" || { echo "$pkgout"; return 1; }
+  echo "$pkgout"
+
   total="$(go tool cover -func="$profile" | tail -1 | grep -oE '[0-9]+\.[0-9]+')"
   echo "    total coverage: ${total}% (floor ${COVERAGE_FLOOR}%)"
   awk -v t="$total" -v f="$COVERAGE_FLOOR" 'BEGIN { exit !(t >= f) }' \
-    || { echo "    coverage ${total}% is below the ${COVERAGE_FLOOR}% floor"; return 1; }
+    || { echo "    coverage ${total}% is below the ${COVERAGE_FLOOR}% floor"; failed=1; }
+
+  # Per-package floors — ratchet up as coverage grows; never down without a
+  # reason recorded alongside the change (same convention as COVERAGE_FLOOR above).
+  # Coverage percentages are parsed from the `go test` output lines that read:
+  #   "ok  	github.com/vilaca/devpit/provider/github  1.23s  coverage: 87.0% of statements"
+  local module; module="$(go list -m)"
+  declare -A pkg_floors=(
+    ["internal/attention"]=90
+    ["internal/engine"]=88
+    ["internal/storage"]=76
+    ["provider/github"]=83
+    ["provider/gitlab"]=85
+  )
+  for pkg in "${!pkg_floors[@]}"; do
+    local floor="${pkg_floors[$pkg]}"
+    local cov
+    cov="$(echo "$pkgout" \
+      | grep -E "^(ok|FAIL)[[:space:]]+${module}/${pkg}[[:space:]]" \
+      | grep -oE 'coverage: [0-9]+\.[0-9]+' \
+      | grep -oE '[0-9]+\.[0-9]+')"
+    if [[ -z "$cov" ]]; then
+      echo "    WARNING: no coverage data for ${pkg} (package may be untested or failed)"
+      continue
+    fi
+    echo "    ${pkg}: ${cov}% (floor ${floor}%)"
+    awk -v c="$cov" -v f="$floor" 'BEGIN { exit !(c >= f) }' \
+      || { echo "    coverage ${cov}% for ${pkg} is below the ${floor}% floor"; failed=1; }
+  done
+
+  return "$failed"
 }
 gate_lint()  { ensure_golangci && golangci-lint run; }
 gate_arch()  { ensure_tool go-arch-lint "github.com/fe3dback/go-arch-lint@$ARCHLINT_VERSION" && go-arch-lint check; }

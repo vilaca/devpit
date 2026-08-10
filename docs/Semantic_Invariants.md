@@ -287,3 +287,27 @@ one of these involvement axes.
   `state=opened`) is only acceptable if every retained item is filtered to a
   sole-approver (or other involvement) stake — an unfiltered wholesale listing
   is the violation.
+
+---
+
+## INV-9 — Live client state is monotonic
+
+**Claim:** When overlapping client fetches refresh the same dashboard state,
+only the newest request may update it; an older success or failure never
+overwrites a newer snapshot or error state.
+
+**Home:** `ADR/ADR-0010_Web_Frontend.md` (live updates and cold loads converge
+on the same state).
+
+**Anchors:** `frontend/src/lib/dashboard.svelte.ts`,
+`frontend/src/lib/dashboard.test.ts`.
+
+**Hunt:**
+- (a) Multiple `hydrate` or slice-refresh requests can be in flight, and a
+  completion writes reactive state without a request generation, cancellation,
+  or equivalent freshness guard.
+- (b) A stale error or `finally` block can replace the loading/error state
+  established by a newer request.
+- (c) The regression test resolves or rejects an older deferred request after a
+  newer request has completed; a test that only awaits requests in issue order
+  does not cover this claim.

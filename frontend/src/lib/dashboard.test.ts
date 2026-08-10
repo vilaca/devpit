@@ -147,4 +147,33 @@ describe("dashboard.hydrate", () => {
     expect(dashboard.loadError).toBeNull();
     expect(dashboard.loading).toBe(false);
   });
+
+  it("keeps a newer live attention refresh when hydration finishes later", async () => {
+    const hydrationAttention = deferred<AttentionResponse>();
+    const hydrationConnections = deferred<ConnectionsResponse>();
+    const hydrationSyncLog = deferred<SyncLogResponse>();
+    const refreshedAttention = deferred<AttentionResponse>();
+
+    vi.mocked(getAttention)
+      .mockReturnValueOnce(hydrationAttention.promise)
+      .mockReturnValueOnce(refreshedAttention.promise);
+    vi.mocked(getConnections).mockReturnValueOnce(hydrationConnections.promise);
+    vi.mocked(getSyncLog).mockReturnValueOnce(hydrationSyncLog.promise);
+
+    const hydration = dashboard.hydrate();
+    const refresh = dashboard.refreshAttention();
+
+    refreshedAttention.resolve({ items: [makeItem({ id: "live" })] });
+    await refresh;
+
+    hydrationAttention.resolve({ items: [makeItem({ id: "stale" })] });
+    hydrationConnections.resolve({
+      connections: [makeConnection()],
+      update: { available: false, in_container: false },
+    });
+    hydrationSyncLog.resolve({ entries: [] });
+    await hydration;
+
+    expect(dashboard.items.map((item) => item.id)).toEqual(["live"]);
+  });
 });

@@ -52,6 +52,11 @@ class Dashboard {
   // A reconnect can start a newer hydrate before an earlier request completes.
   // Only the latest snapshot may replace the dashboard state.
   #hydrateGeneration = 0;
+  // A live slice refresh may complete before an older hydration. Each writer
+  // advances its slice generation so stale responses cannot overwrite it.
+  #attentionGeneration = 0;
+  #connectionsGeneration = 0;
+  #syncLogGeneration = 0;
 
   // start hydrates everything, then opens the live stream. Returns a disposer
   // for onDestroy. Idempotent guards are unnecessary — App calls it once.
@@ -91,6 +96,9 @@ class Dashboard {
 
   async hydrate(): Promise<void> {
     const generation = ++this.#hydrateGeneration;
+    const attentionGeneration = ++this.#attentionGeneration;
+    const connectionsGeneration = ++this.#connectionsGeneration;
+    const syncLogGeneration = ++this.#syncLogGeneration;
     try {
       const [attention, connections, syncLog] = await Promise.all([
         getAttention(),
@@ -98,10 +106,16 @@ class Dashboard {
         getSyncLog(),
       ]);
       if (generation !== this.#hydrateGeneration) return;
-      this.items = attention.items;
-      this.connections = connections.connections;
-      this.update = connections.update;
-      this.syncLog = syncLog.entries;
+      if (attentionGeneration === this.#attentionGeneration) {
+        this.items = attention.items;
+      }
+      if (connectionsGeneration === this.#connectionsGeneration) {
+        this.connections = connections.connections;
+        this.update = connections.update;
+      }
+      if (syncLogGeneration === this.#syncLogGeneration) {
+        this.syncLog = syncLog.entries;
+      }
       this.loadError = null;
     } catch (err) {
       if (generation !== this.#hydrateGeneration) return;
@@ -112,26 +126,37 @@ class Dashboard {
   }
 
   async refreshAttention(): Promise<void> {
+    const generation = ++this.#attentionGeneration;
     try {
-      this.items = (await getAttention()).items;
+      const attention = await getAttention();
+      if (generation === this.#attentionGeneration) {
+        this.items = attention.items;
+      }
     } catch {
       // transient; the next event or reconnect re-hydrates
     }
   }
 
   async refreshConnections(): Promise<void> {
+    const generation = ++this.#connectionsGeneration;
     try {
       const resp = await getConnections();
-      this.connections = resp.connections;
-      this.update = resp.update;
+      if (generation === this.#connectionsGeneration) {
+        this.connections = resp.connections;
+        this.update = resp.update;
+      }
     } catch {
       /* transient */
     }
   }
 
   async refreshSyncLog(): Promise<void> {
+    const generation = ++this.#syncLogGeneration;
     try {
-      this.syncLog = (await getSyncLog()).entries;
+      const syncLog = await getSyncLog();
+      if (generation === this.#syncLogGeneration) {
+        this.syncLog = syncLog.entries;
+      }
     } catch {
       /* transient */
     }

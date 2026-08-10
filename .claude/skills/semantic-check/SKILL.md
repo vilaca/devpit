@@ -38,6 +38,16 @@ doc-checking. Ask, for each invariant in scope: **construct a concrete input or
 diff under the current code where the claim fails.** A finding is the scenario,
 not the vibe. No scenario ⇒ HOLDS.
 
+## Test adversaries
+
+For every concrete failure scenario, identify the automated test that could make
+it happen. When the scoped diff changes behavior or fixes a bug, inspect the
+changed or neighboring tests for a regression that forces the triggering
+failure/boundary condition — especially stale or out-of-order asynchronous
+responses, retries, reconnects, and cancellation where ordering can change the
+result. A missing test is a **coverage gap**, not an invariant violation; report
+it separately with the scenario and the test seam.
+
 ## Mode selection
 
 - **`/semantic-check`** (no args, or a ref/path list) — **diff mode**. Scope is

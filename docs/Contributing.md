@@ -60,6 +60,10 @@ second decision log — the ADRs are it.
   Provider tests replay go-vcr cassettes (`ModeReplayOnly`); to re-record one,
   flip the recorder mode in the provider's test helper, run against a real
   token, then restore the mode before committing.
+- Test the behavior that can fail, not only the happy path. A regression test
+  must reproduce the triggering failure or boundary condition; for asynchronous
+  code, that includes stale or out-of-order responses, retries, reconnects, and
+  cancellation when they can change the result.
 - A change to a code shape that a spec links to should be reflected in that
   spec's prose in the same change.
 

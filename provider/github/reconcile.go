@@ -87,9 +87,9 @@ func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResu
 				events = append(events, sdk.Event{
 					ObjectType: objectType,
 					NativeID:   nativeID(a.repo, it.Number),
-					EventType:  "signal.review_requested",
+					EventType:  sdk.SignalReviewRequested,
 					OccurredAt: parseTime(it.UpdatedAt),
-					DedupeKey:  fmt.Sprintf("signal.review_requested:%s:%s", nativeID(a.repo, it.Number), it.UpdatedAt),
+					DedupeKey:  fmt.Sprintf("%s:%s:%s", sdk.SignalReviewRequested, nativeID(a.repo, it.Number), it.UpdatedAt),
 					Payload:    sdk.SignalReviewRequestedPayload{},
 				})
 			}

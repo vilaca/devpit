@@ -15,8 +15,8 @@ import (
 // Fact-stream event types and the open item state, folded here to reap items
 // that left a complete reconcile sweep (docs/Event_Taxonomy_and_Storage.md).
 const (
-	eventItemObserved = "item.observed"
-	eventItemRemoved  = "item.removed"
+	eventItemObserved = sdk.EventItemObserved
+	eventItemRemoved  = sdk.EventItemRemoved
 	itemStateOpen     = "open"
 )
 
@@ -228,7 +228,7 @@ func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error
 				ObjectType: lf.objectType,
 				NativeID:   nid,
 				EventType:  eventItemRemoved,
-				DedupeKey:  fmt.Sprintf("item.removed:%d", lf.eventID),
+				DedupeKey:  fmt.Sprintf("%s:%d", sdk.EventItemRemoved, lf.eventID),
 			})
 		}
 	}

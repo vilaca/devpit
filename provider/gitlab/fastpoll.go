@@ -84,7 +84,7 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 	if len(p.openSnapshots) > 0 {
 		covered := make(map[string]bool, len(events))
 		for _, ev := range events {
-			if ev.EventType == eventItemObserved {
+			if ev.EventType == sdk.EventItemObserved {
 				covered[ev.NativeID] = true
 			}
 		}
@@ -106,7 +106,7 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 // the next cycle's open-set refresh starts from a REST+GraphQL-complete baseline.
 func (p *Provider) cacheOpenSnapshots(events []sdk.Event) {
 	for _, ev := range events {
-		if ev.EventType != eventItemObserved {
+		if ev.EventType != sdk.EventItemObserved {
 			continue
 		}
 		if pl, ok := ev.Payload.(sdk.ItemObservedPayload); ok && pl.State == stateOpen {
@@ -145,17 +145,17 @@ func signalFromTodo(t glTodo, nid string) *sdk.Event {
 	}
 	switch t.ActionName {
 	case "mentioned":
-		return base("signal.mentioned", sdk.SignalMentionedPayload{})
+		return base(sdk.SignalMentioned, sdk.SignalMentionedPayload{})
 	case "directly_addressed":
-		return base("signal.mentioned", sdk.SignalMentionedPayload{})
+		return base(sdk.SignalMentioned, sdk.SignalMentionedPayload{})
 	case "review_requested":
-		return base("signal.review_requested", sdk.SignalReviewRequestedPayload{})
+		return base(sdk.SignalReviewRequested, sdk.SignalReviewRequestedPayload{})
 	case "review_submitted":
-		return base("signal.review_submitted", sdk.SignalReviewSubmittedPayload{Reviewer: t.Author.Username})
+		return base(sdk.SignalReviewSubmitted, sdk.SignalReviewSubmittedPayload{Reviewer: t.Author.Username})
 	case "assigned":
-		return base("signal.assigned", sdk.SignalAssignedPayload{Assigner: t.Author.Username})
+		return base(sdk.SignalAssigned, sdk.SignalAssignedPayload{Assigner: t.Author.Username})
 	case "build_failed":
-		return base("signal.ci_failed", sdk.SignalCIFailedPayload{})
+		return base(sdk.SignalCIFailed, sdk.SignalCIFailedPayload{})
 	default:
 		return nil
 	}

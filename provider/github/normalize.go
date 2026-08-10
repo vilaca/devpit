@@ -13,10 +13,6 @@ import (
 
 const objectType = "merge_request"
 
-// eventItemObserved is the event_type for a periodic item snapshot
-// (docs/Event_Taxonomy_and_Storage.md).
-const eventItemObserved = "item.observed"
-
 // Normalized mergeable_state and gate values.
 const (
 	msClean     = "clean"
@@ -124,7 +120,7 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 	return sdk.Event{
 		ObjectType: objectType,
 		NativeID:   nid,
-		EventType:  eventItemObserved,
+		EventType:  sdk.EventItemObserved,
 		OccurredAt: parseTime(pr.UpdatedAt),
 		Actor:      pr.User.Login,
 		DedupeKey:  observedDedupeKey(payload),
@@ -154,7 +150,7 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 	return sdk.Event{
 		ObjectType: objectType,
 		NativeID:   nativeID(repo, it.Number),
-		EventType:  eventItemObserved,
+		EventType:  sdk.EventItemObserved,
 		OccurredAt: parseTime(it.UpdatedAt),
 		Actor:      it.User.Login,
 		DedupeKey:  observedDedupeKey(payload),
@@ -169,7 +165,7 @@ func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []stri
 func observedDedupeKey(p sdk.ItemObservedPayload) string {
 	b, _ := json.Marshal(p) //nolint:errchkjson // payload has no unmarshalable fields; Marshal cannot fail here
 	sum := sha256.Sum256(b)
-	return "item.observed:" + hex.EncodeToString(sum[:])
+	return sdk.EventItemObserved + ":" + hex.EncodeToString(sum[:])
 }
 
 // labelsFromGH maps GitHub labels to their names. Returns nil for no labels

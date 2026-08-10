@@ -23,8 +23,6 @@ export function makeItem(
     stale: false,
     old: false,
     updated_at: "2026-07-16T00:00:00Z",
-    auto_merge_armed: false,
-    checks_running: false,
     failing_checks: false,
     merge_conflict: false,
     needs_rebase: false,

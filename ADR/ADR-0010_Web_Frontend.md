@@ -38,7 +38,7 @@ mobile clients. Embedding via `go:embed` keeps the single-binary deployment
   specific API routes, with history-API fallback so a browser refresh on any
   route serves `index.html`.
 - In dev, Vite's server proxies the API paths through to a running backend
-  (`vite.config.ts`), so the browser still sees a single origin.
+  (`frontend/vite.config.ts`), so the browser still sees a single origin.
 - Live updates come from an open SSE stream that invalidates a store slice,
   which re-fetches over REST; a cold load runs the same fetch path, so a live
   update and a refresh converge on identical state (the fold is on read).

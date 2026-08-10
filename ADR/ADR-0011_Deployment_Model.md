@@ -2,8 +2,9 @@
 
 ## Scope
 
-Single-binary build **Implemented (v0.1)**; the Docker image is **Planned** —
-no Dockerfile exists yet. See `docs/Roadmap.md`.
+Single-binary build **Implemented (v0.1)**; Docker publication is **Planned**
+for the first public release. The Dockerfile and release pipeline are committed;
+the image has not yet been published. See `docs/Roadmap.md`.
 
 ## Context
 

@@ -26,6 +26,7 @@ const (
 	ghChangesRequested         = "CHANGES_REQUESTED"
 	ghReviewRequired           = "REVIEW_REQUIRED"
 	normalizedChangesRequested = "changes_requested"
+	normalizedReviewRequired   = "review_required"
 )
 
 // Rank-advancing review-verdict signal event types (duplicated from the GitLab
@@ -170,7 +171,7 @@ func ghReviewDecision(decision string) string {
 	case ghReviewStateApproved:
 		return normalizedApproved
 	case ghReviewRequired:
-		return "review_required"
+		return normalizedReviewRequired
 	default:
 		return ""
 	}

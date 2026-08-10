@@ -36,6 +36,25 @@ type fakeStore struct {
 	logs          []storage.SyncLogEntry
 }
 
+// testSignal lets a test release a goroutine at a known point and wait for that
+// point without relying on scheduler timing.
+type testSignal struct {
+	done chan struct{}
+	once sync.Once
+}
+
+func newTestSignal() *testSignal {
+	return &testSignal{done: make(chan struct{})}
+}
+
+func (s *testSignal) Signal() {
+	s.once.Do(func() { close(s.done) })
+}
+
+func (s *testSignal) Done() <-chan struct{} {
+	return s.done
+}
+
 func (f *fakeStore) LoadCursors(_ context.Context, _ string) (sdk.PollState, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -616,9 +635,8 @@ func TestEngineRunLifecycle(t *testing.T) {
 	const typ = "fake_run_test"
 	prov := &fakeProvider{caps: sdk.Capabilities{FastSignal: true}}
 
-	seeded := make(chan struct{})
-	var once sync.Once
-	prov.hook = func() { once.Do(func() { close(seeded) }) }
+	seeded := newTestSignal()
+	prov.hook = seeded.Signal
 
 	sdk.Registry[typ] = func(sdk.ConnectionConfig) (sdk.Provider, error) { return prov, nil }
 	t.Cleanup(func() { delete(sdk.Registry, typ) })
@@ -636,7 +654,7 @@ func TestEngineRunLifecycle(t *testing.T) {
 	go func() { done <- eng.Run(ctx) }()
 
 	select {
-	case <-seeded:
+	case <-seeded.Done():
 	case <-time.After(2 * time.Second):
 		t.Fatal("engine never ran the seed reconcile")
 	}

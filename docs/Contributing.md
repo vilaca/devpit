@@ -62,8 +62,9 @@ second decision log — the ADRs are it.
   token, then restore the mode before committing.
 - Test the behavior that can fail, not only the happy path. A regression test
   must reproduce the triggering failure or boundary condition; for asynchronous
-  code, that includes stale or out-of-order responses, retries, reconnects, and
-  cancellation when they can change the result.
+  code that changes control flow or ordering, use deterministic deferred
+  promises or channels to cover stale or out-of-order responses, retries,
+  reconnects, and cancellation whenever they can change the result.
 - A change to a code shape that a spec links to should be reflected in that
   spec's prose in the same change.
 

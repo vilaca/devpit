@@ -42,6 +42,9 @@ isn't done until `check.sh` is green.
 - **Over-engineering.** Build the smallest thing that answers "what needs my
   attention now?" ([`docs/Engineering_Philosophy.md`](docs/Engineering_Philosophy.md));
   prefer the stdlib and existing code; delete speculative flexibility.
+- **Happy-path-only tests.** Follow the failure and boundary-case expectations in
+  [`docs/Contributing.md`](docs/Contributing.md); a regression test must make its
+  triggering scenario observable.
 - **`go run`.** Build a binary (`scripts/start.sh`) — the pure-Go SQLite dep makes
   cold builds slow and `go run` pays it every time. Dev workflow and testing
   expectations: [`docs/Contributing.md`](docs/Contributing.md).

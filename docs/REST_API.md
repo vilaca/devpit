@@ -54,14 +54,13 @@ Each item carries:
 - Item identity: `id`, `object_type`, `native_id`, `title`, `url`, `repo`,
   `author`, `draft`.
 - `states` — array of provider signals in precedence order; `states[0]` is the
-  leading chip (precedence orders chips, not item ranking). An authored MR is
-  never bare: worst case `["checking"]` (gate
-  `unknown`, including drafts). A non-authored involved item (assignee, etc.)
-  with a known gate and no reviewer/mention signal may still have `states: []`
-  (marker-only row). The array is never `null`. Nine wire values in precedence
-  order: `changes_requested`, `review_requested`, `blocked`, `mentioned`,
-  `ready_to_merge`, `auto_merge_armed`, `checks_running`, `checking`,
-  `review_submitted`.
+  leading chip (precedence orders chips, not item ranking). The authoritative
+  values and order are direct code in
+  [`internal/attention/states.go`](../internal/attention/states.go); their
+  semantics are in `docs/Attention_Engine.md`. An authored MR is never bare:
+  an unknown gate supplies the role-neutral backstop. A non-authored involved
+  item (assignee, etc.) with a known gate and no reviewer/mention signal may
+  still have `states: []` (marker-only row). The array is never `null`.
 - `muted` — true when the item is reviewed-done for you (you are a reviewer, not
   the author or sole approver, and your review is submitted). Muted is a display cue only: the row
   renders de-emphasized and suppresses its signal chips, but muting does not

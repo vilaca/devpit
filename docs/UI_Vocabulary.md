@@ -43,21 +43,17 @@ only and show even on muted rows. See
 
 ## Signals (v0.1.5 — drive ranking, fixed precedence)
 
-Precedence highest → lowest; an item may carry several, the highest ranks it.
-The signal vocabulary is one word-set regardless of your role; conditions stay
-role-aware where the fact is inherently about a role (see role scope notes).
+The signal vocabulary, precedence, and firing conditions are direct code in
+[`internal/attention/states.go`](../internal/attention/states.go); the
+plain-language semantics and role scope live in `docs/Attention_Engine.md`.
 
-| chip | role scope | it means | hover |
-|---|---|---|---|
-| `changes_requested` | author / reviewer | author-side: a reviewer requested changes on your item (bright, actionable). reviewer-side: you requested changes on someone's item — the row is muted (ball is with the author), but this chip alone still renders so the dim row says why | {N} |
-| `review_requested`  | reviewer / sole approver | your review was requested (or implied — you are the only merge path), not submitted | {N} |
-| `blocked`           | author / sole approver | provider merge gate not satisfied | {N} · provider says: {gate_detail} |
-| `mentioned`         | anyone | you were @-mentioned (shows ×N if repeated) | {N} · clears when the item closes |
-| `ready_to_merge`    | author / sole approver | gate satisfied, mergeable now | {N}; with red checks: · a non-required check is red |
-| `auto_merge_armed`  | author / sole approver | provider auto-merge / merge-when-pipeline-succeeds is armed | {N} |
-| `checks_running`    | author / sole approver | a pipeline is in progress | {N} |
-| `checking`          | any (role-neutral) | gate is `unknown` — no verdict yet; rendered as a subtle animated loading bar along the row's bottom edge (not a chip), no hover text |
-| `review_submitted`  | reviewer | you already reviewed (approved / commented); ball with author. Computed but never shown — the reviewed-done row is muted and suppresses its chips. The one exception is a reviewer-side changes-requested verdict, which surfaces as the `changes_requested` chip above | {N} |
+Presentation-specific behavior:
+
+- The unknown-gate signal is a subtle animated loading bar along the row's
+  bottom edge, not a chip, and has no hover text.
+- A reviewed-done row suppresses its signal chips; the reviewer-side
+  changes-requested signal remains visible so the muted row still explains why.
+- Mentioned items show a count when the signal repeats.
 
 `blocked` defers entirely to the provider's merge gate — DevPit never
 re-derives org rules. That is why it is trustworthy.

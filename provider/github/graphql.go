@@ -32,8 +32,8 @@ const (
 // Rank-advancing review-verdict signal event types (duplicated from the GitLab
 // provider on purpose — providers share no helpers, ADR-0003).
 const (
-	signalApproved         = "signal.approved"
-	signalChangesRequested = "signal.changes_requested"
+	signalApproved         = sdk.SignalApproved
+	signalChangesRequested = sdk.SignalChangesRequested
 )
 
 type prItem struct {
@@ -346,7 +346,7 @@ func (p *Provider) runGHBatches(ctx context.Context, items []prItem) (map[int]gh
 func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool, error) {
 	var items []prItem
 	for i, ev := range events {
-		if ev.EventType != eventItemObserved {
+		if ev.EventType != sdk.EventItemObserved {
 			continue
 		}
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)

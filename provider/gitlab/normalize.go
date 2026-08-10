@@ -13,17 +13,13 @@ import (
 
 const objectType = "merge_request"
 
-// eventItemObserved is the event_type for a periodic item snapshot
-// (docs/Event_Taxonomy_and_Storage.md).
-const eventItemObserved = "item.observed"
-
 // Rank-advancing review-verdict signals (the signal stream in
 // docs/Event_Taxonomy_and_Storage.md). Emitted from the GraphQL join's
 // approvedBy set and reviewers reviewState; rank-only — they advance the fold's
 // ranking clock but add no chip (ADR-0016).
 const (
-	signalApproved         = "signal.approved"
-	signalChangesRequested = "signal.changes_requested"
+	signalApproved         = sdk.SignalApproved
+	signalChangesRequested = sdk.SignalChangesRequested
 )
 
 // Normalized gate and detailed_merge_status values.
@@ -166,7 +162,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 	return sdk.Event{
 		ObjectType: objectType,
 		NativeID:   nativeID(mr),
-		EventType:  eventItemObserved,
+		EventType:  sdk.EventItemObserved,
 		OccurredAt: parseTime(mr.UpdatedAt),
 		Actor:      mr.Author.Username,
 		DedupeKey:  observedDedupeKey(payload),
@@ -181,5 +177,5 @@ func isPolicyDenied(dms string) bool {
 func observedDedupeKey(p sdk.ItemObservedPayload) string {
 	b, _ := json.Marshal(p) //nolint:errchkjson // payload has no unmarshalable fields; Marshal cannot fail here
 	sum := sha256.Sum256(b)
-	return "item.observed:" + hex.EncodeToString(sum[:])
+	return sdk.EventItemObserved + ":" + hex.EncodeToString(sum[:])
 }

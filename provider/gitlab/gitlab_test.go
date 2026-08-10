@@ -920,7 +920,7 @@ func TestGraphQLBatchingUnderCeiling(t *testing.T) {
 	// MyReviewState="approved". The join also appends signal.approved events per
 	// approver (rank-only) — skip those here.
 	for i, ev := range out {
-		if ev.EventType != eventItemObserved {
+		if ev.EventType != sdk.EventItemObserved {
 			continue
 		}
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)

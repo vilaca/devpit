@@ -55,8 +55,6 @@ export interface AttentionItem {
   old: boolean;
   updated_at: string; // RFC 3339 UTC
   signal_counts?: Record<string, number>; // present only for counts > 1
-  auto_merge_armed: boolean;
-  checks_running: boolean;
   failing_checks: boolean;
   merge_conflict: boolean;
   needs_rebase: boolean;

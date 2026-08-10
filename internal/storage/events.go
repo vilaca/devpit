@@ -14,10 +14,9 @@ import (
 const itemStateOpen = "open"
 
 // eventItemObserved is the fact-stream event type for an observed item
-// snapshot; the string matches the engine constant. AllOpenTicketKeys folds
-// the latest observed/removed fact per item and keeps only those whose latest
-// is this type (docs/Event_Taxonomy_and_Storage.md).
-const eventItemObserved = "item.observed"
+// snapshot. AllOpenTicketKeys folds the latest observed/removed fact per item
+// and keeps only those whose latest is this type (docs/Event_Taxonomy_and_Storage.md).
+const eventItemObserved = sdk.EventItemObserved
 
 // WriteEvents inserts events for a connection, deduplicating on
 // (connection_id, object_type, native_id, event_type, dedupe_key) via

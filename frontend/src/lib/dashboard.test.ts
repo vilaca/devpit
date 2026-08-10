@@ -24,14 +24,7 @@ import type {
   ConnectionsResponse,
   SyncLogResponse,
 } from "./types";
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
+import { deferred } from "./deferred";
 
 describe("dashboard.toggleFlag", () => {
   beforeEach(() => {
@@ -116,5 +109,42 @@ describe("dashboard.hydrate", () => {
       ["New connection"],
     );
     expect(dashboard.update).toEqual({ available: false, in_container: false });
+  });
+
+  it("ignores an earlier hydration failure after a newer snapshot succeeds", async () => {
+    const firstAttention = deferred<AttentionResponse>();
+    const firstConnections = deferred<ConnectionsResponse>();
+    const firstSyncLog = deferred<SyncLogResponse>();
+    const secondAttention = deferred<AttentionResponse>();
+    const secondConnections = deferred<ConnectionsResponse>();
+    const secondSyncLog = deferred<SyncLogResponse>();
+
+    vi.mocked(getAttention)
+      .mockReturnValueOnce(firstAttention.promise)
+      .mockReturnValueOnce(secondAttention.promise);
+    vi.mocked(getConnections)
+      .mockReturnValueOnce(firstConnections.promise)
+      .mockReturnValueOnce(secondConnections.promise);
+    vi.mocked(getSyncLog)
+      .mockReturnValueOnce(firstSyncLog.promise)
+      .mockReturnValueOnce(secondSyncLog.promise);
+
+    const first = dashboard.hydrate();
+    const second = dashboard.hydrate();
+
+    secondAttention.resolve({ items: [makeItem({ id: "new" })] });
+    secondConnections.resolve({
+      connections: [makeConnection()],
+      update: { available: false, in_container: false },
+    });
+    secondSyncLog.resolve({ entries: [] });
+    await second;
+
+    firstAttention.reject(new Error("old request failed"));
+    await first;
+
+    expect(dashboard.items.map((item) => item.id)).toEqual(["new"]);
+    expect(dashboard.loadError).toBeNull();
+    expect(dashboard.loading).toBe(false);
   });
 });

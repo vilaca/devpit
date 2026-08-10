@@ -421,7 +421,7 @@ func verdictEvent(nativeID, actor, verdict string, n *glNote) (ev sdk.Event, emi
 func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool) {
 	var items []glBatchItem
 	for i, ev := range events {
-		if ev.EventType != eventItemObserved {
+		if ev.EventType != sdk.EventItemObserved {
 			continue
 		}
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
@@ -630,7 +630,7 @@ func (p *Provider) openSetRefresh(
 		events = append(events, sdk.Event{
 			ObjectType: objectType,
 			NativeID:   it.nativeID,
-			EventType:  eventItemObserved,
+			EventType:  sdk.EventItemObserved,
 			OccurredAt: parseTime(pl.ProviderUpdatedAt),
 			Actor:      pl.Author,
 			DedupeKey:  observedDedupeKey(pl),

@@ -150,6 +150,21 @@ type ProviderFactory func(cfg ConnectionConfig) (Provider, error)
 // Built-in providers register at init time.
 var Registry = map[string]ProviderFactory{}
 
+// Event-type constants — the canonical vocabulary from Event_Taxonomy_and_Storage.md.
+// Use these instead of raw string literals across the codebase.
+const (
+	EventItemObserved      = "item.observed"
+	EventItemRemoved       = "item.removed"
+	SignalPrefix           = "signal."
+	SignalMentioned        = "signal.mentioned"
+	SignalReviewRequested  = "signal.review_requested"
+	SignalReviewSubmitted  = "signal.review_submitted"
+	SignalAssigned         = "signal.assigned"
+	SignalCIFailed         = "signal.ci_failed"
+	SignalApproved         = "signal.approved"
+	SignalChangesRequested = "signal.changes_requested"
+)
+
 // Payload shapes — one struct per event type; the engine serialises whichever
 // is set. Shapes follow the event model in Event_Taxonomy_and_Storage.md.
 

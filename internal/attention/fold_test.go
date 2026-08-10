@@ -177,6 +177,126 @@ func TestFoldStateConditions(t *testing.T) {
 	}
 }
 
+type signalMatrixRole struct {
+	name                     string
+	values                   []string
+	author, reviewer, merger bool
+}
+
+type signalMatrixGate struct {
+	name  string
+	value string
+}
+
+type signalMatrixReview struct {
+	name  string
+	value string
+	done  bool
+}
+
+type signalMatrixDecision struct {
+	name  string
+	value string
+}
+
+type signalMatrixCase struct {
+	name     string
+	role     signalMatrixRole
+	gate     signalMatrixGate
+	review   signalMatrixReview
+	decision signalMatrixDecision
+	draft    bool
+}
+
+func signalMatrixCases() []signalMatrixCase {
+	roles := []signalMatrixRole{
+		{name: "unrelated"},
+		{name: "author", values: []string{roleAuthor}, author: true},
+		{name: "reviewer", values: []string{roleReviewer}, reviewer: true},
+		{name: "sole_approver", values: []string{roleSoleApprover}, merger: true},
+	}
+	gates := []signalMatrixGate{
+		{name: "ready", value: gateReady},
+		{name: "blocked", value: gateBlocked},
+		{name: "unknown", value: gateUnknown},
+	}
+	reviews := []signalMatrixReview{
+		{name: "pending", value: ""},
+		{name: "reviewed", value: reviewStateReviewed, done: true},
+		{name: "approved", value: reviewStateApproved, done: true},
+		{name: "changes_requested", value: reviewStateChangesRequested, done: true},
+		// Providers can return an unfamiliar state while their API evolves; it
+		// remains pending until it is intentionally normalized as completed.
+		{name: "unrecognized", value: "PENDING_REVIEW"},
+	}
+	decisions := []signalMatrixDecision{
+		{name: "no_changes_requested"},
+		{name: "changes_requested", value: decisionChangesRequested},
+	}
+
+	cases := make([]signalMatrixCase, 0, 2*len(decisions)*len(reviews)*len(gates)*len(roles))
+	for _, role := range roles {
+		for _, gate := range gates {
+			for _, review := range reviews {
+				for _, decision := range decisions {
+					for _, draft := range []bool{false, true} {
+						name := role.name + "/" + gate.name + "/" + review.name + "/" + decision.name
+						if draft {
+							name += "/draft"
+						}
+						cases = append(cases, signalMatrixCase{name, role, gate, review, decision, draft})
+					}
+				}
+			}
+		}
+	}
+	return cases
+}
+
+func expectedSignalMatrixStates(c signalMatrixCase) []State {
+	var want []State
+	if (c.role.author && c.decision.value == decisionChangesRequested) ||
+		(c.role.reviewer && c.review.value == reviewStateChangesRequested) {
+		want = append(want, StateChangesRequested)
+	}
+	if !c.draft && (c.role.reviewer || c.role.merger) && !c.review.done {
+		want = append(want, StateReviewRequested)
+	}
+	if !c.draft && (c.role.author || c.role.merger) && c.gate.value == gateBlocked {
+		want = append(want, StateBlocked)
+	}
+	if !c.draft && (c.role.author || c.role.merger) && c.gate.value == gateReady {
+		want = append(want, StateReadyToMerge)
+	}
+	if c.gate.value == gateUnknown {
+		want = append(want, StateChecking)
+	}
+	if c.role.reviewer && c.review.done {
+		want = append(want, StateReviewSubmitted)
+	}
+	return want
+}
+
+// TestStatesForRoleGateReviewMatrix exhausts the normalized axes that decide
+// role-scoped signals. The expected states are expressed in precedence order so
+// a change cannot accidentally preserve membership while changing chip order.
+func TestStatesForRoleGateReviewMatrix(t *testing.T) {
+	for _, c := range signalMatrixCases() {
+		t.Run(c.name, func(t *testing.T) {
+			facts := openFacts()
+			facts.MyRoles = c.role.values
+			facts.Gate = c.gate.value
+			facts.MyReviewState = c.review.value
+			facts.ReviewDecision = c.decision.value
+			facts.Draft = c.draft
+
+			if got, want := statesFor(facts, false), expectedSignalMatrixStates(c); !equalStates(got, want) {
+				t.Errorf("states = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
 func TestFoldMentionedFromSignal(t *testing.T) {
 	events := []storage.StoredEvent{
 		obs(1, "c", "acme/api#1", openFacts()), // open, no role -> no fact state

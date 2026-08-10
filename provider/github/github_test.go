@@ -581,6 +581,60 @@ func TestGraphQLJoinReviewRequired(t *testing.T) {
 	t.Fatal("missing item.observed for acme/api#42")
 }
 
+// TestGraphQLJoinReviewRequiredBoundaryCases pins the guard that prevents
+// GitHub's independently refreshed reviewDecision and mergeableState values
+// from presenting contradictory approval and gate diagnostics.
+func TestGraphQLJoinReviewRequiredBoundaryCases(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		payload sdk.ItemObservedPayload
+		want    bool
+	}{
+		{
+			name:    "ready gate suppresses approval marker",
+			payload: sdk.ItemObservedPayload{Gate: gateReady},
+			want:    false,
+		},
+		{
+			name:    "draft suppresses approval marker",
+			payload: sdk.ItemObservedPayload{Gate: gateBlocked, Draft: true},
+			want:    false,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := newStubProvider(t, stubRT{
+				status: http.StatusOK,
+				body: `{"data":{"a0":{"pullRequest":{"reviewDecision":"REVIEW_REQUIRED",` +
+					`"latestReviews":{"nodes":[]},"autoMergeRequest":null}}}}`,
+			})
+			events := []sdk.Event{{
+				ObjectType: objectType,
+				NativeID:   "acme/api#42",
+				EventType:  eventItemObserved,
+				Payload:    c.payload,
+			}}
+
+			got, degraded, err := p.graphqlJoin(context.Background(), events)
+			if err != nil {
+				t.Fatalf("graphqlJoin: %v", err)
+			}
+			if degraded {
+				t.Fatal("graphqlJoin unexpectedly degraded")
+			}
+			pl, ok := got[0].Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatalf("payload type = %T, want sdk.ItemObservedPayload", got[0].Payload)
+			}
+			if pl.NeedsApproval != c.want {
+				t.Errorf("needs_approval = %v, want %v", pl.NeedsApproval, c.want)
+			}
+			if pl.ReviewDecision != normalizedReviewRequired {
+				t.Errorf("review_decision = %q, want review_required", pl.ReviewDecision)
+			}
+		})
+	}
+}
+
 // TestGraphQLJoinAutoMergeArmed verifies a non-null autoMergeRequest in the
 // GraphQL response sets AutoMergeArmed.
 func TestGraphQLJoinAutoMergeArmed(t *testing.T) {

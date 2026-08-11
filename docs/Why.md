@@ -75,22 +75,12 @@ notification. The goal is to reduce cognitive load and context switching.
 
 ## Multi-provider by Design
 
-Providers are peers rather than centers of the system.
-
-Supported initially:
-
-- GitHub
-- GitLab
-
-Future:
-
-- Forgejo
-- Gitea
-- Jira
-- Slack
-- CI/CD
-- Sentry
-- PagerDuty
+Providers are peers rather than centers of the system — no provider is the hub
+the others orbit. Today DevPit speaks GitHub and GitLab, with optional Jira
+ticket-status enrichment. That peer model is what lets it reach further — other
+forges (Forgejo, Gitea, Codeberg) and, later, issue trackers, CI/CD, and
+alerting (Slack, Sentry, PagerDuty). What lands when lives in
+`docs/Roadmap.md`.
 
 ## The Attention Engine
 
@@ -138,10 +128,13 @@ Within 30 seconds of opening DevPit, an engineer should know:
 2. What is blocking me?
 3. What am I blocking?
 4. Which reviews should I complete?
-5. Which release or backport tasks require action?
+5. Which release or backport tasks require action? *(planned, not yet built —
+   `docs/Roadmap.md`.)*
 
 ## Positioning Statement
 
-DevPit is an open-source attention center for software engineers. It
-aggregates actionable work from code forges, issue trackers, CI/CD systems,
-and collaboration tools into a single, user-centric dashboard.
+DevPit is an open-source attention center for software engineers. Today it
+aggregates actionable work from code forges (GitHub, GitLab), with optional
+Jira ticket-status enrichment, into a single user-centric list. The peer
+provider model is built to reach issue trackers, CI/CD, and collaboration tools
+over time (`docs/Roadmap.md`).

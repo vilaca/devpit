@@ -39,7 +39,7 @@ unmatched path so a browser refresh on any client route works.
   `(connection_id, object_type, native_id)`. Clients treat it as a black box
   and use it only for the `/flag` endpoints.
 - Errors use a uniform shape (`{ "error": code, "message": text }`) with codes
-  `not_found`, `bad_request`, `internal` mapping 1:1 to 404 / 400 / 500.
+  `bad_request` and `internal` mapping to 400 / 500.
 
 ## `GET /attention`
 
@@ -97,12 +97,13 @@ Each item carries:
   - `unresolved_discussions` — threads block the merge (GitLab: `blocking_discussions_resolved`; GitHub: excluded — gate rule unreadable for non-admins).
   - `policy_denied` — security/org policy denies merge (GitLab: `policies_denied` / `security_policy_violations`; GitHub: no signal).
 - Two further facts are **not** emitted as top-level marker booleans — they
-  surface only as entries in the `states` array (see the signal list in
-  `internal/api/attention.go`):
+  surface only as entries in the `states` array (the wire values and their
+  precedence are direct code in
+  [`internal/attention/states.go`](../internal/attention/states.go)):
   - `auto_merge_armed` — auto-merge is queued (GitHub: `autoMergeRequest`; GitLab: `merge_when_pipeline_succeeds`). Appears as the `auto_merge_armed` signal for authored MRs.
   - `checks_running` — a gating pipeline is in progress (GitLab only: `headPipeline.status` running; GitHub ✗ — gating pipeline hidden inside `blocked`). Appears as the `checks_running` signal for authored MRs.
-  - `gate_detail` — raw provider vocabulary for the merge gate (omitted when
-    empty); powers the Blocked tooltip.
+- `gate_detail` — a top-level string field (not a `states` entry): raw provider
+  vocabulary for the merge gate (omitted when empty); powers the Blocked tooltip.
 - `since` — map from tag wire name to RFC 3339 onset time; only active tags
   appear. Onset = start of latest contiguous run of snapshots where the
   condition holds. `mentioned` onset = earliest mention signal time.

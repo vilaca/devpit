@@ -570,7 +570,7 @@ func TestGraphQLJoinReviewRequired(t *testing.T) {
 				t.Fatalf("FastPoll: %v", err)
 			}
 			for _, e := range res.Events {
-				if e.EventType != eventItemObserved || e.NativeID != "acme/api#42" {
+				if e.EventType != sdk.EventItemObserved || e.NativeID != "acme/api#42" {
 					continue
 				}
 				pl, ok := e.Payload.(sdk.ItemObservedPayload)
@@ -622,7 +622,7 @@ func TestGraphQLJoinReviewRequiredBoundaryCases(t *testing.T) {
 			events := []sdk.Event{{
 				ObjectType: objectType,
 				NativeID:   "acme/api#42",
-				EventType:  eventItemObserved,
+				EventType:  sdk.EventItemObserved,
 				Payload:    c.payload,
 			}}
 

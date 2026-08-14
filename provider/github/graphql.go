@@ -16,7 +16,7 @@ import (
 )
 
 const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
-	`{pullRequest(number:%d){reviewDecision headRefName baseRefName ` +
+	`{isArchived pullRequest(number:%d){reviewDecision headRefName baseRefName ` +
 	`latestReviews{nodes{state submittedAt author{login}}} autoMergeRequest{enabledAt}}}`
 
 const (
@@ -46,6 +46,11 @@ type prItem struct {
 }
 
 type ghResult struct {
+	// archived is true when the PR's repository is archived on GitHub. It is the
+	// only field set in that case: the item is dropped from the sweep by
+	// graphqlJoin (so the engine reaps it, ADR-0024 archived carve-out) rather
+	// than enriched.
+	archived       bool
 	reviewDecision string
 	approvalsCount int
 	autoMergeArmed bool
@@ -56,6 +61,10 @@ type ghResult struct {
 }
 
 type ghPRNode struct {
+	// IsArchived reflects the parent repository's archived state (sibling of
+	// pullRequest under the aliased repository node). An archived repo is
+	// read-only, so its PR needs no attention and is dropped from the sweep.
+	IsArchived bool `json:"isArchived"`
 	// PullRequest is a pointer so an aliased repository/pullRequest that resolves
 	// to JSON null (inaccessible repo, deleted PR) reads as nil instead of a zero
 	// struct — the caller then keeps the REST payload rather than overwriting it
@@ -99,7 +108,18 @@ func mergeGHBatchResults(
 			continue
 		}
 		var node ghPRNode
-		if json.Unmarshal(raw, &node) != nil || node.PullRequest == nil {
+		if json.Unmarshal(raw, &node) != nil {
+			degraded = true
+			continue
+		}
+		// Archived repo: record only the archived flag (checked before the
+		// PullRequest-null guard — an archived repo still resolves the PR node).
+		// graphqlJoin drops the item so the engine reaps it (ADR-0024).
+		if node.IsArchived {
+			results[it.evIdx] = ghResult{archived: true}
+			continue
+		}
+		if node.PullRequest == nil {
 			degraded = true
 			continue
 		}
@@ -335,9 +355,14 @@ func (p *Provider) runGHBatches(ctx context.Context, items []prItem) (map[int]gh
 // error only for a rate limit — a rate-limit signal is propagated so the engine
 // backs off, while every other GraphQL failure logs, degrades, and keeps the
 // batch's REST payload (A1/A2), since REST data is still authoritative.
-// Invariant: it never drops or reorders events — every input event appears in the output,
-// enriched or verbatim. The engine relies on this to derive the reconcile swept set from
-// the result's events (ADR-0024); a future edit must preserve it.
+// Invariant: it never drops or reorders events on enrichment failure — every input event
+// appears in the output, enriched or verbatim, so a transient GraphQL failure can never
+// shrink the reconcile swept set and cause a false reap. The one deliberate exception is an
+// archived-repo item: its item.observed (and any sibling signal for the same native ID) is
+// dropped so the item leaves the swept set and the engine reaps it (ADR-0024 archived
+// carve-out) — sound because it is driven by GitHub's definitive isArchived fact, never a
+// failure. The engine relies on this to derive the reconcile swept set from the result's
+// events (ADR-0024); a future edit must preserve it.
 // NeedsApproval is set only when reviewDecision == "REVIEW_REQUIRED" && !draft && gate == blocked,
 // avoiding the "ready to merge · missing approvals" contradiction caused by timing skew or drafts.
 // AutoMergeArmed is set from autoMergeRequest (non-null ⇒ armed); it degrades to false when the
@@ -379,11 +404,20 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 
 	enriched := make([]sdk.Event, len(events))
 	copy(enriched, events)
+	// archivedIDs collects the native IDs of items whose repo is archived; those
+	// item.observed events (and any sibling signals sharing the native ID) are
+	// dropped from the output so the item leaves the swept set and the engine
+	// reaps it (ADR-0024 archived carve-out).
+	archivedIDs := map[string]bool{}
 	var verdicts []sdk.Event
 	for evIdx, r := range results {
 		ev := enriched[evIdx]
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 		if !ok {
+			continue
+		}
+		if r.archived {
+			archivedIDs[ev.NativeID] = true
 			continue
 		}
 		pl.NeedsApproval = r.reviewDecision == ghReviewRequired && !pl.Draft && pl.Gate == gateBlocked
@@ -421,7 +455,12 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 	// their positions — the reconcile reap derives its swept set regardless of
 	// order, preserving the no-drop/no-reorder invariant (ADR-0024).
 	out := make([]sdk.Event, 0, len(enriched)+len(verdicts))
-	out = append(out, enriched...)
+	for _, ev := range enriched {
+		if archivedIDs[ev.NativeID] {
+			continue
+		}
+		out = append(out, ev)
+	}
 	out = append(out, verdicts...)
 	return out, degraded, nil
 }

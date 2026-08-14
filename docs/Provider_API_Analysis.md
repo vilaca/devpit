@@ -204,7 +204,10 @@ leave `my_review_state` empty so the item stays `review_requested`. The same
 verdict timestamp on `approvedBy`/`reviewState`, so on each new or changed
 verdict the provider makes one extra REST call — `GET /projects/:id/merge_requests/:iid/notes?order_by=created_at&sort=desc&per_page=100` — to find the
 system note's `created_at` (the true verdict time). See the baseline-diff logic
-in `ADR/ADR-0016` and `docs/Event_Taxonomy_and_Storage.md`.
+in `ADR/ADR-0016` and `docs/Event_Taxonomy_and_Storage.md`. The join also selects
+the enclosing `project.archived`; an archived project's MRs are dropped from the
+sweep so the engine reaps them (`ADR/ADR-0024`), mirroring GitHub's `isArchived`
+on the `repository` node.
 
 ### Merge-gate mapping (`detailed_merge_status`)
 

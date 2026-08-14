@@ -1321,6 +1321,8 @@ type verdictBaselineRT struct {
 	graphqlChanges []string
 	// graphqlDraft causes the GraphQL response to mark the MR as a draft.
 	graphqlDraft bool
+	// graphqlArchived marks the enclosing project archived in the GraphQL response.
+	graphqlArchived bool
 	// notesStatus is the HTTP status for notes calls (0 = 200 with notesBody).
 	notesStatus int
 	// notesBody is the JSON body for the notes endpoint (used when notesStatus == 0).
@@ -1350,6 +1352,7 @@ func (rt *verdictBaselineRT) RoundTrip(req *http.Request) (*http.Response, error
 				}
 			}
 			data[fmt.Sprintf("a%d", i)] = map[string]any{
+				"archived": rt.graphqlArchived,
 				"mergeRequest": map[string]any{
 					"approved":        len(rt.graphqlApprovers) > 0,
 					"shouldBeRebased": false,
@@ -1744,5 +1747,63 @@ func TestBranchPassthrough(t *testing.T) {
 	}
 	if pl.TargetBranch != "main" {
 		t.Errorf("target_branch = %q, want main", pl.TargetBranch)
+	}
+}
+
+// TestGraphQLJoinArchivedProjectDropped verifies that an MR on an archived
+// project is dropped from the join output (item.observed and any sibling signal
+// sharing its native ID) and evicted from openSnapshots, so the reconcile sweep
+// no longer sees it and the engine reaps it (ADR-0024 archived carve-out).
+func TestGraphQLJoinArchivedProjectDropped(t *testing.T) {
+	rt := &verdictBaselineRT{graphqlArchived: true}
+	p := newVerdictProvider(t, rt)
+
+	obs := p.observedFromMR(makeMR("mergeable"))
+	// A sibling signal for the same MR must be dropped alongside the observation.
+	sibling := sdk.Event{
+		ObjectType: objectType,
+		NativeID:   obs.NativeID,
+		EventType:  sdk.SignalReviewRequested,
+		Payload:    sdk.SignalReviewRequestedPayload{},
+	}
+	// Seed the open-set cache as a prior reconcile would have, to prove eviction.
+	if pl, ok := obs.Payload.(sdk.ItemObservedPayload); ok {
+		p.openSnapshots[obs.NativeID] = pl
+	}
+
+	out, degraded := p.graphqlJoin(context.Background(), []sdk.Event{obs, sibling})
+	if degraded {
+		t.Error("archived drop must not mark the cycle degraded")
+	}
+	for _, e := range out {
+		if e.NativeID == obs.NativeID {
+			t.Errorf("archived-project event %s (%s) should have been dropped", e.NativeID, e.EventType)
+		}
+	}
+	if _, ok := p.openSnapshots[obs.NativeID]; ok {
+		t.Errorf("archived-project item %s should be evicted from openSnapshots", obs.NativeID)
+	}
+}
+
+// TestOpenSetRefreshArchivedProjectEvicted verifies the FastPoll open-set refresh
+// drops a cached open item whose project has since been archived: it emits no
+// item.observed for it and evicts it from openSnapshots so a later refresh cannot
+// resurrect it (ADR-0024 archived carve-out).
+func TestOpenSetRefreshArchivedProjectEvicted(t *testing.T) {
+	rt := &verdictBaselineRT{graphqlArchived: true}
+	p := newVerdictProvider(t, rt)
+	p.openSnapshots["acme/api!7"] = sdk.ItemObservedPayload{
+		Title: "cached MR", State: stateOpen, Author: "jdoe",
+		ProviderUpdatedAt: "2026-07-10T00:00:00Z",
+	}
+
+	out, _ := p.openSetRefresh(context.Background(), nil, map[string]bool{})
+	for _, e := range out {
+		if e.NativeID == "acme/api!7" {
+			t.Errorf("archived-project item should not be refreshed, got %s", e.EventType)
+		}
+	}
+	if _, ok := p.openSnapshots["acme/api!7"]; ok {
+		t.Error("archived-project item should be evicted from openSnapshots")
 	}
 }

@@ -2,8 +2,10 @@
 
 ## Scope
 
-Planned — fixes a live correctness bug (merged/closed items never leave the
-list). Lands with the reconcile-reaping work; see `docs/Roadmap.md` for timing.
+Implemented — the engine reaps merged/closed/un-roled items on a complete
+reconcile (`internal/engine/cycle.go`), fixing the ghost-row bug where they never
+left the list. The mention-only (role-less) ghost remainder is deferred to v0.2
+sync hardening (`docs/Roadmap.md`).
 
 ## Context
 
@@ -58,8 +60,12 @@ items that went terminal while the app was down "for free" on the next start.
   a complete sweep is genuinely gone (merged, closed, or access/role lost).
   Deriving the swept set from the result's events is sound only because both
   providers' GraphQL joins return the original events unchanged on enrichment
-  failure (`provider/github/graphql.go`, `provider/gitlab/graphql.go`) — that
-  never-drop behaviour becomes a stated invariant of the join. The diff needs
+  *failure* (`provider/github/graphql.go`, `provider/gitlab/graphql.go`) — that
+  never-drop-on-failure behaviour becomes a stated invariant of the join. The one
+  sanctioned drop is an **archived-repo item** (see the archived-repo bullet in
+  Consequences): the join drops it deliberately so it leaves the swept set and is
+  reaped, which is safe because it is keyed on a definitive forge fact
+  (`isArchived` / `project.archived`), never a transient failure. The diff needs
   one new store read; the `engine → storage` edge already exists
   (`.go-arch-lint.yml`).
 - **Mention-only items are exempt.** An item surfaced purely by a FastPoll
@@ -130,6 +136,19 @@ the GraphQL complexity ceiling, where `Degraded` is common
 - **A partial sweep never reaps** — any REST scope or sole-approver enumeration
   failure clears `Complete`, so a transient outage cannot mass-remove live
   items.
+- **Archived-repo items are reaped.** A PR/MR on a repo the forge reports
+  archived needs no attention (an archived repo is read-only), so both providers'
+  GraphQL joins drop its `item.observed` — and any sibling signal sharing the
+  native ID — keyed on GitHub's `isArchived` / GitLab's `project.archived`
+  (`provider/github/graphql.go`, `provider/gitlab/graphql.go`). GitLab also evicts
+  the item from its `openSnapshots` cache so FastPoll's open-set refresh cannot
+  resurrect it. The dropped item is absent from the sweep, so the engine reaps a
+  previously-open one exactly as it reaps a merge/close. This is the *only* drop
+  the join's never-drop-on-failure invariant permits; because it is gated on the
+  definitive archived fact and skipped whenever the enrichment batch degrades, a
+  transient GraphQL failure never triggers it (no false reap). It also narrows
+  discovery to involvement that can still act — the intent of
+  `ADR/ADR-0004_User_Centric_Synchronization.md`.
 - Related: `ADR/ADR-0005_Event_Based_Attention_Engine.md` (event store),
   `ADR/ADR-0016_Presentation_And_Ranking.md` (the fold shows every open involved
   item — the invariant this restores on the exit side),

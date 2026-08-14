@@ -14,7 +14,7 @@ import (
 	"github.com/vilaca/devpit/sdk"
 )
 
-const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
+const mrQueryFmt = `a%d:project(fullPath:"%s"){archived mergeRequest(iid:"%d"){` +
 	`approved shouldBeRebased detailedMergeStatus ` +
 	`headPipeline{status} approvedBy{count nodes{username}} ` +
 	`reviewers{nodes{username mergeRequestInteraction{reviewState}}}}}`
@@ -24,7 +24,8 @@ const mrQueryFmt = `a%d:project(fullPath:"%s"){mergeRequest(iid:"%d"){` +
 // approvedBy and reviewers connections are each scored — and GitLab's ceiling is
 // 250. An earlier estimate of ≈18/node put the batch at 12 (× 23 = 276), which
 // overshot the ceiling on real instances. 8 × 24 = 192 stays under with headroom
-// for stricter instances.
+// for stricter instances. The project-level `archived` scalar adds ≈1/node, still
+// well within the ceiling at this batch size.
 const graphQLBatchSize = 8
 
 // Normalized my_review_state values recorded for the authenticated user's own
@@ -124,6 +125,11 @@ type glPipeline struct {
 
 // glGraphQLMR holds the GraphQL join result for one GitLab MR.
 type glGraphQLMR struct {
+	// Archived is the parent project's archived state, hoisted onto the MR result
+	// from the enclosing project node (json:"-" because it is not a mergeRequest
+	// field). When true the item is dropped from the sweep so the engine reaps it
+	// (ADR-0024 archived carve-out); no other field is consulted.
+	Archived     bool        `json:"-"`
 	Approved     bool        `json:"approved"`
 	ShouldRebase bool        `json:"shouldBeRebased"`
 	DMS          string      `json:"detailedMergeStatus"`
@@ -148,9 +154,15 @@ type glGraphQLMR struct {
 // Returns the enriched events and a degraded flag (true when at least one batch
 // failed). On failure it logs and falls back to last-known enrichment from
 // openSnapshots (B3: fail closed), so good data is never downgraded to nil.
-// Invariant: it never drops or reorders the input events — every event appears in
-// the output, enriched or carried forward. The engine derives the reconcile swept
-// set from the result's events (ADR-0024) and relies on this; preserve it.
+// Invariant: it never drops or reorders events on enrichment failure — every event
+// appears in the output, enriched or carried forward, so a transient GraphQL failure
+// can never shrink the reconcile swept set and cause a false reap. The one deliberate
+// exception is an archived-project item: its item.observed (and any sibling signal for
+// the same native ID) is dropped and its openSnapshots entry evicted, so the item
+// leaves the swept set and the engine reaps it (ADR-0024 archived carve-out) — sound
+// because it is driven by GitLab's definitive project.archived fact, never a failure.
+// The engine derives the reconcile swept set from the result's events (ADR-0024) and
+// relies on this; preserve it.
 // Draft suppression: NeedsApproval, NeedsRebase, FailingChecks, ChecksRunning,
 // ApprovalsCount, and MyReviewState are zeroed for draft MRs. MergeConflict
 // needs no suppression — GitLab reports DRAFT_STATUS as a draft's blocker, so
@@ -205,10 +217,13 @@ func (p *Provider) runMRBatches(ctx context.Context, queries []mrBatchQuery) (ma
 				continue
 			}
 			var node struct {
+				Archived     bool         `json:"archived"`
 				MergeRequest *glGraphQLMR `json:"mergeRequest"`
 			}
 			if json.Unmarshal(raw, &node) == nil && node.MergeRequest != nil {
-				results[start+j] = *node.MergeRequest
+				mr := *node.MergeRequest
+				mr.Archived = node.Archived // hoist the project-level flag onto the MR result
+				results[start+j] = mr
 			}
 		}
 	}
@@ -446,6 +461,11 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 
 	enriched := make([]sdk.Event, len(events))
 	copy(enriched, events)
+	// archivedIDs collects the native IDs of items whose project is archived; those
+	// item.observed events (and any sibling signals sharing the native ID) are
+	// dropped from the output so the item leaves the swept set and the engine reaps
+	// it (ADR-0024 archived carve-out).
+	archivedIDs := map[string]bool{}
 	var verdicts []sdk.Event
 	for _, it := range items {
 		ev := enriched[it.evIdx]
@@ -454,6 +474,13 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 			continue
 		}
 		if mr, ok := gqlResults[it.evIdx]; ok {
+			if mr.Archived {
+				// Project archived: drop the item and evict any cached snapshot so
+				// FastPoll's open-set refresh cannot resurrect it.
+				archivedIDs[ev.NativeID] = true
+				delete(p.openSnapshots, ev.NativeID)
+				continue
+			}
 			pl = applyGraphQL(pl, mr, p.handle)
 			if pl.State == stateOpen {
 				verdicts = append(verdicts, p.emitNewVerdictSignals(ctx, ev.NativeID, it.fullPath, it.iid, mr, pl.Draft)...)
@@ -473,7 +500,12 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 	// the reconcile reap derives its swept set from the item.observed native_ids
 	// regardless of order, and the no-drop/no-reorder invariant is preserved (ADR-0024).
 	out := make([]sdk.Event, 0, len(enriched)+len(verdicts))
-	out = append(out, enriched...)
+	for _, ev := range enriched {
+		if archivedIDs[ev.NativeID] {
+			continue
+		}
+		out = append(out, ev)
+	}
 	out = append(out, verdicts...)
 	return out, degraded
 }
@@ -626,6 +658,12 @@ func (p *Provider) openSetRefresh(
 			continue
 		}
 		it := openItems[i]
+		if mr.Archived {
+			// Project archived since it was cached: evict and emit nothing. The next
+			// reconcile omits it from the sweep, so the engine reaps it (ADR-0024).
+			delete(p.openSnapshots, it.nativeID)
+			continue
+		}
 		pl := applyGraphQL(it.payload, mr, p.handle)
 		events = append(events, sdk.Event{
 			ObjectType: objectType,

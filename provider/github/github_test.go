@@ -1159,6 +1159,37 @@ func TestGHVerdictSignalsCommentedDismissedSkipped(t *testing.T) {
 	}
 }
 
+// TestGraphQLJoinArchivedRepoDropped verifies that a PR whose repository is
+// archived is dropped from the join output (item.observed and any sibling signal
+// sharing its native ID), so the reconcile sweep no longer sees it and the engine
+// reaps it (ADR-0024 archived carve-out).
+func TestGraphQLJoinArchivedRepoDropped(t *testing.T) {
+	body := `{"data":{"a0":{"isArchived":true,"pullRequest":` +
+		`{"reviewDecision":"APPROVED","latestReviews":{"nodes":[]},"autoMergeRequest":null}}}}`
+	p := newGHVerdictProvider(t, body)
+
+	obs := p.observedFromPull(makePR("clean"))
+	sibling := sdk.Event{
+		ObjectType: objectType,
+		NativeID:   obs.NativeID,
+		EventType:  sdk.SignalReviewRequested,
+		Payload:    sdk.SignalReviewRequestedPayload{},
+	}
+
+	out, degraded, err := p.graphqlJoin(context.Background(), []sdk.Event{obs, sibling})
+	if err != nil {
+		t.Fatalf("graphqlJoin: %v", err)
+	}
+	if degraded {
+		t.Error("archived drop must not mark the cycle degraded")
+	}
+	for _, e := range out {
+		if e.NativeID == obs.NativeID {
+			t.Errorf("archived-repo event %s (%s) should have been dropped", e.NativeID, e.EventType)
+		}
+	}
+}
+
 // TestBranchesFromPullREST verifies observedFromPull populates source_branch
 // (head.ref) and target_branch (base.ref) from the REST PR payload.
 func TestBranchesFromPullREST(t *testing.T) {

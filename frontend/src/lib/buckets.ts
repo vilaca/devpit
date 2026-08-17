@@ -31,14 +31,15 @@ export const BUCKETS: Bucket[] = [
   { state: "review_submitted", label: "Review Submitted" },
 ];
 
-// isMine reports whether the item was authored by you — the connection's own
-// identity matches the item author. Identity lives in connection config (not the
-// event log), so authorship is a client-side derivation. This is the single
+// isMine reports whether the item is "yours" — either you authored it or you
+// are an assignee. Identity for the authorship check lives in connection config
+// (not the event log), so it is a client-side derivation. This is the single
 // source of truth for both the "mine" tint (WorkItemRow) and ?bucket=mine.
 export function isMine(
   item: AttentionItem,
   connections: Connection[],
 ): boolean {
+  if (item.my_roles?.includes("assignee")) return true;
   if (!item.author) return false;
   return (
     connections.find((c) => c.id === item.connection_id)?.identity ===

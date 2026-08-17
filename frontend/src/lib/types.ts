@@ -18,8 +18,8 @@ export type State =
   | "review_submitted";
 
 // A bucket filter is either a provider signal state or the client-side "mine"
-// axis (author is you). "mine" is not a State — authorship is derived from the
-// connection identity (config), not the event log, so it lives only client-side.
+// axis (you authored it or are assigned to it). "mine" is not a State — it is
+// derived from the connection identity (config) and my_roles, client-side only.
 export type Filter = State | "mine";
 
 // Canonical highest-first precedence, matching internal/attention/states.go.

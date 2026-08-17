@@ -114,6 +114,10 @@
         <span class="sep">·</span>
         <span class="author">{item.author}</span>
       {/if}
+      {#if !mine && item.my_roles?.includes("assignee")}
+        <span class="sep">·</span>
+        <span class="assigned">assigned to you</span>
+      {/if}
       {#if item.jira}
         <span class="sep">·</span>
         <a
@@ -282,8 +286,13 @@
   .author,
   .approvals,
   .time,
-  .conn {
+  .conn,
+  .assigned {
     white-space: nowrap;
+  }
+  .assigned {
+    color: var(--accent);
+    font-weight: 500;
   }
   .approvals {
     color: var(--meta-approvals);

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Implemented — the engine reaps merged/closed/un-roled items on a complete
+Implemented (v0.1.6) — the engine reaps merged/closed/un-roled items on a complete
 reconcile (`internal/engine/cycle.go`), fixing the ghost-row bug where they never
 left the list. The mention-only (role-less) ghost remainder is deferred to v0.2
 sync hardening (`docs/Roadmap.md`).

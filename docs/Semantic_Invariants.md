@@ -82,8 +82,8 @@ out of scope; route it to `/simplify` or code review.
 only user-applied state DevPit persists is the local `handle_next` flag in
 SQLite, and it is never written back to any provider.
 
-**Home:** `ADR/ADR-0017_Read_Only_Action_Model.md` (also `docs/Why.md`
-"Read-only by Default").
+**Home:** `ADR/ADR-0017_Read_Only_Action_Model.md` (also
+`docs/Engineering_Philosophy.md` "Read-only by default").
 
 **Anchors:** `provider/github/`, `provider/gitlab/`, `internal/jira/`,
 `internal/api/`, `internal/storage/`, `sdk/`.

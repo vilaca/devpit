@@ -3,7 +3,7 @@
 ## Scope
 
 Single-user localhost core **Implemented (v0.1)**. Team visibility (own-token
-observation) is **Planned**.
+observation) is **Planned** (see `docs/Roadmap.md`).
 
 ## Context
 

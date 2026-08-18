@@ -34,25 +34,28 @@ no separate author/reviewer labels, no authorship tag (the blue tint carries
 authorship). The *conditions* stay role-aware where the fact is inherently about
 a role (see Role scope below).
 
-Highest precedence first (index 0 is the leading chip; precedence orders chips,
-not item ranking — see Ranking):
+The nine signal wire values and their precedence order are direct code — the
+`State` consts and `precedence` var in
+[`internal/attention/states.go`](../internal/attention/states.go) (index 0 is
+the leading chip; precedence orders chips, not item ranking — see Ranking).
+Their human labels, highest precedence first:
 
-| # | wire value | label |
-|---|---|---|
-| 1 | `changes_requested` | Changes Requested |
-| 2 | `review_requested`  | Review Requested  |
-| 3 | `blocked`           | Blocked           |
-| 4 | `mentioned`         | Mentioned         |
-| 5 | `ready_to_merge`    | Ready to Merge    |
-| 6 | `auto_merge_armed`  | Auto-merge Armed  |
-| 7 | `checks_running`    | Checks Running    |
-| 8 | `checking`          | Checking          |
-| 9 | `review_submitted`  | Review Submitted  |
+| wire value | label |
+|---|---|
+| `changes_requested` | Changes Requested |
+| `review_requested`  | Review Requested  |
+| `blocked`           | Blocked           |
+| `mentioned`         | Mentioned         |
+| `ready_to_merge`    | Ready to Merge    |
+| `auto_merge_armed`  | Auto-merge Armed  |
+| `checks_running`    | Checks Running    |
+| `checking`          | Checking          |
+| `review_submitted`  | Review Submitted  |
 
 The exact firing condition for each signal is **direct code** — the `matches`
 switch in `internal/attention/states.go`; the plain-language meaning and role
-scope are below. An item carries **every** signal that applies; its highest
-(lowest-numbered) signal sets its rank, the rest ride as additional tags.
+scope are below. An item carries **every** signal that applies; its
+highest-precedence signal leads, the rest ride as additional tags.
 
 ### Role scope
 
@@ -66,7 +69,7 @@ brightness conveys whose court the ball is in. Review Requested is
 reviewer-relative and also fires for a sole
 approver whose review isn't done — an implicit review obligation, no explicit
 request needed. Review Submitted is reviewer-relative. Mentioned is any-role.
-**Checking (#8) is role-neutral**: it
+**Checking is role-neutral**: it
 fires on any involved item whose gate is `unknown`, including a draft you only
 review, so it can backstop a row that would otherwise be bare.
 
@@ -91,8 +94,8 @@ review, so it can backstop a row that would otherwise be bare.
   item with a known gate and no reviewer or mention signal (e.g. a pure assignee
   on a ready MR) may still render marker-only (empty `states` array).
 - **Changes Requested (author) vs Review Submitted (reviewer)** are the two
-  sides of a review round-trip. Changes Requested is high-precedence (#1, your
-  turn); Review Submitted is lowest (#9, informational — the stale badge is the
+  sides of a review round-trip. Changes Requested is highest-precedence (your
+  turn); Review Submitted is lowest-precedence (informational — the stale badge is the
   safety net for round-trips the author has forgotten). Where the org's merge
   gate enforces approvals, Changes Requested co-occurs with Blocked; the item
   carries both tags and ranks by Changes Requested.
@@ -109,15 +112,15 @@ GitLab markers no longer read a single `detailed_merge_status` value — they co
 from independent REST fields plus a batched GraphQL join, so every applicable
 reason shows at once (`docs/UI_Vocabulary.md` has the provider-parity table).
 
-| Marker | Meaning | GitHub | GitLab |
-|---|---|---|---|
-| `failing_checks` | CI / checks are red | `unstable` (non-gating only; gating-CI failures hide inside `blocked`) | `headPipeline.status` red (GraphQL, any pipeline) |
-| `merge_conflict` | manual conflict resolution needed | `dirty` | `detailed_merge_status == conflict` (REST, refined by GraphQL), dropped when `shouldBeRebased` — see the conflict note in `docs/Provider_API_Analysis.md` |
-| `needs_rebase` | mechanical rebase / update-branch needed | `behind` (only when up-to-date branches required) | `shouldBeRebased` (GraphQL) |
-| `needs_approval` | required approvals not met | `reviewDecision` (GraphQL) | `approved` (GraphQL) |
-| `unresolved_discussions` | unresolved threads gate the merge | — (gate rule unreadable for non-admins) | `blocking_discussions_resolved` (REST) |
-| `policy_denied` | security / org policy denies merge | — (no signal) | `policies_denied` / `security_policy_violations` |
-| `draft` | item is in draft mode | draft flag | draft flag |
+The marker set is the diagnostic boolean fields on `WorkItem`
+(`internal/attention/fold.go`) — `failing_checks` (CI/checks red),
+`merge_conflict` (manual conflict resolution needed), `needs_rebase` (mechanical
+rebase/update-branch needed), `needs_approval` (required approvals not met),
+`unresolved_discussions` (unresolved threads gate the merge), `policy_denied`
+(security/org policy denies merge), and `draft`. The per-provider derivation of
+each — which GitHub/GitLab field feeds it and where a provider is structurally
+blind — is the parity table in `docs/UI_Vocabulary.md` (raw API facts in
+`docs/Provider_API_Analysis.md`), not restated here.
 
 The gate mapping (`mergeGate` in each provider) is **unchanged** — `dirty`,
 `behind`, `conflict`, `need_rebase`, and `ci_must_pass` still produce gate

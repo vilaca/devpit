@@ -85,23 +85,21 @@ Each item carries:
   types with count > 1. The UI renders "×N" only for `mentioned`; other keys
   (including the rank-only `approved` / `changes_requested` verdict signals) are
   counted for completeness but not shown as a tag.
-- **Markers** (diagnostic booleans, never affect state):
-  - `draft` — item is in draft/WIP mode (pre-existing; also listed under item
-    identity above).
-  - `failing_checks` — CI/checks red (GitHub: `unstable`; GitLab: `headPipeline.status` red via GraphQL).
-  - `merge_conflict` — manual conflict resolution needed (GitHub: `dirty`;
-    GitLab: `detailed_merge_status == conflict`, dropped when `shouldBeRebased`).
-  - `needs_rebase` — mechanical rebase needed (GitHub: `behind`; GitLab:
-    `shouldBeRebased` GraphQL).
-  - `needs_approval` — required approvals not met (GitHub: `reviewDecision`; GitLab: `approved` GraphQL).
-  - `unresolved_discussions` — threads block the merge (GitLab: `blocking_discussions_resolved`; GitHub: excluded — gate rule unreadable for non-admins).
-  - `policy_denied` — security/org policy denies merge (GitLab: `policies_denied` / `security_policy_violations`; GitHub: no signal).
+- **Markers** (diagnostic booleans, never affect state): `draft` (draft/WIP —
+  pre-existing; also under item identity above), `failing_checks` (CI/checks
+  red), `merge_conflict` (manual conflict resolution needed), `needs_rebase`
+  (mechanical rebase needed), `needs_approval` (required approvals not met),
+  `unresolved_discussions` (threads block the merge), and `policy_denied`
+  (security/org policy denies merge). The per-provider derivation of each — and
+  where a provider is structurally blind — is the parity table in
+  `docs/UI_Vocabulary.md`, not restated here.
 - Two further facts are **not** emitted as top-level marker booleans — they
-  surface only as entries in the `states` array (the wire values and their
-  precedence are direct code in
-  [`internal/attention/states.go`](../internal/attention/states.go)):
-  - `auto_merge_armed` — auto-merge is queued (GitHub: `autoMergeRequest`; GitLab: `merge_when_pipeline_succeeds`). Appears as the `auto_merge_armed` signal for authored MRs.
-  - `checks_running` — a gating pipeline is in progress (GitLab only: `headPipeline.status` running; GitHub ✗ — gating pipeline hidden inside `blocked`). Appears as the `checks_running` signal for authored MRs.
+  surface only as entries in the `states` array (wire values and precedence are
+  direct code in
+  [`internal/attention/states.go`](../internal/attention/states.go); provider
+  parity in `docs/UI_Vocabulary.md`): `auto_merge_armed` (auto-merge queued) and
+  `checks_running` (a gating pipeline is in progress), each appearing as the
+  like-named signal for authored MRs.
 - `gate_detail` — a top-level string field (not a `states` entry): raw provider
   vocabulary for the merge gate (omitted when empty); powers the Blocked tooltip.
 - `since` — map from tag wire name to RFC 3339 onset time; only active tags

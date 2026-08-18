@@ -68,20 +68,6 @@ Me
 
 Repositories become context rather than navigation.
 
-## Attention Over Information
-
-DevPit intentionally surfaces actionable work instead of displaying every
-notification. The goal is to reduce cognitive load and context switching.
-
-## Multi-provider by Design
-
-Providers are peers rather than centers of the system — no provider is the hub
-the others orbit. Today DevPit speaks GitHub and GitLab, with optional Jira
-ticket-status enrichment. That peer model is what lets it reach further — other
-forges (Forgejo, Gitea, Codeberg) and, later, issue trackers, CI/CD, and
-alerting (Slack, Sentry, PagerDuty). What lands when lives in
-`docs/Roadmap.md`.
-
 ## The Attention Engine
 
 Provider-specific events are normalized into common events — reviews requested,
@@ -100,25 +86,10 @@ Rather than mirroring hundreds of repositories, DevPit discovers work from:
 
 Repository details are fetched only when needed.
 
-## Self-host First
-
-DevPit runs as:
-
-- A single executable
-- A Docker container
-
-No server-side plugins or modifications to GitHub, GitLab, or other
-providers are required.
-
-## Read-only by Default
-
-DevPit aggregates information rather than replacing existing platforms.
-Actions remain in the source systems unless optional integrations are added
-later.
-
 ## Guiding Principles
 
-See `docs/Engineering_Philosophy.md` for the guiding principles.
+See `docs/Engineering_Philosophy.md` for the guiding principles — attention over
+information, provider-agnostic peers, self-host first, and read-only by default.
 
 ## Success Criteria
 

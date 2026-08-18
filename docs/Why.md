@@ -58,12 +58,12 @@ DevPit:
 
 Me
 
-- Needs Review
+- Review Requested
 - Changes Requested
 - Blocked
 - Ready to Merge
 - Mentioned
-- Waiting on Author
+- Review Submitted
 - Needs Backport (future)
 
 Repositories become context rather than navigation.

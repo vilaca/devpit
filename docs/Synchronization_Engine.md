@@ -83,17 +83,21 @@ cycle into an outcome (the value set is an open `TEXT` column in
 themselves are the constants in `internal/engine/cycle.go`). The
 classification the engine applies:
 
-| Outcome | Trigger | Cause shown in the log |
-|---|---|---|
-| ok | 2xx / 304 | — |
-| degraded | cycle succeeded but enrichment partially failed (`PollResult.Degraded`) | — |
-| auth | 401 (permanent 403) | Authentication failed — check the token |
-| rate_limited | 429 / rate 403 | Rate limited — retry in Ns |
-| network | transport only (DNS/TCP/TLS/timeout, no HTTP response) | Couldn't reach {provider} |
-| server | provider 5xx | {provider} server error — will retry |
-| parse | 2xx but body decode failed | Unexpected response format |
-| storage | local write failure | Local storage error |
-| unexpected | any other odd status | Unexpected status |
+| Outcome | Trigger |
+|---|---|
+| ok | 2xx / 304 |
+| degraded | cycle succeeded but enrichment partially failed (`PollResult.Degraded`) |
+| auth | 401 (permanent 403) |
+| rate_limited | 429 / rate 403 |
+| network | transport only (DNS/TCP/TLS/timeout, no HTTP response) |
+| server | provider 5xx |
+| parse | 2xx but body decode failed |
+| storage | local write failure |
+| unexpected | any other odd status |
+
+Each failing outcome carries a plain-language cause shown in the sync activity
+view; the strings are rendered by `causeText` (and the two special-cased
+`SyncFailed` calls) in `internal/engine/cycle.go`.
 
 ## Health dot derivation
 

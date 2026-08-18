@@ -90,12 +90,12 @@ timestamp used as `OccurredAt` (`docs/Event_Taxonomy_and_Storage.md`,
 
 | Bucket | Search query | Post-filter |
 |--------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| Needs Review | `is:open is:pr review-requested:@me archived:false` | — (`user-review-requested:@me` additionally distinguishes direct from team requests) |
+| Review Requested | `is:open is:pr review-requested:@me archived:false` | — (`user-review-requested:@me` additionally distinguishes direct from team requests) |
 | Changes Requested | `is:open is:pr author:@me archived:false` | `reviewDecision == CHANGES_REQUESTED` |
 | Blocked | same authored query | merge-gate mapping below, non-draft |
 | Ready to Merge | same authored query | merge-gate mapping below, non-draft |
 | Mentioned | `is:open mentions:@me archived:false` | includes issues by design |
-| Waiting on Author | `is:open is:pr reviewed-by:@me -review-requested:@me -author:@me archived:false` | — |
+| Review Submitted | `is:open is:pr reviewed-by:@me -review-requested:@me -author:@me archived:false` | — |
 
 Assigned work (discovery per ADR-0004): `is:open assignee:@me`.
 
@@ -177,11 +177,11 @@ Global list endpoint, `state=opened`, response includes
 
 | Bucket | Call | Post-filter |
 |---------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| Needs Review | `GET /merge_requests?scope=reviews_for_me&state=opened` | my reviewer state ∈ {unreviewed, review_started} via reviewers endpoint (below) |
+| Review Requested | `GET /merge_requests?scope=reviews_for_me&state=opened` | my reviewer state ∈ {unreviewed, review_started} via reviewers endpoint (below) |
 | Changes Requested | `GET /merge_requests?scope=created_by_me&state=opened` | `detailed_merge_status == requested_changes` (Premium) **or** any reviewer state `requested_changes` via reviewers endpoint (Free) |
 | Blocked / Ready to Merge | same authored query | merge-gate mapping below, non-draft |
 | Mentioned | `GET /todos?state=pending&action=mentioned` + `directly_addressed` | — |
-| Waiting on Author | `scope=reviews_for_me` result | my reviewer state ∈ {reviewed, requested_changes} |
+| Review Submitted | `scope=reviews_for_me` result | my reviewer state ∈ {reviewed, requested_changes} |
 
 Assigned: `scope=assigned_to_me&state=opened`.
 

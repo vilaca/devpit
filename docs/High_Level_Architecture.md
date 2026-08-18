@@ -26,7 +26,7 @@ Reads never block the writer and vice versa (split pools, WAL — ADR-0007).
 
 ## Deployment
 
-Single binary (built) or Docker (planned) — `ADR/ADR-0011_Deployment_Model.md`.
+Single binary or Docker image (v0.1.6) — `ADR/ADR-0011_Deployment_Model.md`.
 Single-user, localhost, no auth (`ADR/ADR-0001_Local_First_Web_Application.md`).
 
 ## Timeline

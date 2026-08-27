@@ -318,7 +318,8 @@ func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json
 // well within the GraphQL node budget) and returns the per-evIdx results, a
 // degraded flag (any batch failed or any node came back null), and an error only
 // for a rate limit — that is propagated so the engine backs off, while every
-// other GraphQL failure logs, degrades, and keeps the batch's REST payload.
+// other GraphQL failure logs, degrades, and leaves that batch out of results
+// so graphqlJoin can carry a prior snapshot forward (or keep the REST payload).
 func (p *Provider) runGHBatches(ctx context.Context, items []prItem) (map[int]ghResult, bool, error) {
 	results := make(map[int]ghResult, len(items))
 	var degraded bool
@@ -354,7 +355,8 @@ func (p *Provider) runGHBatches(ctx context.Context, items []prItem) (map[int]gh
 // degraded flag (true when any batch failed or any node came back null), and an
 // error only for a rate limit — a rate-limit signal is propagated so the engine
 // backs off, while every other GraphQL failure logs, degrades, and keeps the
-// batch's REST payload (A1/A2), since REST data is still authoritative.
+// batch's REST payload (A1/A2), or carries the last-known GraphQL enrichment
+// forward from openSnapshots when a prior successful join cached one.
 // Invariant: it never drops or reorders events on enrichment failure — every input event
 // appears in the output, enriched or verbatim, so a transient GraphQL failure can never
 // shrink the reconcile swept set and cause a false reap. The one deliberate exception is an
@@ -366,8 +368,8 @@ func (p *Provider) runGHBatches(ctx context.Context, items []prItem) (map[int]gh
 // NeedsApproval is set only when reviewDecision == "REVIEW_REQUIRED" && !draft && gate == blocked,
 // avoiding the "ready to merge · missing approvals" contradiction caused by timing skew or drafts.
 // AutoMergeArmed is set from autoMergeRequest (non-null ⇒ armed); it degrades to false when the
-// field is unreadable or GraphQL fails. ChecksRunning is left false on GitHub (documented parity
-// gap: a gating in-progress pipeline is hidden inside the blocked gate, ADR-0016).
+// field is unreadable and no snapshot exists. ChecksRunning is left false on GitHub (documented
+// parity gap: a gating in-progress pipeline is hidden inside the blocked gate, ADR-0016).
 func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.Event, bool, error) {
 	var items []prItem
 	for i, ev := range events {
@@ -392,9 +394,6 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 	if err != nil {
 		return events, false, err
 	}
-	if len(results) == 0 {
-		return events, degraded, nil
-	}
 
 	// Build a lookup from evIdx → "owner/repo" for the opportunistic downgrade below.
 	evIdxToRepo := make(map[int]string, len(items))
@@ -410,14 +409,27 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 	// reaps it (ADR-0024 archived carve-out).
 	archivedIDs := map[string]bool{}
 	var verdicts []sdk.Event
-	for evIdx, r := range results {
-		ev := enriched[evIdx]
+	for _, it := range items {
+		ev := enriched[it.evIdx]
 		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
 		if !ok {
 			continue
 		}
+		r, hasResult := results[it.evIdx]
+		if !hasResult {
+			// Batch for this item degraded: carry forward the last-known GraphQL-
+			// enriched fields so a transient failure never downgrades good data.
+			if snap, ok := p.openSnapshots[ev.NativeID]; ok {
+				pl = carryForwardEnrichment(pl, snap)
+				ev.Payload = pl
+				ev.DedupeKey = observedDedupeKey(pl)
+				enriched[it.evIdx] = ev
+			}
+			continue
+		}
 		if r.archived {
 			archivedIDs[ev.NativeID] = true
+			delete(p.openSnapshots, ev.NativeID)
 			continue
 		}
 		pl.NeedsApproval = r.reviewDecision == ghReviewRequired && !pl.Draft && pl.Gate == gateBlocked
@@ -427,23 +439,10 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 		pl.MyReviewState = r.myReviewState
 		pl.SourceBranch = r.sourceBranch
 		pl.TargetBranch = r.targetBranch
-
-		// Opportunistic downgrade: if approvals exist beyond the user's own,
-		// another account can approve — mark the repo as not-sole-approver immediately.
-		if repoKey, keyOK := evIdxToRepo[evIdx]; keyOK {
-			myCount := 0
-			if r.myReviewState == normalizedApproved {
-				myCount = 1
-			}
-			if r.approvalsCount > myCount {
-				p.approverCache[repoKey] = approverEntry{isSole: false, fetchedAt: time.Now()}
-			}
-		}
-
+		p.updateSoleApprover(evIdxToRepo[it.evIdx], r)
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
-		enriched[evIdx] = ev
-
+		enriched[it.evIdx] = ev
 		// Verdict signals ride after all input events (ADR-0024). Only emit for open
 		// non-draft PRs; r.verdictSigs is already filtered to non-draft in mergeGHBatchResults.
 		if pl.State == stateOpen {
@@ -463,6 +462,52 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 	}
 	out = append(out, verdicts...)
 	return out, degraded, nil
+}
+
+// carryForwardEnrichment merges the GraphQL-sourced fields from a prior snapshot
+// onto pl so a failed batch does not wipe previously-known approval / auto-merge
+// state. The REST payload never populates these fields (they are GraphQL-only),
+// so the snapshot is their sole source while a batch is degraded and each is
+// assigned from it directly — never OR-ed, which would let a stale true survive
+// a REST-observed false if REST ever began reporting one. Draft suppression: on
+// a PR that has since become a draft the approval / auto-merge / needs-approval
+// fields are NOT carried (a draft hides the merge-gate chips), so a stale
+// non-draft snapshot cannot resurrect them. review_decision is not a merge-gate
+// fact and is carried regardless of draft, matching the live GraphQL apply.
+// Source/target branches are carried when REST left them empty (search-path
+// snapshots omit head/base).
+// updateSoleApprover performs the opportunistic downgrade: if a PR already has
+// approvals beyond the user's own, another account can approve — mark the repo
+// as not-sole-approver immediately. repoKey is "" when the lookup is absent.
+func (p *Provider) updateSoleApprover(repoKey string, r ghResult) {
+	if repoKey == "" {
+		return
+	}
+	myCount := 0
+	if r.myReviewState == normalizedApproved {
+		myCount = 1
+	}
+	if r.approvalsCount > myCount {
+		p.approverCache[repoKey] = approverEntry{isSole: false, fetchedAt: time.Now()}
+	}
+}
+
+func carryForwardEnrichment(pl, snap sdk.ItemObservedPayload) sdk.ItemObservedPayload {
+	pl.ReviewDecision = snap.ReviewDecision
+	if pl.SourceBranch == "" {
+		pl.SourceBranch = snap.SourceBranch
+	}
+	if pl.TargetBranch == "" {
+		pl.TargetBranch = snap.TargetBranch
+	}
+	if pl.Draft {
+		return pl
+	}
+	pl.ApprovalsCount = snap.ApprovalsCount
+	pl.MyReviewState = snap.MyReviewState
+	pl.AutoMergeArmed = snap.AutoMergeArmed
+	pl.NeedsApproval = snap.NeedsApproval
+	return pl
 }
 
 // parseGHNativeID splits "owner/repo#number" into its components.

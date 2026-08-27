@@ -29,8 +29,10 @@ provider last failed.
   *stale*, plus a non-blocking banner naming the provider and cause. One
   provider failing never blanks the others.
 - **Never conflate empty with failed**: an empty list says so explicitly
-  ("All clear — synced 1m ago"); a stale/failed provider is always visibly
-  distinct.
+  ("All clear — synced 1m ago", from the oldest `last_synced_at`); a failing
+  connection replaces that sentence so empty never reads as healthy. Copy is
+  `emptyListCopy` in `frontend/src/lib/format.ts`. A stale/failed provider is
+  always visibly distinct.
 - **A persisted, bounded sync log**: one human-readable row per poll cycle per
   connection; on failure the individual calls, statuses, retries, and
   next-retry are captured and shown on expand. Bounded by user-initiated

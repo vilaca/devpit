@@ -19,5 +19,6 @@ Optional TCP address the dashboard API binds to. Defaults to `localhost:7474`.
 > Keep the bind on loopback. Set a non-loopback value (e.g. `:7474`) **only**
 > inside a container — where loopback is unreachable from the host — and publish
 > it host-side as a loopback port map (`-p 127.0.0.1:7474:7474`), never on a
-> routable interface. Rationale:
+> routable interface. `config.Load` emits a warning for any non-loopback bind
+> (including the Docker form). Rationale:
 > `ADR/ADR-0023_Packaging_Distribution_and_Release_Pipeline.md`.

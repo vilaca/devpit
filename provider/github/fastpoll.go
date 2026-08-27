@@ -86,6 +86,7 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 	if err != nil {
 		return sdk.PollResult{}, err
 	}
+	p.cacheOpenSnapshots(events)
 
 	return sdk.PollResult{
 		Events:        events,
@@ -93,6 +94,31 @@ func (p *Provider) FastPoll(ctx context.Context, state sdk.PollState) (sdk.PollR
 		RateRemaining: rate,
 		Degraded:      degraded,
 	}, nil
+}
+
+// cacheOpenSnapshots stores post-join open-item payloads so a later degraded
+// graphqlJoin can carry GraphQL enrichment forward instead of wiping it.
+func (p *Provider) cacheOpenSnapshots(events []sdk.Event) {
+	if p.openSnapshots == nil {
+		p.openSnapshots = map[string]sdk.ItemObservedPayload{}
+	}
+	for _, ev := range events {
+		if ev.EventType != sdk.EventItemObserved {
+			continue
+		}
+		pl, ok := ev.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			continue
+		}
+		if pl.State == stateOpen {
+			p.openSnapshots[ev.NativeID] = pl
+		} else {
+			// Observing a PR as merged/closed makes its open snapshot stale;
+			// drop it so a merge (which FastPoll sees as a non-open snapshot,
+			// ADR-0024) evicts the entry instead of leaking it forever.
+			delete(p.openSnapshots, ev.NativeID)
+		}
+	}
 }
 
 func (p *Provider) fetchPull(ctx context.Context, owner, repo string, number int) (*ghPull, error) {

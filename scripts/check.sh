@@ -37,7 +37,7 @@ CI_MODE=0
 # Pinned; the external linters are installed on demand (a fresh clone and CI
 # have neither). Bump the version here and it changes for local and CI together.
 GOLANGCI_VERSION="v2.12.2"
-ARCHLINT_VERSION="v1.16.0"
+ARCHLINT_VERSION="v1.18.0"
 SHELLCHECK_VERSION="v0.10.0"
 ACTIONLINT_VERSION="v1.7.12"
 LYCHEE_VERSION="v0.24.2"

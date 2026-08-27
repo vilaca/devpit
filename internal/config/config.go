@@ -3,8 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/vilaca/devpit/sdk"
 
@@ -18,6 +21,8 @@ import (
 // (ADR-0004), not config, and deliberately absent here.
 type Config struct {
 	// DBPath is the SQLite database path passed to storage.Open.
+	// A leading ~/ (or a lone ~) is expanded to the current user's home
+	// at Load time so the README snippet is a usable path.
 	DBPath string
 	// Listen is the TCP address the dashboard API binds to. Defaults to
 	// DefaultListen; a container config overrides it to ":7474" because a
@@ -30,8 +35,8 @@ type Config struct {
 	// is absent from the config file; present means all three fields are set.
 	Jira *JiraConfig
 	// Warnings are non-fatal advisories surfaced at load time (e.g. an
-	// over-permissive config file — ADR-0019). The caller decides how to
-	// present them.
+	// over-permissive config file — ADR-0019 — or a non-loopback listen).
+	// The caller decides how to present them.
 	Warnings []string
 }
 
@@ -120,13 +125,38 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("config %q: %w", path, err)
 	}
+	if !listenIsLoopback(cfg.Listen) {
+		warnings = append(warnings, fmt.Sprintf(
+			"listen %q is not loopback; the API is unauthenticated (ADR-0001) —"+
+				" use a non-loopback bind only inside a container and publish it host-side as 127.0.0.1",
+			cfg.Listen))
+	}
 	cfg.Warnings = warnings
 	return cfg, nil
+}
+
+// listenIsLoopback reports whether addr is a loopback host:port (localhost,
+// 127.0.0.1, ::1). An empty host (:7474) or 0.0.0.0 / :: binds every
+// interface and is not loopback.
+func listenIsLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func validate(raw fileConfig) (Config, error) {
 	if raw.DBPath == "" {
 		return Config{}, errors.New("db_path is required")
+	}
+	dbPath, err := expandHome(raw.DBPath)
+	if err != nil {
+		return Config{}, err
 	}
 
 	listen := raw.Listen
@@ -190,5 +220,43 @@ func validate(raw fileConfig) (Config, error) {
 		}
 	}
 
-	return Config{DBPath: raw.DBPath, Listen: listen, Connections: conns, Jira: jira}, nil
+	return Config{DBPath: dbPath, Listen: listen, Connections: conns, Jira: jira}, nil
+}
+
+// userHomeDir is os.UserHomeDir, swapped in tests to force a lookup failure.
+var userHomeDir = os.UserHomeDir
+
+// expandHome resolves a leading ~/ (or a lone ~) to the current user's home.
+// Other-user forms (~name/...) and mid-path tildes are left unchanged — we
+// do not consult passwd.
+func expandHome(p string) (string, error) {
+	rest, ok := cutHomePrefix(p)
+	if !ok {
+		return p, nil
+	}
+	home, err := userHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("expand ~ in db_path: %w", err)
+	}
+	if rest == "" {
+		return home, nil
+	}
+	return filepath.Join(home, rest), nil
+}
+
+func cutHomePrefix(p string) (rest string, ok bool) {
+	if p == "~" {
+		return "", true
+	}
+	if after, found := strings.CutPrefix(p, "~/"); found {
+		return after, true
+	}
+	// `\` is a path separator only on Windows; on Unix it is a valid filename
+	// character, so a literal "~\foo" must not be expanded there.
+	if runtime.GOOS == "windows" {
+		if after, found := strings.CutPrefix(p, `~\`); found {
+			return after, true
+		}
+	}
+	return "", false
 }

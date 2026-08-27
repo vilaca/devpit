@@ -137,6 +137,14 @@ type Provider interface {
 	// (e.g. "fast.last_modified").
 	Reconcile(ctx context.Context, state PollState) (PollResult, error)
 
+	// ResolveOpen reports which of nativeIDs are still open and visible on the
+	// forge. The engine calls it after a complete reconcile to decide whether
+	// mention-only leftovers should be reaped (ADR-0024): an omitted ID is gone
+	// (merged, closed, or inaccessible) and receives item.removed. A transport,
+	// rate-limit, or auth error is returned so the engine does not reap leftovers
+	// this cycle. An empty input returns a nil slice.
+	ResolveOpen(ctx context.Context, nativeIDs []string) (open []string, err error)
+
 	// Close releases any resources held by the provider (HTTP client, open
 	// connections). Called when the connection is removed or the engine shuts down.
 	Close(ctx context.Context) error

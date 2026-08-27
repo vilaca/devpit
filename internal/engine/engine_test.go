@@ -131,6 +131,10 @@ type fakeProvider struct {
 
 	hook func() // runs at the top of FastPoll/Reconcile
 
+	// resolveOpen, when set, answers leftover mention lookups. When nil,
+	// leftovers are reported still-open so live mentions stay on the list.
+	resolveOpen func([]string) ([]string, error)
+
 	fastCalls  int
 	reconCalls int
 	closed     bool
@@ -160,6 +164,13 @@ func (p *fakeProvider) Reconcile(context.Context, sdk.PollState) (sdk.PollResult
 		p.hook()
 	}
 	return p.result, p.pollErr
+}
+
+func (p *fakeProvider) ResolveOpen(_ context.Context, ids []string) ([]string, error) {
+	if p.resolveOpen != nil {
+		return p.resolveOpen(ids)
+	}
+	return ids, nil
 }
 
 func (p *fakeProvider) Close(context.Context) error {

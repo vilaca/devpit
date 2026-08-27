@@ -914,6 +914,183 @@ func TestGraphQLJoinGenericErrorDegrades(t *testing.T) {
 	}
 }
 
+// TestGraphQLJoinCarryForward exercises the fail-closed carry-forward path: a
+// degraded batch with a prior openSnapshots entry copies the last-known GraphQL
+// fields (ApprovalsCount, MyReviewState, ReviewDecision, AutoMergeArmed,
+// NeedsApproval) forward instead of wiping them to the REST defaults
+// (ApprovalsCount -1, the booleans false).
+func TestGraphQLJoinCarryForward(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200, body: `{"data":null,"errors":[{"message":"boom"}]}`})
+	p.handle = "octocat"
+
+	p.openSnapshots["acme/api#1"] = sdk.ItemObservedPayload{
+		ApprovalsCount: 3,
+		MyReviewState:  normalizedApproved,
+		ReviewDecision: normalizedChangesRequested,
+		NeedsApproval:  true,
+		AutoMergeArmed: true,
+		SourceBranch:   "feat/rate-limit",
+		TargetBranch:   "main",
+	}
+
+	events := []sdk.Event{p.observedFromPull(makePR("blocked"))}
+
+	out, degraded, err := p.graphqlJoin(context.Background(), events)
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if !degraded {
+		t.Fatal("degraded should be true when the batch fails")
+	}
+	pl, ok := out[0].Payload.(sdk.ItemObservedPayload)
+	if !ok {
+		t.Fatalf("payload type %T", out[0].Payload)
+	}
+	if pl.ApprovalsCount != 3 {
+		t.Errorf("approvals_count = %d, want 3 (carried from snapshot, not the -1 REST default)", pl.ApprovalsCount)
+	}
+	if pl.MyReviewState != normalizedApproved {
+		t.Errorf("my_review_state = %q, want approved (carried)", pl.MyReviewState)
+	}
+	if pl.ReviewDecision != normalizedChangesRequested {
+		t.Errorf("review_decision = %q, want changes_requested (carried)", pl.ReviewDecision)
+	}
+	if !pl.NeedsApproval {
+		t.Error("needs_approval should be true (carried from snapshot)")
+	}
+	if !pl.AutoMergeArmed {
+		t.Error("auto_merge_armed should be true (carried from snapshot)")
+	}
+	if pl.SourceBranch != "feat/rate-limit" {
+		t.Errorf("source_branch = %q, want feat/rate-limit (carried when REST left it empty)", pl.SourceBranch)
+	}
+	if pl.TargetBranch != "main" {
+		t.Errorf("target_branch = %q, want main (carried when REST left it empty)", pl.TargetBranch)
+	}
+}
+
+// TestCarryForwardEnrichmentNowDraft is the now-draft edge case: a PR that had a
+// non-draft snapshot (3 approved, auto-merge armed) and has since become a draft
+// must NOT have that approval / auto-merge state carried forward — drafts hide
+// those chips, so the stale snapshot cannot re-show them.
+func TestCarryForwardEnrichmentNowDraft(t *testing.T) {
+	snap := sdk.ItemObservedPayload{
+		ApprovalsCount: 3,
+		MyReviewState:  normalizedApproved,
+		ReviewDecision: normalizedChangesRequested,
+		NeedsApproval:  true,
+		AutoMergeArmed: true,
+		SourceBranch:   "feat/rate-limit",
+		TargetBranch:   "main",
+	}
+
+	draft := carryForwardEnrichment(sdk.ItemObservedPayload{Draft: true, ApprovalsCount: -1}, snap)
+	if draft.ApprovalsCount != -1 {
+		t.Errorf("approvals_count = %d, want -1 (suppressed on a draft, not carried)", draft.ApprovalsCount)
+	}
+	if draft.MyReviewState != "" {
+		t.Errorf("my_review_state = %q, want empty (suppressed on a draft)", draft.MyReviewState)
+	}
+	if draft.NeedsApproval {
+		t.Error("needs_approval should stay false on a draft (snapshot not carried)")
+	}
+	if draft.AutoMergeArmed {
+		t.Error("auto_merge_armed should stay false on a draft (snapshot not carried)")
+	}
+	if draft.ReviewDecision != normalizedChangesRequested {
+		t.Errorf("review_decision = %q, want changes_requested (carried regardless of draft)", draft.ReviewDecision)
+	}
+	if draft.SourceBranch != "feat/rate-limit" || draft.TargetBranch != "main" {
+		t.Errorf("draft branches = %q/%q, want feat/rate-limit/main (carried even on a draft)",
+			draft.SourceBranch, draft.TargetBranch)
+	}
+
+	live := carryForwardEnrichment(sdk.ItemObservedPayload{ApprovalsCount: -1}, snap)
+	if live.ApprovalsCount != 3 || live.MyReviewState != normalizedApproved || !live.AutoMergeArmed {
+		t.Errorf("non-draft carry: approvals=%d review=%q auto_merge=%v, want 3/approved/true",
+			live.ApprovalsCount, live.MyReviewState, live.AutoMergeArmed)
+	}
+}
+
+func TestCacheOpenSnapshots(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200, body: `{}`})
+	open := p.observedFromPull(makePR("clean"))
+	closedPR := makePR("clean")
+	closedPR.Number = 2
+	closedPR.State = "closed"
+	closed := p.observedFromPull(closedPR)
+
+	p.cacheOpenSnapshots([]sdk.Event{open, closed})
+	if _, ok := p.openSnapshots[open.NativeID]; !ok {
+		t.Fatal("open item should be cached")
+	}
+	if _, ok := p.openSnapshots[closed.NativeID]; ok {
+		t.Error("closed item should not be cached")
+	}
+
+	// Observing a previously-open PR as merged evicts its stale snapshot, so a
+	// merge does not leak the entry forever (there was no delete path but for
+	// archived repos).
+	mergedPR := makePR("clean") // same number/native ID as open (acme/api#1)
+	mergedPR.State = "closed"
+	mergedPR.Merged = true
+	merged := p.observedFromPull(mergedPR)
+	p.cacheOpenSnapshots([]sdk.Event{merged})
+	if _, ok := p.openSnapshots[open.NativeID]; ok {
+		t.Errorf("merged item %s should be evicted from openSnapshots", open.NativeID)
+	}
+}
+
+// TestPruneClosedSnapshots verifies the authoritative Reconcile sweep evicts a
+// cached snapshot whose PR has left the open set, while an incomplete sweep
+// (non-authoritative) evicts nothing.
+func TestPruneClosedSnapshots(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200, body: `{}`})
+	stillOpen := p.observedFromPull(makePR("clean")) // acme/api#1
+	gonePR := makePR("clean")
+	gonePR.Number = 2
+	gone := p.observedFromPull(gonePR) // acme/api#2
+
+	// Both were cached by earlier cycles; the sweep below lists only #1.
+	openPL, _ := stillOpen.Payload.(sdk.ItemObservedPayload)
+	gonePL, _ := gone.Payload.(sdk.ItemObservedPayload)
+	p.openSnapshots[stillOpen.NativeID] = openPL
+	p.openSnapshots[gone.NativeID] = gonePL
+
+	// An incomplete sweep is not authoritative: nothing is evicted.
+	p.pruneClosedSnapshots([]sdk.Event{stillOpen}, false)
+	if len(p.openSnapshots) != 2 {
+		t.Fatalf("incomplete sweep kept %d entries, want 2 (no eviction)", len(p.openSnapshots))
+	}
+
+	// A complete sweep evicts the PR absent from it and keeps the swept one.
+	p.pruneClosedSnapshots([]sdk.Event{stillOpen}, true)
+	if _, ok := p.openSnapshots[stillOpen.NativeID]; !ok {
+		t.Errorf("swept-open %s should be kept", stillOpen.NativeID)
+	}
+	if _, ok := p.openSnapshots[gone.NativeID]; ok {
+		t.Errorf("departed %s should be evicted by the authoritative sweep", gone.NativeID)
+	}
+}
+
+// TestCarryForwardEnrichmentSnapshotWins verifies the degraded carry-forward
+// assigns the snapshot's boolean enrichment directly rather than OR-ing it onto
+// the payload — so the snapshot's false is honoured and a stale true cannot
+// stick if the REST payload ever began carrying one.
+func TestCarryForwardEnrichmentSnapshotWins(t *testing.T) {
+	snap := sdk.ItemObservedPayload{AutoMergeArmed: false, NeedsApproval: false, ApprovalsCount: 2}
+	pl := carryForwardEnrichment(
+		sdk.ItemObservedPayload{AutoMergeArmed: true, NeedsApproval: true, ApprovalsCount: -1},
+		snap,
+	)
+	if pl.AutoMergeArmed {
+		t.Error("auto_merge_armed should follow the snapshot (false), not OR to true")
+	}
+	if pl.NeedsApproval {
+		t.Error("needs_approval should follow the snapshot (false), not OR to true")
+	}
+}
+
 // TestGraphQLJoinNullNodeKeepsREST verifies a JSON-null PR node (an inaccessible
 // repo in the batch) is skipped so its REST payload survives instead of being
 // overwritten with zeros, while sibling PRs still enrich and the cycle is marked
@@ -1175,6 +1352,9 @@ func TestGraphQLJoinArchivedRepoDropped(t *testing.T) {
 		EventType:  sdk.SignalReviewRequested,
 		Payload:    sdk.SignalReviewRequestedPayload{},
 	}
+	if pl, ok := obs.Payload.(sdk.ItemObservedPayload); ok {
+		p.openSnapshots[obs.NativeID] = pl
+	}
 
 	out, degraded, err := p.graphqlJoin(context.Background(), []sdk.Event{obs, sibling})
 	if err != nil {
@@ -1187,6 +1367,9 @@ func TestGraphQLJoinArchivedRepoDropped(t *testing.T) {
 		if e.NativeID == obs.NativeID {
 			t.Errorf("archived-repo event %s (%s) should have been dropped", e.NativeID, e.EventType)
 		}
+	}
+	if _, ok := p.openSnapshots[obs.NativeID]; ok {
+		t.Errorf("archived-repo item %s should be evicted from openSnapshots", obs.NativeID)
 	}
 }
 

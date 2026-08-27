@@ -1,0 +1,21 @@
+# Example Compose file (ADR-0023). Host publish stays loopback-only so the
+# unauthenticated API (ADR-0001) is not on the LAN. The mounted config must
+# set listen: :7474 and db_path: /var/lib/devpit/devpit.db — see
+# config.yaml.example.
+services:
+  devpit:
+    image: ghcr.io/vilaca/devpit:latest
+    command: ["--config", "/etc/devpit/config.yaml"]
+    ports:
+      - "127.0.0.1:7474:7474" # host loopback only
+    volumes:
+      - ./config.yaml:/etc/devpit/config.yaml:ro # required
+      - devpit-db:/var/lib/devpit # optional (rebuildable cache)
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7474/up"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+volumes:
+  devpit-db:

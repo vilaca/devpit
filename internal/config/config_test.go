@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -90,6 +92,31 @@ connections:
 	}
 	if cfg.Listen != ":7474" {
 		t.Errorf("Listen = %q, want :7474", cfg.Listen)
+	}
+	if len(cfg.Warnings) != 1 || !strings.Contains(cfg.Warnings[0], "not loopback") {
+		t.Errorf("warnings = %v, want one non-loopback listen warning", cfg.Warnings)
+	}
+}
+
+func TestListenIsLoopback(t *testing.T) {
+	cases := []struct {
+		addr string
+		want bool
+	}{
+		{DefaultListen, true},
+		{"127.0.0.1:7474", true},
+		{"[::1]:7474", true},
+		{"Localhost:7474", true}, // hostname compare is case-insensitive
+		{":7474", false},
+		{"0.0.0.0:7474", false},
+		{"[::]:7474", false},
+		{"192.168.1.10:7474", false},
+		{"not-an-addr", false},
+	}
+	for _, c := range cases {
+		if got := listenIsLoopback(c.addr); got != c.want {
+			t.Errorf("listenIsLoopback(%q) = %v, want %v", c.addr, got, c.want)
+		}
 	}
 }
 
@@ -281,6 +308,82 @@ jira:
 `)
 	if _, err := Load(path); err == nil {
 		t.Fatal("Load with unknown jira key: want error")
+	}
+}
+
+func TestLoadExpandsHomeDBPath(t *testing.T) {
+	stubRegistry(t, "github")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	path := writeConfig(t, `
+db_path: ~/.local/share/devpit/devpit.db
+connections:
+  - id: a
+    type: github
+    token: t
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := filepath.Join(home, ".local/share/devpit/devpit.db")
+	if cfg.DBPath != want {
+		t.Errorf("DBPath = %q, want %q", cfg.DBPath, want)
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	cases := []struct {
+		in, want string
+	}{
+		{"/var/lib/devpit.db", "/var/lib/devpit.db"},
+		{"relative/devpit.db", "relative/devpit.db"},
+		{"~other/db", "~other/db"},
+		{"~", home},
+		{"~/", home},
+		{"~/devpit.db", filepath.Join(home, "devpit.db")},
+	}
+	for _, c := range cases {
+		got, err := expandHome(c.in)
+		if err != nil {
+			t.Errorf("expandHome(%q): %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("expandHome(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestExpandHomeBackslashUnix verifies a literal "~\foo" is NOT home-expanded on
+// Unix, where `\` is an ordinary filename character (only Windows treats it as a
+// path separator).
+func TestExpandHomeBackslashUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip(`\ is a path separator on Windows`)
+	}
+	got, err := expandHome(`~\foo`)
+	if err != nil {
+		t.Fatalf("expandHome: %v", err)
+	}
+	if got != `~\foo` {
+		t.Errorf(`expandHome(%q) = %q, want %q (unexpanded on Unix)`, `~\foo`, got, `~\foo`)
+	}
+}
+
+func TestExpandHomeNoHome(t *testing.T) {
+	orig := userHomeDir
+	userHomeDir = func() (string, error) { return "", errors.New("no home") }
+	t.Cleanup(func() { userHomeDir = orig })
+
+	if _, err := expandHome("~/devpit.db"); err == nil {
+		t.Fatal("expandHome with no home: want error")
 	}
 }
 

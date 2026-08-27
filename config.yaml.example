@@ -1,0 +1,25 @@
+# Copy to ~/.config/devpit/config.yaml and chmod 600 (plaintext tokens).
+# For Compose, copy to ./config.yaml next to compose.yaml and use the
+# Docker listen / db_path pair below. Schema: internal/config/config.go
+# Token scopes: docs/Token_Setup.md
+
+# Host / brew / systemd:
+db_path: ~/.local/share/devpit/devpit.db
+# Docker / Compose (required inside the container; comment out the host pair):
+# listen: :7474
+# db_path: /var/lib/devpit/devpit.db
+
+connections:
+  - id: github-personal
+    type: github
+    token: ghp_… # classic or fine-grained
+  - id: work-gitlab
+    type: gitlab
+    base_url: https://gitlab.example.com
+    token: glpat-… # read_api scope
+
+# Optional — Jira status enrichment
+# jira:
+#   base_url: https://example.atlassian.net
+#   email: you@example.com
+#   api_token: …

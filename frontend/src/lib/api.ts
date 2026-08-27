@@ -8,14 +8,18 @@ import type {
   SyncLogResponse,
   ApiError,
 } from "./types";
+import { parseRetryAfter } from "./retry";
 
 // ApiRequestError carries the uniform error envelope (docs/REST_API.md) so
-// callers can distinguish not_found / bad_request / internal.
+// callers can distinguish not_found / bad_request / internal. retryAfterMs is
+// populated from Retry-After / X-RateLimit-Reset when the server or a proxy
+// sends one (429, sometimes 503) — the dashboard retry loop honors it.
 export class ApiRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: ApiError["error"] | "unknown",
     message: string,
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -36,7 +40,12 @@ async function getJSON<T>(path: string): Promise<T> {
     } catch {
       // non-JSON error body; keep the status text
     }
-    throw new ApiRequestError(res.status, code, message);
+    throw new ApiRequestError(
+      res.status,
+      code,
+      message,
+      parseRetryAfter(res.headers),
+    );
   }
   return (await res.json()) as T;
 }

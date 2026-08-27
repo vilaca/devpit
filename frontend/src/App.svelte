@@ -179,7 +179,10 @@
     />
   {/if}
 
-  <main class="main">
+  <main class="main" class:stale={dashboard.stale}>
+    {#if dashboard.stale}
+      <span class="sr-only" role="status">List may be out of date.</span>
+    {/if}
     {#if dashboard.loading}
       <p class="hint">Loading…</p>
     {:else if dashboard.loadError}
@@ -355,6 +358,19 @@
     width: 100%;
     margin: 0 auto;
     box-sizing: border-box;
+  }
+  /* Last-good snapshot after a failed REST refresh (ADR-0018). 1px inset
+     outline — a slight edge change, no layout shift. */
+  .main.stale {
+    outline: 1px solid var(--health-failing);
+    outline-offset: -1px;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
   }
   .hint {
     color: var(--text-muted);

@@ -1,4 +1,4 @@
-import type { State } from "./types";
+import type { Connection, State } from "./types";
 
 // relativeTime converts an RFC 3339 UTC string to a human-readable relative
 // label ("2 hours ago", "3 days ago"). Falls back to the raw string on parse
@@ -19,6 +19,31 @@ export function relativeTime(iso: string): string {
 
 function plural(n: number, unit: string): string {
   return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}
+
+// emptyListCopy is the empty-attention sentence (ADR-0018): never conflate
+// "nothing to do" with "sync is broken". A failing connection replaces
+// "All clear"; otherwise we cite the oldest last_synced_at (most conservative).
+export function emptyListCopy(connections: Connection[]): string {
+  if (connections.length === 0) {
+    return "All clear — no connections configured";
+  }
+  const failing = connections.filter((c) => c.health.status === "failing");
+  if (failing.length > 0) {
+    const names = failing.map((c) => c.label).join(", ");
+    return `Sync failed for ${names} — the list may be incomplete.`;
+  }
+  const times = connections
+    .map((c) => c.health.last_synced_at)
+    .filter((t): t is string => t != null);
+  if (times.length === 0) {
+    return "All clear — synced never";
+  }
+  let oldest = times[0];
+  for (const t of times) {
+    if (new Date(t).getTime() < new Date(oldest).getTime()) oldest = t;
+  }
+  return `All clear — synced ${relativeTime(oldest)}`;
 }
 
 // stateLabel maps wire state values to display labels.

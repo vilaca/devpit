@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with: { go-version: '1.26', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       - run: scripts/check.sh --ci gofmt
 
   build:
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with: { go-version: '1.26', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       - run: scripts/check.sh --ci build vet test tidy
 
   lint:
@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with: { go-version: '1.26', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       - run: scripts/check.sh --ci lint
 
   arch:
@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with: { go-version: '1.26', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       - run: scripts/check.sh --ci arch
 
   shell:
@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
-        with: { go-version: '1.26', cache: true }
+        with: { go-version-file: go.mod, cache: true }
       - run: scripts/check.sh --ci actionlint
 
   links:

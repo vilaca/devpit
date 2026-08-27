@@ -28,6 +28,11 @@ type Provider struct {
 	handle          string
 	http            *http.Client
 	approverCache   map[string]approverEntry // key: "owner/repo"; no lock needed (serialised per connection)
+	// openSnapshots caches the last full item.observed payload for each open PR,
+	// keyed by native ID. Written after graphqlJoin; read to carry GraphQL
+	// enrichment forward when a later join batch degrades. No lock — FastPoll
+	// and Reconcile are serialised per connection (same as GitLab, ADR-0003).
+	openSnapshots map[string]sdk.ItemObservedPayload
 }
 
 // New builds a GitHub provider. BaseURL is the web host (e.g.
@@ -41,6 +46,7 @@ func New(cfg sdk.ConnectionConfig) (*Provider, error) {
 		graphqlEndpoint: strings.TrimSuffix(base, "/v3") + "/graphql",
 		http:            &http.Client{Timeout: 30 * time.Second},
 		approverCache:   make(map[string]approverEntry),
+		openSnapshots:   map[string]sdk.ItemObservedPayload{},
 	}, nil
 }
 

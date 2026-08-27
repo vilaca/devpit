@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { relativeTime, visibleStates } from "./format";
+import { emptyListCopy, relativeTime, visibleStates } from "./format";
 import type { State } from "./types";
+import { makeConnection } from "./fixtures";
 
 const NOW = new Date("2026-07-16T12:00:00.000Z").getTime();
 const ago = (seconds: number): string =>
@@ -67,5 +68,85 @@ describe("visibleStates", () => {
     // reviewer-side approved/commented rows collapse to review_submitted, which
     // the mute suppresses -> a chipless dim row.
     expect(visibleStates(["review_submitted"], true)).toEqual([]);
+  });
+});
+
+describe("emptyListCopy", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("names missing connections instead of pretending a sync ran", () => {
+    expect(emptyListCopy([])).toBe("All clear — no connections configured");
+  });
+
+  it("cites the oldest last_synced_at when every connection is healthy", () => {
+    const newer = makeConnection({
+      id: "a",
+      label: "GitHub",
+      health: { status: "ok", last_synced_at: ago(60) },
+    });
+    const older = makeConnection({
+      id: "b",
+      label: "GitLab",
+      health: { status: "ok", last_synced_at: ago(3600) },
+    });
+    expect(emptyListCopy([newer, older])).toBe("All clear — synced 1 hour ago");
+  });
+
+  it("says synced never when no connection has a timestamp", () => {
+    expect(
+      emptyListCopy([
+        makeConnection({
+          health: { status: "ok", last_synced_at: null },
+        }),
+      ]),
+    ).toBe("All clear — synced never");
+  });
+
+  it("replaces All clear when any connection is failing", () => {
+    const ok = makeConnection({
+      id: "ok",
+      label: "GitHub",
+      health: { status: "ok", last_synced_at: ago(60) },
+    });
+    const bad = makeConnection({
+      id: "bad",
+      label: "GitLab",
+      health: { status: "failing", last_synced_at: ago(3600) },
+    });
+    expect(emptyListCopy([ok, bad])).toBe(
+      "Sync failed for GitLab — the list may be incomplete.",
+    );
+  });
+
+  it("lists every failing connection", () => {
+    const a = makeConnection({
+      id: "a",
+      label: "GitHub",
+      health: { status: "failing", last_synced_at: null },
+    });
+    const b = makeConnection({
+      id: "b",
+      label: "GitLab",
+      health: { status: "failing", last_synced_at: null },
+    });
+    expect(emptyListCopy([a, b])).toBe(
+      "Sync failed for GitHub, GitLab — the list may be incomplete.",
+    );
+  });
+
+  it("still says All clear when a connection is only degraded", () => {
+    expect(
+      emptyListCopy([
+        makeConnection({
+          health: { status: "degraded", last_synced_at: ago(60) },
+        }),
+      ]),
+    ).toBe("All clear — synced 1 minute ago");
   });
 });

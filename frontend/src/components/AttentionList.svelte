@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { AttentionItem, Connection, Filter } from "../lib/types";
   import { partitionVisible } from "../lib/buckets";
+  import { emptyListCopy } from "../lib/format";
   import PinnedZone from "./PinnedZone.svelte";
   import WorkItemRow from "./WorkItemRow.svelte";
 
@@ -27,6 +28,10 @@
   const split = $derived(partitionVisible(items, activeFilter, connections));
   const pinned = $derived(split.pinned);
   const ranked = $derived(split.ranked);
+  const emptyCopy = $derived(emptyListCopy(connections));
+  const emptyFailing = $derived(
+    connections.some((c) => c.health.status === "failing"),
+  );
 </script>
 
 <div class="list">
@@ -56,7 +61,7 @@
   {:else if items.length > 0 && pinned.length === 0}
     <p class="empty">No items match this filter.</p>
   {:else if items.length === 0}
-    <p class="empty">Nothing needs your attention right now.</p>
+    <p class="empty" class:failing={emptyFailing}>{emptyCopy}</p>
   {/if}
 </div>
 
@@ -82,5 +87,8 @@
     padding: 24px 0;
     margin: 0;
     font-size: 13px;
+  }
+  .empty.failing {
+    color: var(--health-failing);
   }
 </style>

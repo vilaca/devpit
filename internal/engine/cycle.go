@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/vilaca/devpit/internal/storage"
@@ -168,10 +169,14 @@ func (c *conn) abortStorage(ctx context.Context, op operation, inserted int, err
 }
 
 // reap diffs a complete reconcile sweep against the store's latest per-item facts
-// and returns item.removed events for the open roled items the sweep no longer
-// sees — merged, closed, or access/role lost (ADR-0024). It also salts, in place,
-// the dedupe key of any swept snapshot whose latest stored fact is a removal, so
-// an item re-observed with an identical fact set still inserts a fresh superseding
+// and returns item.removed events for items the sweep no longer sees (ADR-0024).
+// Open roled items missing from the sweep are reaped immediately. Mention-only
+// (role-less) leftovers are outside reconcile's identity set, so they are
+// confirmed gone via Provider.ResolveOpen before reaping — a still-open mention
+// is kept, and a resolve error skips leftover reap this cycle (fail closed)
+// without blocking the roled path. It also salts, in place, the dedupe key of
+// any swept snapshot whose latest stored fact is a removal, so an item
+// re-observed with an identical fact set still inserts a fresh superseding
 // snapshot instead of being dropped by INSERT OR IGNORE. A store read failure is
 // returned so the caller can treat it like any storage failure and persist nothing.
 func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error) {
@@ -189,12 +194,12 @@ func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error
 	}
 
 	// Index each item's latest stored fact, parsing the observed payload for the
-	// engine's own view of open-ness and roles (mention-only items carry no role
-	// and are outside reconcile's authority, so they are never reaped).
+	// engine's own view of open-ness and roles.
 	type latestFact struct {
 		objectType string
 		eventID    int64
 		removed    bool
+		open       bool
 		openRoled  bool
 	}
 	latest := make(map[string]latestFact, len(facts))
@@ -204,13 +209,14 @@ func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error
 			var pl sdk.ItemObservedPayload
 			if err := json.Unmarshal(f.Payload, &pl); err != nil {
 				// Payloads are engine-written, so this is defensive: a corrupt
-				// snapshot leaves openRoled false, making the item a ghost that
+				// snapshot leaves open false, making the item a ghost that
 				// is never reaped nor resurrected. Log it so the corruption is
 				// observable rather than silent. Control flow is unchanged.
 				slog.Warn("reap: unparseable item.observed payload",
 					"connection", c.cfg.ID, "item", f.NativeID, "err", err)
 			} else {
-				lf.openRoled = pl.State == itemStateOpen && len(pl.MyRoles) > 0
+				lf.open = pl.State == itemStateOpen
+				lf.openRoled = lf.open && len(pl.MyRoles) > 0
 			}
 		}
 		latest[f.NativeID] = lf
@@ -222,8 +228,24 @@ func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error
 	// item (latest fact is a removal) is skipped, so a still-gone item is not
 	// re-removed every cycle.
 	var removals []sdk.Event
+	var leftovers []string
 	for nid, lf := range latest {
 		if lf.openRoled && !swept[nid] {
+			removals = append(removals, sdk.Event{
+				ObjectType: lf.objectType,
+				NativeID:   nid,
+				EventType:  eventItemRemoved,
+				DedupeKey:  fmt.Sprintf("%s:%d", sdk.EventItemRemoved, lf.eventID),
+			})
+			continue
+		}
+		if lf.open && !lf.openRoled && !swept[nid] {
+			leftovers = append(leftovers, nid)
+		}
+	}
+	if gone, ok := c.confirmGone(ctx, leftovers); ok {
+		for _, nid := range gone {
+			lf := latest[nid]
 			removals = append(removals, sdk.Event{
 				ObjectType: lf.objectType,
 				NativeID:   nid,
@@ -247,6 +269,32 @@ func (c *conn) reap(ctx context.Context, events []sdk.Event) ([]sdk.Event, error
 	}
 
 	return removals, nil
+}
+
+// confirmGone asks the provider which mention-only leftovers are still open
+// and returns the native IDs that are gone. ok is false when the lookup fails
+// — the caller then skips leftover reap this cycle (fail closed).
+func (c *conn) confirmGone(ctx context.Context, leftovers []string) (gone []string, ok bool) {
+	if len(leftovers) == 0 {
+		return nil, true
+	}
+	slices.Sort(leftovers)
+	stillOpen, err := c.prov.ResolveOpen(ctx, leftovers)
+	if err != nil {
+		slog.Warn("reap: mention leftover resolve failed",
+			"connection", c.cfg.ID, "err", err)
+		return nil, false
+	}
+	open := make(map[string]bool, len(stillOpen))
+	for _, nid := range stillOpen {
+		open[nid] = true
+	}
+	for _, nid := range leftovers {
+		if !open[nid] {
+			gone = append(gone, nid)
+		}
+	}
+	return gone, true
 }
 
 // fail classifies a provider error into a sync-log outcome, applies backoff,

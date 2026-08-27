@@ -105,6 +105,8 @@ func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResu
 	if err != nil {
 		return sdk.PollResult{}, err
 	}
+	p.cacheOpenSnapshots(events)
+	p.pruneClosedSnapshots(events, complete)
 
 	return sdk.PollResult{
 		Events:        events,
@@ -112,6 +114,36 @@ func (p *Provider) Reconcile(ctx context.Context, _ sdk.PollState) (sdk.PollResu
 		Degraded:      degraded,
 		Complete:      complete,
 	}, nil
+}
+
+// pruneClosedSnapshots evicts cached open-item snapshots whose PR is absent from
+// an authoritative Reconcile sweep — no longer an open roled PR, so its
+// carried-forward enrichment would only grow the cache without ever being read.
+// Only the full sweep may prune: FastPoll sees a partial, notification-driven
+// slice and must not evict PRs it merely did not hear about this cycle. When the
+// sweep is incomplete (a sole-approver probe failed) it is not authoritative, so
+// eviction is skipped, matching the engine's reap suppression (ADR-0024). The
+// kept set mirrors cacheOpenSnapshots' store criterion exactly (open
+// item.observed events), so after cache+prune openSnapshots holds precisely this
+// sweep's open set.
+func (p *Provider) pruneClosedSnapshots(events []sdk.Event, complete bool) {
+	if !complete {
+		return
+	}
+	swept := make(map[string]struct{}, len(events))
+	for _, ev := range events {
+		if ev.EventType != sdk.EventItemObserved {
+			continue
+		}
+		if pl, ok := ev.Payload.(sdk.ItemObservedPayload); ok && pl.State == stateOpen {
+			swept[ev.NativeID] = struct{}{}
+		}
+	}
+	for id := range p.openSnapshots {
+		if _, ok := swept[id]; !ok {
+			delete(p.openSnapshots, id)
+		}
+	}
 }
 
 // search runs a Search API query, following the Link header rel="next" until

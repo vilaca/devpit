@@ -26,21 +26,28 @@ func openReapDB(t *testing.T) *storage.DB {
 	return db
 }
 
-// nid is the single item the reap tests operate on. One item is enough to
+// nid is the single item most reap tests operate on. One item is enough to
 // exercise every reap/resurrection branch, and a constant keeps the assertions
-// terse.
-const nid = "g/p#1"
+// terse. nid2 is a second item for mixed roled/mention-only cases.
+const (
+	nid  = "g/p#1"
+	nid2 = "g/p#2"
+)
 
 // observed builds an item.observed event for nid whose dedupe key is stable for
 // a given roles fact set, so a re-observation with the same facts collides on
 // INSERT OR IGNORE — the case salted resurrection must defeat.
 func observed(roles ...string) sdk.Event {
+	return observedID(nid, roles...)
+}
+
+func observedID(id string, roles ...string) sdk.Event {
 	pl := sdk.ItemObservedPayload{State: itemStateOpen, Title: "t", MyRoles: roles}
 	return sdk.Event{
 		ObjectType: "merge_request",
-		NativeID:   nid,
+		NativeID:   id,
 		EventType:  eventItemObserved,
-		DedupeKey:  "obs:" + nid,
+		DedupeKey:  "obs:" + id,
 		Payload:    pl,
 	}
 }
@@ -62,9 +69,13 @@ func storedEvents(t *testing.T, db *storage.DB) []storage.StoredEvent {
 }
 
 func removals(evs []storage.StoredEvent) []storage.StoredEvent {
+	return removalsFor(evs, nid)
+}
+
+func removalsFor(evs []storage.StoredEvent, id string) []storage.StoredEvent {
 	var out []storage.StoredEvent
 	for _, e := range evs {
-		if e.EventType == eventItemRemoved && e.NativeID == nid {
+		if e.EventType == eventItemRemoved && e.NativeID == id {
 			out = append(out, e)
 		}
 	}
@@ -154,9 +165,10 @@ func TestReapDegradedButCompleteStillReaps(t *testing.T) {
 	}
 }
 
-// 4. A mention-only (role-less) item is outside reconcile's authority and is
-// never reaped.
-func TestReapMentionOnlyItemExempt(t *testing.T) {
+// 4. A mention-only (role-less) item that ResolveOpen still reports open is
+// kept — reconcile never enumerates mentions, so absence from the sweep is
+// not enough to reap.
+func TestReapMentionOnlyStillOpenKept(t *testing.T) {
 	db := openReapDB(t)
 	seed(t, db, observed()) // no roles
 
@@ -166,7 +178,62 @@ func TestReapMentionOnlyItemExempt(t *testing.T) {
 	c.cycle(context.Background(), opReconcile, false)
 
 	if got := removals(storedEvents(t, db)); len(got) != 0 {
-		t.Errorf("removals = %d, want 0 for a role-less item", len(got))
+		t.Errorf("removals = %d, want 0 for a still-open mention-only item", len(got))
+	}
+}
+
+// 4b. A mention-only leftover that ResolveOpen reports gone is reaped.
+func TestReapMentionOnlyGoneIsRemoved(t *testing.T) {
+	db := openReapDB(t)
+	seed(t, db, observed())
+
+	prov := &fakeProvider{
+		result:      reconcileResult(true, false),
+		resolveOpen: func([]string) ([]string, error) { return nil, nil },
+	}
+	notify := &recordNotifier{}
+	c := newTestConn(db, prov, notify)
+
+	c.cycle(context.Background(), opReconcile, false)
+
+	if got := removals(storedEvents(t, db)); len(got) != 1 {
+		t.Fatalf("removals = %d, want 1 for a gone mention-only item", len(got))
+	}
+	if notify.attention != 1 {
+		t.Errorf("AttentionChanged fired %d times, want 1", notify.attention)
+	}
+	if latestFactOpen(storedEvents(t, db)) {
+		t.Error("gone mention-only item should be reaped")
+	}
+}
+
+// 4c. A ResolveOpen error skips leftover reap (fail closed) but does not
+// block reaping a missing roled item in the same sweep.
+func TestReapMentionOnlyResolveErrorSkipsLeftoverOnly(t *testing.T) {
+	db := openReapDB(t)
+	seed(t, db, observed("author"), observedID(nid2))
+
+	var lookedUp []string
+	prov := &fakeProvider{
+		result: reconcileResult(true, false),
+		resolveOpen: func(ids []string) ([]string, error) {
+			lookedUp = append([]string(nil), ids...)
+			return nil, context.DeadlineExceeded
+		},
+	}
+	c := newTestConn(db, prov, &recordNotifier{})
+
+	c.cycle(context.Background(), opReconcile, false)
+
+	evs := storedEvents(t, db)
+	if got := removalsFor(evs, nid); len(got) != 1 {
+		t.Errorf("roled removals = %d, want 1", len(got))
+	}
+	if got := removalsFor(evs, nid2); len(got) != 0 {
+		t.Errorf("mention-only removals = %d, want 0 on resolve error", len(got))
+	}
+	if len(lookedUp) != 1 || lookedUp[0] != nid2 {
+		t.Errorf("ResolveOpen ids = %v, want [%s]", lookedUp, nid2)
 	}
 }
 

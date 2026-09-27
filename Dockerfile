@@ -6,7 +6,7 @@
 # ca-certificates, and the HEALTHCHECK probe needs wget (busybox provides it) —
 # distroless has neither. The image is deliberately dumb: no entrypoint
 # scripting, no config generation.
-FROM alpine:3.21
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates \
     && addgroup -S devpit \

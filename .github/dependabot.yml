@@ -1,0 +1,31 @@
+# Dependency update PRs. Every dependency stays exactly pinned (actions by
+# commit SHA with a version comment, go.sum, package-lock.json); Dependabot only
+# proposes bumps, and each bump still has to pass the full CI gate. Updates are
+# grouped per ecosystem so a week's bumps arrive as one PR, not a stream.
+#
+# Not covered: the linter pins in scripts/check.sh and the goreleaser pin in
+# release.yml / docs/Releasing.md (held at v2.9.0 on purpose, ADR-0023) — those
+# are bumped by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      go: { patterns: ["*"] }
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    groups:
+      frontend: { patterns: ["*"] }
+
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }

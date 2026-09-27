@@ -42,8 +42,8 @@ SHELLCHECK_VERSION="v0.10.0"
 ACTIONLINT_VERSION="v1.7.12"
 LYCHEE_VERSION="v0.24.2"
 
-# Coverage ratchet (D4, docs/plans/audit-remediation/04): total statement
-# coverage across ./... must not drop below this. A few points under the
+# Coverage ratchet: total statement coverage across ./... must not drop below
+# this. A few points under the
 # ~81% measured when this floor was added — room to move without babysitting
 # every PR, but a regression still fails the build. Bump it up as coverage
 # grows; never down without a reason recorded alongside the change.
@@ -165,17 +165,20 @@ gate_test()  {
   # reason recorded alongside the change (same convention as COVERAGE_FLOOR above).
   # Coverage percentages are parsed from the `go test` output lines that read:
   #   "ok  	github.com/vilaca/devpit/provider/github  1.23s  coverage: 87.0% of statements"
+  # "pkg:floor" pairs, not an associative array: `declare -A` needs bash 4, and
+  # stock macOS ships bash 3.2 (same constraint as the db-*.sh scripts).
   local module; module="$(go list -m)"
-  declare -A pkg_floors=(
-    ["internal/attention"]=90
-    ["internal/engine"]=88
-    ["internal/storage"]=76
-    ["provider/github"]=83
-    ["provider/gitlab"]=85
+  local pkg_floors=(
+    "internal/attention:90"
+    "internal/engine:88"
+    "internal/storage:76"
+    "provider/github:83"
+    "provider/gitlab:85"
   )
-  for pkg in "${!pkg_floors[@]}"; do
-    local floor="${pkg_floors[$pkg]}"
-    local cov
+  local entry pkg floor cov
+  for entry in "${pkg_floors[@]}"; do
+    pkg="${entry%:*}"
+    floor="${entry##*:}"
     cov="$(echo "$pkgout" \
       | grep -E "^(ok|FAIL)[[:space:]]+${module}/${pkg}[[:space:]]" \
       | grep -oE 'coverage: [0-9]+\.[0-9]+' \

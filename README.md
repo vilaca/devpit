@@ -43,33 +43,11 @@ docker run --rm \
   ghcr.io/vilaca/devpit --config /etc/devpit/config.yaml
 ```
 
-That config must set `listen: :7474`. Or with Compose — the DB volume is
-**optional** (the event store is a rebuildable cache; dropping it re-syncs within
-one cycle and costs only your "Handle next" pins and hover history), the config
-mount is always required:
-
-```yaml
-# compose.yaml
-services:
-  devpit:
-    image: ghcr.io/vilaca/devpit:latest
-    command: ["--config", "/etc/devpit/config.yaml"]
-    ports:
-      - "127.0.0.1:7474:7474"     # host loopback only
-    volumes:
-      - ./config.yaml:/etc/devpit/config.yaml:ro   # required
-      - devpit-db:/var/lib/devpit                  # optional (rebuildable cache)
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7474/up || exit 1"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-    restart: unless-stopped
-volumes:
-  devpit-db:
-```
-
-The `config.yaml` for Compose sets `listen: :7474` and
+That config must set `listen: :7474`. Or with Compose, using the committed
+[`compose.yaml`](compose.yaml): the DB volume is **optional** (the event store
+is a rebuildable cache; dropping it re-syncs within one cycle and costs only
+your "Handle next" pins and hover history), the config mount is always
+required. The `config.yaml` for Compose sets `listen: :7474` and
 `db_path: /var/lib/devpit/devpit.db`.
 
 ### Linux (systemd)

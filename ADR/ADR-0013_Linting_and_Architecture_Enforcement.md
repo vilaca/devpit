@@ -153,16 +153,31 @@ component-DOM harness, matching the "smallest thing that works" stance.
 
 ## Amendment — v0.1.6: Go coverage floor
 
-`gate_test` now runs `go test -race -coverprofile=... ./...`, reads the total
-statement-coverage percentage off `go tool cover -func`'s last line, and fails
-the gate below `COVERAGE_FLOOR` (`scripts/check.sh`, currently 75% — a few
-points under the ~81% measured when the floor was added). It is a ratchet
-against silent regression, not a target to chase: the floor is the single
-number for the whole module, not a per-package minimum, so `cmd/devpit`
-(composition root, no unit tests by design) and `scripts/demo` (a fixture
-generator, not shipped product code) pull the total down without needing an
-exclusion list. The CI `build` job needs no change — it already runs `test`
-via `scripts/check.sh --ci build vet test tidy`.
+`gate_test` runs `go test -race -coverprofile=... ./...` and fails the gate
+when total statement coverage, or that of a package with its own floor, drops
+below the floor (`scripts/check.sh` holds the numbers). It is a ratchet against
+silent regression, not a target to chase: `cmd/devpit` (composition root, no
+unit tests by design) and `scripts/demo` (a fixture generator, not shipped
+product code) pull the total down without needing an exclusion list, and only
+packages with real logic get a floor of their own. A floor also fails when it
+sits more than `COVERAGE_SLACK` points under what's measured, naming the value
+to raise it to: a floor that relies on someone remembering to raise it stops
+ratcheting (these had drifted 4–8 points below actual). The CI `build` job
+runs `test` via `scripts/check.sh --ci build vet test tidy`.
+
+## Amendment — v0.1.6: docrefs gate and script tests
+
+`docrefs` fails when a backtick path or package-qualified Go identifier in
+README, `CLAUDE.md`, `docs/`, `ADR/` or the committed skills doesn't resolve
+against tracked files. It is the mechanical half of doc-check's stale-claim
+check (ADR-0014) — the half `links` can't do, because lychee skips code spans —
+so drift like a renamed file or a deleted symbol fails the gate instead of
+waiting for a review to notice it. Its rules and its one allowlist live in
+`gate_docrefs`; CI runs it in the `docs` job beside `links`.
+
+The `shell` gate also runs `scripts/*_test.sh`. Shell scripts that make
+decisions (today, the agent gate hook — ADR-0022) carry a test held to the same
+failure-and-boundary bar as Go code (`docs/Contributing.md`).
 
 ## Amendment — v0.1.6: secrets gate
 

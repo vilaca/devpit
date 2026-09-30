@@ -9,6 +9,12 @@
             "if": "Bash(git *)",
             "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/claude-gate.sh",
             "timeout": 900
+          },
+          {
+            "type": "command",
+            "if": "Bash(gh pr *)",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/claude-gate.sh",
+            "timeout": 900
           }
         ]
       }

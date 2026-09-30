@@ -36,7 +36,8 @@ contributor and CI-adjacent agent gets the same behaviour.
   its template** rather than embedding a code shape, so a skill cannot drift out
   of sync with the code it scaffolds against.
 - **A committed hook gates an agent's commits and pushes.** `.claude/settings.json`
-  registers `scripts/claude-gate.sh` as a `PreToolUse` hook on `git` commands.
+  registers `scripts/claude-gate.sh` as a `PreToolUse` hook on `git` commands
+  (and `gh pr create`, which can push).
   A push is blocked until the tree is clean, `scripts/check.sh` is green, and a
   diff-mode `/doc-check` + `/semantic-check` review of `HEAD` has been recorded;
   commits and pushes are also scanned against optional per-clone leak rules

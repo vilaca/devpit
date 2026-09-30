@@ -12,6 +12,13 @@ Deterministic rules already have homes that a machine enforces:
 gate). **This file is only for intent that no linter can see** — the meaning a
 change can violate while every deterministic gate stays green.
 
+When part of a claim becomes mechanically checkable, it moves into a test and
+the Hunt keeps only the judgment. Today `internal/attention/sdk_surface_test.go`
+backs INV-4 (every payload field produced and consumed) and
+`internal/attention/invariants_test.go` backs INV-1 (outbound calls are GETs or
+GraphQL queries) and INV-5 (every sdk signal's effect on ranking is classified
+against ADR-0016).
+
 Each invariant is a claim an audit can try to *break*, not a description to
 check for consistency. The unit of work is: route a diff (or the whole tree)
 to the invariants its files touch, then for each, *construct a concrete

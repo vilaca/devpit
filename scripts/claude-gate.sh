@@ -4,7 +4,8 @@
 # ADR-0022): gates an agent's `git commit` / `git push` in this repo.
 #
 #   git commit → the per-clone leak rules (below) over the change and message
-#   git push   → a clean tree; a green scripts/check.sh; the per-clone leak
+#   git push   → (and `gh pr create` without --head, which can push)
+#                a clean tree; a green scripts/check.sh; the per-clone leak
 #                rules over the history and commit messages reachable from HEAD;
 #                and a recorded /doc-check + /semantic-check review of HEAD
 #
@@ -50,6 +51,9 @@ git_re='(^|[[:space:];&|("])git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:spac
 is_push=0 is_commit=0
 [[ $cmd =~ ${git_re}push([[:space:]]|$) ]] && is_push=1
 [[ $cmd =~ ${git_re}commit([[:space:]]|$) ]] && is_commit=1
+# `gh pr create` pushes an unpushed branch unless --head names one (gh help).
+[[ $cmd =~ (^|[[:space:]\;\&\|\(\"])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$) \
+   && ! $cmd =~ [[:space:]](--head|-H)([[:space:]=]|$) ]] && is_push=1
 (( is_push || is_commit )) || exit 0
 
 cd "${cwd:-.}" 2>/dev/null && root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
@@ -71,8 +75,10 @@ if (( is_commit )) && [[ -f $leak_rules ]]; then
 fi
 
 if (( is_push )); then
-  [[ -z "$(git status --porcelain)" ]] \
-    || block "uncommitted changes — check.sh tests the working tree, not what you push; commit or stash first"
+  if [[ -n "$(git status --porcelain)" ]]; then
+    (( is_commit )) && block "uncommitted changes — this hook runs before the command, so a push chained after a commit sees the tree as it is now; run the commit, then the push"
+    block "uncommitted changes — check.sh tests the working tree, not what you push; commit or stash first"
+  fi
 
   head="$(git rev-parse HEAD)"
   base="$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo origin/main)"

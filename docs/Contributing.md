@@ -68,6 +68,9 @@ second decision log — the ADRs are it.
 
 ## Testing expectations
 
+- A shell script whose behaviour matters carries a `scripts/<name>_test.sh`,
+  which the `shell` gate runs — held to the same failure-and-boundary bar as
+  Go code below.
 - Unit-test the fold, engine cycle, storage, and config against fakes/fixtures
   (see `testdata/fixtures/`); providers are tested against recorded fixtures.
   Provider tests replay go-vcr cassettes (`ModeReplayOnly`); to re-record one,

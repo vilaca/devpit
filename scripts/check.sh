@@ -16,13 +16,14 @@
 #   scripts/check.sh --ci GATE ...   # how CI invokes it, one gate per job:
 #                                    # same gates, CI-only install fast paths
 #
-# Gates: gofmt build vet test lint arch shell frontend tidy actionlint links secrets
+# Gates: gofmt build vet test lint arch shell frontend tidy actionlint links docrefs secrets
 #   lint = golangci-lint, arch = go-arch-lint, shell = shellcheck,
 #   frontend = svelte-check + eslint + prettier --check + vitest, tidy = go mod tidy -diff,
 #   actionlint = workflow YAML + embedded shellcheck, links = lychee (offline,
-#   internal markdown links only), secrets = gitleaks (default rules) over the git
-#   history reachable from HEAD. test also enforces COVERAGE_FLOOR below — a
-#   ratchet against the total statement coverage silently regressing.
+#   internal markdown links only), docrefs = backtick paths and Go identifiers in
+#   the docs resolve, secrets = gitleaks (default rules) over the git history
+#   reachable from HEAD. shell also runs scripts/*_test.sh. test also enforces
+#   the coverage floors below — a ratchet against coverage silently regressing.
 #   gofmt, shell, and frontend are included on purpose — all recurring sources of
 #   after-the-fact "style: gofmt" / "fix: svelte-check" / broken-script churn
 #   that the old CI never caught. govulncheck is deliberately NOT a gate here —
@@ -45,11 +46,13 @@ LYCHEE_VERSION="v0.24.2"
 GITLEAKS_VERSION="v8.30.1"
 
 # Coverage ratchet: total statement coverage across ./... must not drop below
-# this. A few points under the
-# ~81% measured when this floor was added — room to move without babysitting
-# every PR, but a regression still fails the build. Bump it up as coverage
-# grows; never down without a reason recorded alongside the change.
-COVERAGE_FLOOR=75
+# COVERAGE_FLOOR, and each package in gate_test's list below its own floor. A
+# floor more than COVERAGE_SLACK points under what's measured fails too, naming
+# the value to raise it to (measured - 3), so gains are locked in instead of
+# becoming room to regress into. Never lower a floor without a reason recorded
+# alongside the change.
+COVERAGE_FLOOR=80
+COVERAGE_SLACK=5
 
 # Linters run from a repo-local dir, keyed by a version stamp: the pinned
 # version is the one that runs even if a different build of the same tool is on
@@ -153,6 +156,14 @@ gate_gofmt() {
 }
 gate_build() { go build ./...; }
 gate_vet()   { go vet ./...; }
+check_floor() { # check_floor <what> <measured %> <floor %> — sets gate_test's failed=1 on a miss
+  if ! awk -v c="$2" -v f="$3" 'BEGIN { exit !(c >= f) }'; then
+    echo "    coverage $2% for $1 is below the $3% floor"; failed=1
+  elif awk -v c="$2" -v f="$3" -v s="$COVERAGE_SLACK" 'BEGIN { exit !(c - f > s) }'; then
+    echo "    coverage $2% for $1 is over ${COVERAGE_SLACK} points above its $3% floor —" \
+         "raise the floor to $(awk -v c="$2" 'BEGIN { print int(c) - 3 }')"; failed=1
+  fi
+}
 gate_test()  {
   local profile="$TOOLS/coverage.out" total pkgout failed=0
   pkgout="$(go test -race -covermode=atomic -coverprofile="$profile" ./... 2>&1)" || { echo "$pkgout"; return 1; }
@@ -160,22 +171,20 @@ gate_test()  {
 
   total="$(go tool cover -func="$profile" | tail -1 | grep -oE '[0-9]+\.[0-9]+')"
   echo "    total coverage: ${total}% (floor ${COVERAGE_FLOOR}%)"
-  awk -v t="$total" -v f="$COVERAGE_FLOOR" 'BEGIN { exit !(t >= f) }' \
-    || { echo "    coverage ${total}% is below the ${COVERAGE_FLOOR}% floor"; failed=1; }
+  check_floor "the module" "$total" "$COVERAGE_FLOOR"
 
-  # Per-package floors — ratchet up as coverage grows; never down without a
-  # reason recorded alongside the change (same convention as COVERAGE_FLOOR above).
+  # Per-package floors — same ratchet as COVERAGE_FLOOR above.
   # Coverage percentages are parsed from the `go test` output lines that read:
   #   "ok  	github.com/vilaca/devpit/provider/github  1.23s  coverage: 87.0% of statements"
   # "pkg:floor" pairs, not an associative array: `declare -A` needs bash 4, and
   # stock macOS ships bash 3.2 (same constraint as the db-*.sh scripts).
   local module; module="$(go list -m)"
   local pkg_floors=(
-    "internal/attention:90"
-    "internal/engine:88"
+    "internal/attention:91"
+    "internal/engine:90"
     "internal/storage:76"
-    "provider/github:83"
-    "provider/gitlab:85"
+    "provider/github:86"
+    "provider/gitlab:88"
   )
   local entry pkg floor cov
   for entry in "${pkg_floors[@]}"; do
@@ -190,8 +199,7 @@ gate_test()  {
       continue
     fi
     echo "    ${pkg}: ${cov}% (floor ${floor}%)"
-    awk -v c="$cov" -v f="$floor" 'BEGIN { exit !(c >= f) }' \
-      || { echo "    coverage ${cov}% for ${pkg} is below the ${floor}% floor"; failed=1; }
+    check_floor "$pkg" "$cov" "$floor"
   done
 
   return "$failed"
@@ -203,7 +211,10 @@ gate_shell() {
   # severity=warning: catch real bugs (unquoted vars, bad redirects, typos), not
   # style/info nags on deliberate idioms — the naggy tier would only breed churn.
   ensure_shellcheck || return 1
-  git ls-files -z -- '*.sh' | xargs -0 shellcheck --severity=warning
+  git ls-files -z -- '*.sh' | xargs -0 shellcheck --severity=warning || return 1
+  # A script whose behaviour is worth pinning carries a *_test.sh beside it.
+  local t
+  for t in $(git ls-files -- 'scripts/*_test.sh'); do bash "$t" || return 1; done
 }
 gate_frontend() {
   # svelte-check needs deps; install them the way start.sh does when absent/stale.
@@ -237,6 +248,47 @@ gate_links() {
   git ls-files -z -- '*.md' | xargs -0 lychee --offline --no-progress
 }
 
+# Backtick references the design record makes on purpose to something that no
+# longer exists — keep this short; each entry needs its reason.
+DOCREF_ALLOW=(
+  docs/Design_Decisions.md   # retired; ADR-0014 names it to say so
+)
+gate_docrefs() {
+  # The links gate checks markdown links; this checks the backtick spans lychee
+  # skips. In README, CLAUDE.md, docs/, ADR/ and the committed skills, a span
+  # must resolve if it is a repo path (first segment a tracked top-level dir —
+  # a file, a dir, a glob, or an `ADR/ADR-NNNN` prefix; a `:line` suffix is
+  # ignored) or a package-qualified Go identifier (`sdk.Capabilities`,
+  # `engine.WithNotifier()`). Resolved against tracked files, not the disk, so
+  # local == CI. Anything else (flags, external paths, placeholders, bare
+  # names) isn't a claim about this repo and is skipped.
+  local tops pkgs skip_re='[][<>{}#!@[:space:]]|…' doc line span p failed=0
+  tops="|$(git ls-files | grep / | cut -d/ -f1 | sort -u | paste -sd'|' -)|"
+  pkgs="|$(git ls-files -- '*.go' | xargs -n1 dirname | xargs -n1 basename | sort -u | paste -sd'|' -)|"
+  while IFS=$'\t' read -r doc line span; do
+    [[ $span =~ $skip_re ]] && continue
+    [[ " ${DOCREF_ALLOW[*]} " == *" $span "* ]] && continue
+    p="${span%%:*}"
+    if [[ $p == */* && $tops == *"|${p%%/*}|"* ]]; then
+      [[ $p =~ ^ADR/ADR-[0-9]{4}$ ]] && p+="_*"
+      [[ -n "$(git ls-files -- "$p" | head -1)" ]] && continue
+      git check-ignore -q -- "$p" && continue   # e.g. docs/plans/, bin/tools
+    elif [[ $p =~ ^([a-z]+)\.[A-Z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*(\(\))?$ \
+            && $pkgs == *"|${BASH_REMATCH[1]}|"* ]]; then
+      p="${p%()}"
+      git grep -qw -e "${p##*.}" -- '*.go' && continue
+    else
+      continue
+    fi
+    echo "$doc:$line: \`$span\` doesn't resolve"; failed=1
+  done < <(git ls-files -z -- README.md CLAUDE.md 'docs/*.md' 'ADR/*.md' '.claude/skills/*/SKILL.md' \
+    | xargs -0 awk '
+        FNR == 1 { fence = 0 }
+        /^[[:space:]]*```/ { fence = !fence; next }
+        !fence { n = split($0, f, "`"); for (i = 2; i < n; i += 2) print FILENAME "\t" FNR "\t" f[i] }')
+  return "$failed"
+}
+
 gate_secrets() {
   # History reachable from HEAD, not gitleaks' default --all: other local refs
   # would make a local scan differ from CI's (whose checkout uses fetch-depth 0).
@@ -255,12 +307,12 @@ gate_secrets() {
     gitleaks git --no-banner --redact --log-opts=HEAD .
 }
 
-ALL_GATES=(gofmt build vet test lint arch shell frontend tidy actionlint links secrets)
+ALL_GATES=(gofmt build vet test lint arch shell frontend tidy actionlint links docrefs secrets)
 
 # --- select which gates to run ---------------------------------------------
 case "${1:-}" in
   "")            gates=("${ALL_GATES[@]}") ;;
-  --no-frontend) gates=(gofmt build vet test lint arch shell tidy actionlint links secrets) ;;
+  --no-frontend) gates=(gofmt build vet test lint arch shell tidy actionlint links docrefs secrets) ;;
   *)             gates=("$@") ;;
 esac
 

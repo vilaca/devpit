@@ -67,11 +67,11 @@ jobs:
         with: { go-version-file: go.mod, cache: true }
       - run: scripts/check.sh --ci actionlint
 
-  links:
+  docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: scripts/check.sh --ci links
+      - run: scripts/check.sh --ci links docrefs
 
   secrets:
     runs-on: ubuntu-latest

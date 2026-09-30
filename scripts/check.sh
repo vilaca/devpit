@@ -16,11 +16,12 @@
 #   scripts/check.sh --ci GATE ...   # how CI invokes it, one gate per job:
 #                                    # same gates, CI-only install fast paths
 #
-# Gates: gofmt build vet test lint arch shell frontend tidy actionlint links
+# Gates: gofmt build vet test lint arch shell frontend tidy actionlint links secrets
 #   lint = golangci-lint, arch = go-arch-lint, shell = shellcheck,
 #   frontend = svelte-check + eslint + prettier --check + vitest, tidy = go mod tidy -diff,
 #   actionlint = workflow YAML + embedded shellcheck, links = lychee (offline,
-#   internal markdown links only). test also enforces COVERAGE_FLOOR below — a
+#   internal markdown links only), secrets = gitleaks (default rules) over the git
+#   history reachable from HEAD. test also enforces COVERAGE_FLOOR below — a
 #   ratchet against the total statement coverage silently regressing.
 #   gofmt, shell, and frontend are included on purpose — all recurring sources of
 #   after-the-fact "style: gofmt" / "fix: svelte-check" / broken-script churn
@@ -41,6 +42,7 @@ ARCHLINT_VERSION="v1.18.0"
 SHELLCHECK_VERSION="v0.10.0"
 ACTIONLINT_VERSION="v1.7.12"
 LYCHEE_VERSION="v0.24.2"
+GITLEAKS_VERSION="v8.30.1"
 
 # Coverage ratchet: total statement coverage across ./... must not drop below
 # this. A few points under the
@@ -235,12 +237,28 @@ gate_links() {
   git ls-files -z -- '*.md' | xargs -0 lychee --offline --no-progress
 }
 
-ALL_GATES=(gofmt build vet test lint arch shell frontend tidy actionlint links)
+gate_secrets() {
+  # History reachable from HEAD, not gitleaks' default --all: other local refs
+  # would make a local scan differ from CI's (whose checkout uses fetch-depth 0).
+  # The GITLEAKS_CONFIG* env vars are dropped and an untracked root config or
+  # ignore file is refused, so nothing local can change the rules CI runs.
+  local f
+  for f in .gitleaks.toml .gitleaksignore; do
+    if [[ -e $f ]] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+      echo "untracked $f would make this gate differ from CI — commit or remove it"; return 1
+    fi
+  done
+  ensure_tool gitleaks "github.com/zricethezav/gitleaks/v8@$GITLEAKS_VERSION" || return 1
+  env -u GITLEAKS_CONFIG -u GITLEAKS_CONFIG_TOML \
+    gitleaks git --no-banner --redact --log-opts=HEAD .
+}
+
+ALL_GATES=(gofmt build vet test lint arch shell frontend tidy actionlint links secrets)
 
 # --- select which gates to run ---------------------------------------------
 case "${1:-}" in
   "")            gates=("${ALL_GATES[@]}") ;;
-  --no-frontend) gates=(gofmt build vet test lint arch shell tidy actionlint links) ;;
+  --no-frontend) gates=(gofmt build vet test lint arch shell tidy actionlint links secrets) ;;
   *)             gates=("$@") ;;
 esac
 

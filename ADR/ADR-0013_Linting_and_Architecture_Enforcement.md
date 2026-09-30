@@ -15,14 +15,12 @@ time, and Go's default `go vet` catches only a narrow class of issues.
 
 ## Decision
 
-`scripts/check.sh` is the single gate runner and the definition of "green": it
-runs `gofmt`, `go build`/`vet`/`test`, golangci-lint, go-arch-lint, shellcheck
-on the shell scripts, `go mod tidy -diff`, actionlint on the workflow YAML,
-lychee on tracked markdown, and the frontend `svelte-check` + eslint +
-`prettier --check`. Contributors run it before a change is done; CI runs the
-same script, one job per gate, so a red check names the failing gate and local
-and CI cannot drift — the gate list and the pinned linter versions live only in
-the script, not in the workflow. The two gates that make ADR-0012's layered
+`scripts/check.sh` is the single gate runner and the definition of "green"; its
+header lists every gate. Contributors run it before a change is done (an
+agent's push is gated on it — ADR-0022); CI runs the same script, one job per
+gate, so a red check names the failing gate and local and CI cannot drift — the
+gate list and the pinned linter versions live only in the script, not in the
+workflow. The two gates that make ADR-0012's layered
 structure executable (see `.golangci.yml`, `.go-arch-lint.yml`):
 
 1. **golangci-lint (v2)** runs with `default: all` — every bundled linter is
@@ -93,8 +91,9 @@ the arch check will flag them as unmapped. The `deepScan` exclusion is pinned to
 or a second composition-root file is added, `excludeFiles` must be updated in the
 same change or `deepScan` will resurface the `api -> engine` false positive.
 
-Adding a gate or bumping a pinned linter version is a change to `scripts/check.sh`
-alone — the workflow only invokes it. `go-arch-lint` scans the filesystem, so
+A gate's command, flags, and pinned version live only in `scripts/check.sh` —
+the workflow only invokes it — so bumping a version touches the script alone;
+adding a gate also adds its one-line CI job. `go-arch-lint` scans the filesystem, so
 local git worktrees under `.claude/` are excluded in `.go-arch-lint.yml`
 (`exclude:`); the gofmt gate checks tracked files only for the same reason. A
 fresh CI checkout has no worktrees.
@@ -164,3 +163,22 @@ number for the whole module, not a per-package minimum, so `cmd/devpit`
 generator, not shipped product code) pull the total down without needing an
 exclusion list. The CI `build` job needs no change — it already runs `test`
 via `scripts/check.sh --ci build vet test tidy`.
+
+## Amendment — v0.1.6: secrets gate
+
+`secrets` runs gitleaks, pinned like the other linters, with its **default
+rules** over the git history reachable from `HEAD`. (gitleaks also picks up a
+`.gitleaks.toml` / `.gitleaksignore` at the repo root; the gate fails on an
+untracked one, so only a committed one can change what it checks.) DevPit handles forge and
+Jira tokens and the repo is public, so a committed token is the costliest
+mistake a contributor can make, and it is one a machine can decide. The scan is
+of history, not the working tree: a token deleted in a later commit is still
+published. It is scoped to `HEAD` rather than gitleaks' default `--all` so a
+local run can't differ from CI's by scanning other local branches, and the CI
+jobs that run it check out with `fetch-depth: 0` for the same reason.
+
+Organisation-specific patterns (internal hostnames, ticket keys) are
+deliberately **not** in this gate: committing them would publish the very
+strings they guard, and CI can't have a file that isn't committed. They live
+in an optional per-clone config that the agent hook (ADR-0022) applies instead
+— see `docs/Contributing.md`.

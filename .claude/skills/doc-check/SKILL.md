@@ -43,13 +43,12 @@ skill — but its own claims are audited like any doc's.
   --others --exclude-standard`), plus `<base>...HEAD` when a base is named. In
   scope:
   - every changed target doc — run all checks below on it;
-  - every target doc that names a changed non-doc file (`git grep` its path)
-    or a symbol, route, flag, or token the diff removes or renames (`git grep`
-    the `-` lines' identifiers) — run checks 1, 2, and 5 on those references;
+  - every target doc that names a changed non-doc file or the old path of a
+    renamed or removed doc (`git grep` the path — backtick references too, which
+    the `links` gate doesn't check), or a symbol, route, flag, or token the diff
+    removes or renames (`git grep` the `-` lines' identifiers) — run checks 1,
+    2, and 5 on those references;
   - the whole `ADR/` log for check 3 when an ADR is added, renamed, or removed.
-
-  Links *to* a renamed or removed doc from unchanged docs are left to the
-  `links` gate in `scripts/check.sh`, which checks every tracked markdown file.
 
   Report the routing up front (which changed file pulled in which doc). If
   nothing is in scope, say so and stop.

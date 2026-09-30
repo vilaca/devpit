@@ -79,7 +79,7 @@ than forgetful.
 - The hook matches command text (`.claude/settings.json`, the script header), so
   it guards against an agent forgetting, not against intent: a push from a
   human's terminal, from inside another script, or outside Claude Code is not
-  gated. CI still runs every gate after the push.
+  gated. CI still runs every gate on pushes to `main` and on pull requests.
 - Every agent push costs a review, and a commit made after `--reviewed` needs a
   fresh one (the record is per `HEAD`). Both skills report their routing first,
   and a diff that pulls in no doc and no invariant anchor leaves them nothing to

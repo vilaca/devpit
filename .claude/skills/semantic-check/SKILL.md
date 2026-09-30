@@ -52,8 +52,8 @@ it separately with the scenario and the test seam.
 ## Mode selection
 
 - **`/semantic-check`** (no args, or a ref/path list) — **diff mode**. Scope is
-  the working diff (`git diff` + staged), or `git diff <base>...HEAD` if a base
-  is named. Route only the *touched* invariants.
+  the changed set from step 1 (working diff, staged, and untracked files, plus
+  `<base>...HEAD` if a base is named). Route only the *touched* invariants.
 - **`/semantic-check audit`** — **audit mode**. Scope is the whole tree; run
   every invariant. This is also the calibration run (see Calibration).
 

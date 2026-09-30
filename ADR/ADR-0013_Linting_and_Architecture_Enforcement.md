@@ -18,9 +18,9 @@ time, and Go's default `go vet` catches only a narrow class of issues.
 `scripts/check.sh` is the single gate runner and the definition of "green"; its
 header lists every gate. Contributors run it before a change is done (an
 agent's push is gated on it — ADR-0022); CI runs the same script, one job per
-gate, so a red check names the failing gate and local and CI cannot drift — the
-gate list and the pinned linter versions live only in the script, not in the
-workflow. The two gates that make ADR-0012's layered
+gate or small group of gates, so a red check names the failing gate and local
+and CI cannot drift — the gate list and the pinned linter versions live only in
+the script, not in the workflow. The two gates that make ADR-0012's layered
 structure executable (see `.golangci.yml`, `.go-arch-lint.yml`):
 
 1. **golangci-lint (v2)** runs with `default: all` — every bundled linter is
@@ -93,7 +93,7 @@ same change or `deepScan` will resurface the `api -> engine` false positive.
 
 A gate's command, flags, and pinned version live only in `scripts/check.sh` —
 the workflow only invokes it — so bumping a version touches the script alone;
-adding a gate also adds its one-line CI job. `go-arch-lint` scans the filesystem, so
+adding a gate also adds or joins a CI job that invokes it. `go-arch-lint` scans the filesystem, so
 local git worktrees under `.claude/` are excluded in `.go-arch-lint.yml`
 (`exclude:`); the gofmt gate checks tracked files only for the same reason. A
 fresh CI checkout has no worktrees.
@@ -168,8 +168,8 @@ via `scripts/check.sh --ci build vet test tidy`.
 
 `secrets` runs gitleaks, pinned like the other linters, with its **default
 rules** over the git history reachable from `HEAD`. (gitleaks also picks up a
-`.gitleaks.toml` / `.gitleaksignore` at the repo root; the gate fails on an
-untracked one, so only a committed one can change what it checks.) DevPit handles forge and
+`.gitleaks.toml` / `.gitleaksignore` at the repo root; the gate fails when one
+differs from `HEAD`, so only a committed one can change what it checks.) DevPit handles forge and
 Jira tokens and the repo is public, so a committed token is the costliest
 mistake a contributor can make, and it is one a machine can decide. The scan is
 of history, not the working tree: a token deleted in a later commit is still

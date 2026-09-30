@@ -240,12 +240,14 @@ gate_links() {
 gate_secrets() {
   # History reachable from HEAD, not gitleaks' default --all: other local refs
   # would make a local scan differ from CI's (whose checkout uses fetch-depth 0).
-  # The GITLEAKS_CONFIG* env vars are dropped and an untracked root config or
-  # ignore file is refused, so nothing local can change the rules CI runs.
+  # The GITLEAKS_CONFIG* env vars are dropped, and a root config or ignore file
+  # that differs from HEAD (untracked, staged, or modified) is refused, so
+  # nothing local can change the rules CI runs.
   local f
   for f in .gitleaks.toml .gitleaksignore; do
-    if [[ -e $f ]] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
-      echo "untracked $f would make this gate differ from CI — commit or remove it"; return 1
+    if [[ -e $f ]] && ! { git ls-files --error-unmatch -- "$f" >/dev/null 2>&1 \
+                          && git diff --quiet HEAD -- "$f"; }; then
+      echo "$f differs from HEAD, so this gate would differ from CI — commit or revert it"; return 1
     fi
   done
   ensure_tool gitleaks "github.com/zricethezav/gitleaks/v8@$GITLEAKS_VERSION" || return 1

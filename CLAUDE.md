@@ -22,7 +22,9 @@ scripts/check.sh --no-frontend   # backend-only change
 can't drift ([`ADR/ADR-0013`](ADR/ADR-0013_Linting_and_Architecture_Enforcement.md)).
 The git history is full of after-the-fact `style: gofmt` and `fix: resolve
 golangci-lint failures` commits — those mean the gate was skipped. A change
-isn't done until `check.sh` is green.
+isn't done until `check.sh` is green. A committed hook (`scripts/claude-gate.sh`,
+[`ADR/ADR-0022`](ADR/ADR-0022_Agent_Contributor_Tooling.md)) enforces this on
+agent pushes; its block message says what to run.
 
 ## The rules agents break most
 

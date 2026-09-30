@@ -7,9 +7,11 @@ description: >
   instead of linking it, doc claims whose referenced code has changed, stale
   version/Scope tags, duplicated facts, dead internal links, ADR convention
   violations, and stale agent instructions (CLAUDE.md and the committed
-  skills). Use in the DevPit repo when the user says "check the docs",
-  "are the docs stale", "doc-check", "audit ADRs", "docs consistency", or before
-  a release. Reports findings; only edits when asked.
+  skills). Two modes: default scopes to a diff (the docs it touches and the
+  docs that reference code it touches); `audit` checks every doc. Use in the
+  DevPit repo when the user says "check the docs", "are the docs stale",
+  "doc-check", "audit ADRs", "docs consistency", before a push (diff mode), or
+  before a release (`audit`). Reports findings; only edits when asked.
 allowed-tools: Bash, Read, Grep, Glob, Edit
 ---
 
@@ -33,6 +35,26 @@ symlink) plus `.claude/skills/*/SKILL.md`. Ignore `docs/plans/` (gitignored
 working notes, not the design record). Read `docs/Contributing.md` first — it
 is the authority for the rules below; if it has changed, defer to it over this
 skill — but its own claims are audited like any doc's.
+
+### Mode selection
+
+- **`/doc-check`** (no args, or a base ref) — **diff mode**. The changed set is
+  `git diff --name-only` plus `--cached`, plus untracked files (`git ls-files
+  --others --exclude-standard`), plus `<base>...HEAD` when a base is named. In
+  scope:
+  - every changed target doc — run all checks below on it;
+  - every target doc that names a changed non-doc file (`git grep` its path)
+    or a symbol, route, flag, or token the diff removes or renames (`git grep`
+    the `-` lines' identifiers) — run checks 1, 2, and 5 on those references;
+  - the whole `ADR/` log for check 3 when an ADR is added, renamed, or removed.
+
+  Links *to* a renamed or removed doc from unchanged docs are left to the
+  `links` gate in `scripts/check.sh`, which checks every tracked markdown file.
+
+  Report the routing up front (which changed file pulled in which doc). If
+  nothing is in scope, say so and stop.
+- **`/doc-check audit`** — **audit mode**. Every target, every check. Use it
+  before a release.
 
 ## 1. Prose that restates a code shape (should link instead)
 

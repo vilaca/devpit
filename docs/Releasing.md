@@ -21,7 +21,7 @@ the full gate and then [`.goreleaser.yaml`](../.goreleaser.yaml).
    - `scripts/check.sh` is green (the gate; it is what the release workflow runs
      via `--ci`). A tag on a red commit produces no artifacts — the pipeline
      fails at its `gate` job by design.
-   - `/doc-check` is clean.
+   - `/doc-check audit` and `/semantic-check audit` are clean.
    - If the UI changed since the last release, the hero screenshot is fresh —
      re-capture it from the demo world (see [Screenshot refresh](#screenshot-refresh)).
    - The [`docs/Roadmap.md`](Roadmap.md) section for this release is accurate.

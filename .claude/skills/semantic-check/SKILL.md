@@ -25,7 +25,7 @@ deterministic gate stays green. The invariants live in
 adversarially.
 
 An AI judge is nondeterministic, so this is **advisory-with-teeth**, never a
-`check.sh` gate (`feedback-explicit-ci-divergence`): a VIOLATED finding needs a
+`check.sh` gate (green must be deterministic, local == CI — `ADR/ADR-0013`): a VIOLATED finding needs a
 human "accepted, here's why" or an ADR, not a silent pass. Read
 `docs/Semantic_Invariants.md` first — it is the authority for the invariant set,
 the verdict vocabulary (HOLDS / VIOLATED / WEAKENED), and the escalation
@@ -61,8 +61,9 @@ it separately with the scenario and the test seam.
 
 ### 1. Determine scope and route (deterministic)
 
-- Diff mode: `git diff --name-only` (plus `--cached`, plus `<base>...HEAD` when a
-  base is given) → the changed file set.
+- Diff mode: `git diff --name-only` (plus `--cached`, plus untracked files from
+  `git ls-files --others --exclude-standard`, plus `<base>...HEAD` when a base
+  is given) → the changed file set.
 - Read `docs/Semantic_Invariants.md`. For each invariant, match its **Anchors**
   globs against the changed set. An invariant is *in scope* if any anchor
   matches. In audit mode every invariant is in scope.

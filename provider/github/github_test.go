@@ -1424,3 +1424,40 @@ func TestBranchesFromGraphQLJoin(t *testing.T) {
 		t.Errorf("degraded join: got branches %q/%q, want empty", pl2.SourceBranch, pl2.TargetBranch)
 	}
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestDoGraphQLRefusesNonQueryDocuments (INV-1): the GraphQL POST is the
+// provider's only non-GET call, so doGraphQL refuses anything but a query
+// document before a request leaves the process.
+func TestDoGraphQLRefusesNonQueryDocuments(t *testing.T) {
+	p, err := New(sdk.ConnectionConfig{ID: "conn1", Type: "github", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	sent := 0
+	p.http.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		sent++
+		return nil, errors.New("transport reached")
+	})
+
+	for _, doc := range []string{
+		"mutation{approve(id:1){id}}",
+		" query{a}",
+		"query{a} mutation{b}",
+		"subscription{x}",
+		"",
+	} {
+		sent = 0
+		if _, err := p.doGraphQL(t.Context(), doc); err == nil || sent != 0 {
+			t.Errorf("doGraphQL(%q): err=%v, requests sent=%d — want it refused before sending", doc, err, sent)
+		}
+	}
+
+	sent = 0
+	if _, err := p.doGraphQL(t.Context(), "query{viewer{login}}"); err == nil || sent != 1 {
+		t.Errorf("a query document must be sent: err=%v, requests sent=%d", err, sent)
+	}
+}

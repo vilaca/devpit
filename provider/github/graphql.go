@@ -236,6 +236,11 @@ func (e *graphQLError) Error() string { return "github graphql: " + e.msg }
 // *graphQLError so the caller degrades. Graceful-degradation callers catch the
 // non-rate errors and continue.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
+	// DevPit is read-only (ADR-0017): only query documents leave the process,
+	// however they were built.
+	if !strings.HasPrefix(query, "query") || strings.Contains(query, "mutation") {
+		return nil, errors.New("github graphql: refusing a non-query document (DevPit is read-only)")
+	}
 	body, _ := json.Marshal(struct { //nolint:errchkjson // struct has no interface fields; Marshal cannot fail
 		Query string `json:"query"`
 	}{query})

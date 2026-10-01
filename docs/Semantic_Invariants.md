@@ -12,12 +12,14 @@ Deterministic rules already have homes that a machine enforces:
 gate). **This file is only for intent that no linter can see** — the meaning a
 change can violate while every deterministic gate stays green.
 
-When part of a claim becomes mechanically checkable, it moves into a test and
-the Hunt keeps only the judgment. Today `internal/attention/sdk_surface_test.go`
-backs INV-4 (every payload field produced and consumed) and
-`internal/attention/invariants_test.go` backs INV-1 (outbound calls are GETs or
-GraphQL queries) and INV-5 (every sdk signal's effect on ranking is classified
-against ADR-0016).
+When part of a claim becomes mechanically checkable, a test backs it, and the
+Hunt still runs — aimed at what the test can't see. Today
+`internal/attention/sdk_surface_test.go` backs INV-4 (every
+`sdk.ItemObservedPayload` field is produced and consumed) and
+`internal/attention/invariants_test.go` backs INV-1 (outside the inbound server,
+requests are GET/HEAD or a provider's one GraphQL query POST, and each
+provider's `doGraphQL` refuses non-query documents at runtime) and INV-5 (every
+sdk signal's effect on ranking is classified against ADR-0016).
 
 Each invariant is a claim an audit can try to *break*, not a description to
 check for consistency. The unit of work is: route a diff (or the whole tree)
@@ -93,14 +95,17 @@ SQLite, and it is never written back to any provider.
 `docs/Engineering_Philosophy.md` "Read-only by default").
 
 **Anchors:** `provider/github/`, `provider/gitlab/`, `internal/jira/`,
-`internal/api/`, `internal/storage/`, `sdk/`.
+`internal/api/`, `internal/storage/`, `sdk/`, `internal/attention/invariants_test.go`.
 
 **Hunt:**
 - (a) Any outbound HTTP verb other than `GET`/`HEAD` in provider or jira code —
   `http.MethodPost|Put|Patch|Delete`, `http.NewRequest(` with a non-GET method,
-  a request body on a forge call.
+  a request body on a forge call. (The test catches the source-level forms;
+  hunt the ones it can't — a write through an HTTP library it doesn't model, or
+  a client that outbound code receives rather than builds.)
 - (b) Any GraphQL `mutation` document, or a REST path that names a write action
-  (approve, merge, comment, note, label, close).
+  (approve, merge, comment, note, label, close). (`doGraphQL` refuses
+  non-query documents; hunt REST write paths, which no test models.)
 - (c) A write to a provider that is dressed up as a read — a "refresh" that
   POSTs, a token scope requested beyond read.
 - (d) Any DevPit-persisted user state beyond `handle_next` that could imply a
@@ -183,7 +188,8 @@ resolved account display name" roadmap entry.)
 
 **Hunt:**
 - (a) An `sdk` struct field written by providers but never read downstream (fold,
-  api), or read downstream but never populated by any provider.
+  api), or read downstream but never populated by any provider. (The test covers
+  `sdk.ItemObservedPayload`; hunt the signal payloads and the other `sdk` types.)
 - (b) A `Capabilities` flag (or equivalent declared capability) that no provider
   sets, or that nothing branches on.
 - (c) A `PollResult`/event field that is carried through the pipeline but changes

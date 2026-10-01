@@ -115,8 +115,11 @@ func TestEventVocabRatchet(t *testing.T) {
 	bare := []*regexp.Regexp{
 		regexp.MustCompile(`"item\.observed"`),
 		regexp.MustCompile(`"item\.removed"`),
-		regexp.MustCompile(`"signal\.[a-z_]+"`),
+		regexp.MustCompile(`"signal\.`), // any signal literal, "signal.x" or "signal.%s"
 	}
+	// Composing a type from sdk.SignalPrefix would mint a signal outside sdk;
+	// only the fold's prefix match (its signalPrefix alias) may use it.
+	prefixUse := regexp.MustCompile(`\bSignalPrefix\b`)
 
 	for _, path := range sources {
 		data, err := os.ReadFile(path)
@@ -128,6 +131,9 @@ func TestEventVocabRatchet(t *testing.T) {
 			if re.Match(data) {
 				t.Errorf("%s: contains bare event-type literal matching %s — use sdk constants instead", rel, re)
 			}
+		}
+		if filepath.ToSlash(rel) != "internal/attention/fold.go" && prefixUse.Match(data) {
+			t.Errorf("%s: uses sdk.SignalPrefix — signal types are minted only as sdk constants", rel)
 		}
 	}
 }

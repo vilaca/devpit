@@ -10,10 +10,10 @@
 #                and a recorded /doc-check + /semantic-check review of HEAD
 #
 # Every other command passes straight through. Exit 2 blocks the tool call and
-# feeds stderr back to the agent. The hook's `if: Bash(git *)` filter matches
-# parsed subcommands; the regex below re-checks the text (and is the only
-# filter on Claude Code versions without `if`). A guard against accidents, not
-# a lock: a push hidden inside another script isn't seen.
+# feeds stderr back to the agent. The hook's `if` filters (`Bash(git *)`,
+# `Bash(gh pr *)`) match parsed subcommands; the regexes below re-check the text
+# (and are the only filter on Claude Code versions without `if`). A guard
+# against accidents, not a lock: a push hidden inside another script isn't seen.
 #
 # A hook can't run a skill, so the review is the agent's job: the push is
 # blocked with instructions until `scripts/claude-gate.sh --reviewed` records

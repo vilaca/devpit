@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -64,6 +65,11 @@ func (e *graphQLError) Error() string { return "gitlab graphql: " + e.msg }
 // Returns *graphQLError when the server returns HTTP 200 with a non-empty errors field
 // and null data — this is how GitLab signals a complexity-ceiling rejection.
 func (p *Provider) doGraphQL(ctx context.Context, query string) (map[string]json.RawMessage, error) {
+	// DevPit is read-only (ADR-0017): only query documents leave the process,
+	// however they were built.
+	if !strings.HasPrefix(query, "query") || strings.Contains(query, "mutation") {
+		return nil, errors.New("gitlab graphql: refusing a non-query document (DevPit is read-only)")
+	}
 	body, _ := json.Marshal(struct { //nolint:errchkjson // struct has no interface fields; Marshal cannot fail
 		Query string `json:"query"`
 	}{query})

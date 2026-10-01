@@ -3,7 +3,8 @@
 ## Scope
 
 Implemented (v0.1) — every gate runs through `scripts/check.sh`, locally and in CI
-(`.github/workflows/ci.yml`, one job per gate). See `docs/Roadmap.md`.
+(`.github/workflows/ci.yml`, one job per gate or small group of gates). See
+`docs/Roadmap.md`.
 
 ## Context
 
@@ -172,8 +173,9 @@ README, `CLAUDE.md`, `docs/`, `ADR/` or the committed skills doesn't resolve
 against tracked files. It is the mechanical half of doc-check's stale-claim
 check (ADR-0014) — the half `links` can't do, because lychee skips code spans —
 so drift like a renamed file or a deleted symbol fails the gate instead of
-waiting for a review to notice it. Its rules and its one allowlist live in
-`gate_docrefs`; CI runs it in the `docs` job beside `links`.
+waiting for a review to notice it. Its rules (`gate_docrefs`) and allowlist
+(`DOCREF_ALLOW`) live in `scripts/check.sh`; CI runs it in the `docs` job beside
+`links`.
 
 The `shell` gate also runs `scripts/*_test.sh`. Shell scripts that make
 decisions (today, the agent gate hook — ADR-0022) carry a test held to the same

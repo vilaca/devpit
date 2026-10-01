@@ -46,8 +46,8 @@ second decision log — the ADRs are it.
   `build:`, `style:`, `refactor:`, `chore:`, `test:`), imperative mood.
 - Working implementation plans and agent handoffs live in the gitignored
   `docs/plans/` — they are not part of the committed design record.
-- Claude Code sessions in this repo run `scripts/claude-gate.sh` before any
-  `git commit` or `git push` (`ADR/ADR-0022_Agent_Contributor_Tooling.md`).
+- Claude Code sessions in this repo run `scripts/claude-gate.sh` before commits
+  and pushes (`ADR/ADR-0022_Agent_Contributor_Tooling.md`).
   To also block strings that must never reach this public repo — an
   employer's hostnames, ticket keys — put gitleaks rules in
   `.git/info/gitleaks-local.toml` — inside `.git/`, so it is never committed.

@@ -86,9 +86,6 @@ in v0.1.6.
 - Providers: Forgejo, Gitea, Codeberg (with capability declaration/degradation, ADR-0003). Codeberg is a hosted Forgejo instance; its provider type shares the Forgejo implementation with `base_url` defaulting to `https://codeberg.org`.
 - Needs Backport bucket via a configurable label convention (deferred from v0.1,
   ADR-0003).
-- Reconcile item reaping — mention-only remainder: emit `item.removed` for
-  role-less ghost rows so they leave the list too. The merged/closed/un-roled
-  reaping core shipped in v0.1.6 (ADR-0024).
 - Adaptive rate-budget scheduler, replacing basic backoff (ADR-0004).
 - Snapshot/compaction of the event log, only if a real instance proves it
   necessary (ADR-0005).
@@ -247,8 +244,8 @@ Noted, not committed to any release.
     someone specifically mentioned you back, distinct from one you merely
     opened).
   - Precedence of issue states relative to PR states in the ranked list
-    (Assigned issues are probably lower precedence than Needs Review /
-    Changes Requested, but higher than Waiting on Author).
+    (Assigned issues are probably lower precedence than Review Requested /
+    Changes Requested, but higher than Review Submitted).
   - Whether issues and PRs should be visually distinguished in the list
     (they currently share the same row shape).
 
@@ -282,7 +279,7 @@ Noted, not committed to any release.
   The main design questions:
   - Whether label subscriptions are configured per-connection or globally.
   - How label-matched items sit in the bucket/precedence model (they do not
-    map cleanly to Needs Review / Changes Requested / Assigned — a new bucket
+    map cleanly to Review Requested / Changes Requested / Assigned — a new bucket
     or a separate "Watching" tier may be needed).
   - Whether label tracking and user tracking are additive (union) or
     configurable per-subscription.

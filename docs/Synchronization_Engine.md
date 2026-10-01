@@ -17,7 +17,8 @@ computes no attention state itself — buckets are folded on read by
   at startup. Connections do not change while running (no runtime add/remove).
 - Resolve identity, distinguishing **permanent** from **transient** failure.
 - Run two tiers per connection on a **single goroutine** — a fast change-signal
-  poll (~60 s) and a slow full reconcile (~3 min) — never overlapping.
+  poll and a slower full reconcile (cadences: `defaultFastEvery` /
+  `defaultReconEvery`, `internal/engine/engine.go`) — never overlapping.
 - Per cycle: load cursors → call the provider → **on success** persist events
   then cursors → write one `sync_log` row → notify. **On error**, persist
   nothing and leave cursors untouched.

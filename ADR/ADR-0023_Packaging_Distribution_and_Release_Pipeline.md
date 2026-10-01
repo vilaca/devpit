@@ -150,7 +150,7 @@ deferring a user-facing feature until a real instance proves it necessary
 - **Docker DB disposability** is an accepted trade-off: losing the volume loses
   pins, onset history, and the sync log — never forge data.
 - **Forward dependency**: binary-shipped, user-facing retention ("clear history
-  older than X") is deferred to v0.2 (`docs/Roadmap.md`); until then brew/Docker
+  older than X") is deferred (`docs/Roadmap.md`); until then brew/Docker
   users rely on the maintainer scripts or the disposable Docker DB.
 - **Forward dependency**: the goreleaser pin is held below v2.10 to keep formula
   generation (above). Adopting a newer goreleaser requires migrating the Homebrew

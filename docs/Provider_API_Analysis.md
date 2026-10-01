@@ -75,7 +75,7 @@ absorbs easily.
 > token-driven capability degradation are **not yet implemented**. `FastPoll`
 > polls `/notifications` unconditionally and GitHub mention signals arrive only
 > from it, so a fine-grained PAT loses the fast tier and mentions entirely (only
-> the 3-minute reconcile runs). The practical token trade-off users face is in
+> the reconcile sweep runs). The practical token trade-off users face is in
 > `docs/Token_Setup.md`; the "recommended default" and "optional tier" framing
 > here is aspirational until the fallback lands.
 
@@ -273,11 +273,11 @@ minimum supported GitLab version]**.
 
 | Tier | GitHub | GitLab | Default cadence |
 |----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------|
-| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items (v0.1.3) | 60s (obey `X-Poll-Interval` on GitHub) |
+| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items (v0.1.3) | `defaultFastEvery` (obey `X-Poll-Interval` on GitHub) |
 | Detail fetch | included in GraphQL responses | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
-| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | 3 min |
+| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | `defaultReconEvery` |
 
-Cadences are proposed defaults (fixed in v0.1); the reconciliation
+Cadences are engine constants (`internal/engine/engine.go`, ADR-0004); the reconciliation
 sweep also self-heals anything the fast tier missed (deleted todos,
 watermark gaps, GitHub search lag).
 

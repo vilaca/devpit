@@ -28,13 +28,20 @@ a provider needs no internal locking.
   alone. Capability-gated *bucket* production (an "unsupported" marker for
   buckets a provider cannot feed) is deferred until a forge needs it
   (`ADR/ADR-0003_Provider_Plugin_Model.md`).
-- **Two poll tiers.** `FastPoll` (~60 s) is the lightweight change-signal tier;
-  `Reconcile` (~3 min) is the full identity-scoped sweep that self-heals
-  anything the fast tier missed. Both take an opaque `PollState` cursor map — one
-  shared map with namespaced keys — that the engine persists; `FastPoll` advances
+- **Two poll tiers.** `FastPoll` is the frequent, lightweight change-signal
+  tier; `Reconcile` is the slower, full identity-scoped sweep that self-heals
+  anything the fast tier missed (cadences: `internal/engine/engine.go`). Both
+  take an opaque `PollState` cursor map — one shared map with namespaced keys —
+  that the engine persists; `FastPoll` advances
   it, while `Reconcile` is a cursorless full sweep that reads and returns none and
   instead sets `Complete` so the engine reaps items that left the sweep
   (`ADR/ADR-0024_Reconcile_Item_Reaping.md`). An empty result is valid (nothing changed).
+- **Resolving leftovers.** `ResolveOpen` reports which of the given native IDs
+  are still open and visible; an omitted ID is gone (merged, closed, or
+  inaccessible). The engine calls it only after a complete reconcile, for
+  mention-only leftovers the sweep can't vouch for (ADR-0024). A transport,
+  rate-limit, or auth error is returned so the engine reaps none of them that
+  cycle; an empty input returns nil.
 - **Error contract.** When `FastPoll` or `Reconcile` returns a non-nil error the
   engine **discards the returned result entirely and leaves cursors
   untouched** — providers need not accumulate partial events or state alongside

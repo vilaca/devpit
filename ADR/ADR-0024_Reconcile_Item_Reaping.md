@@ -2,10 +2,9 @@
 
 ## Scope
 
-Implemented (v0.1.6) — the engine reaps merged/closed/un-roled items on a complete
-reconcile (`internal/engine/cycle.go`), fixing the ghost-row bug where they never
-left the list. The mention-only (role-less) ghost remainder is deferred to v0.2
-sync hardening (`docs/Roadmap.md`).
+Implemented (v0.1.6) — on a complete reconcile the engine reaps merged, closed,
+and un-roled items, and mention-only leftovers once `Provider.ResolveOpen`
+confirms them gone (`internal/engine/cycle.go`). See `docs/Roadmap.md`.
 
 ## Context
 
@@ -35,17 +34,16 @@ items that went terminal while the app was down "for free" on the next start.
 
 ## Decision
 
-**Reconcile becomes a full authoritative sweep and the engine reaps.**
+**Reconcile is a full authoritative sweep, and the engine reaps.**
 
 - **Full sweep, no incremental cursor.** Every reconcile enumerates *all* open
-  roled items, dropping the incremental `updated_after` / `updated:>` filter and
-  its per-scope cursor bookkeeping. The absolute cost is the startup sweep
-  repeated each cycle (cadence: `defaultReconEvery` in `internal/engine/engine.go`,
+  roled items — no incremental `updated_after` / `updated:>` filter, no per-scope
+  cursor. The absolute cost is the startup sweep repeated each cycle (cadence: `defaultReconEvery` in `internal/engine/engine.go`,
   rationale in ADR-0004); enrichment batching is
   unchanged (`provider/gitlab/graphql.go`, `provider/github/graphql.go`) and the
   `item.observed` dedupe-hash makes an unchanged re-sweep a write/notify no-op
   (`docs/Event_Taxonomy_and_Storage.md`).
-- **`Complete` on `PollResult`.** A new boolean (mirroring `Degraded`,
+- **`Complete` on `PollResult`.** A boolean (mirroring `Degraded`,
   `sdk/provider.go`) is true only when every role-scope's REST identity
   enumeration succeeded — **including** sole-approver discovery, whose
   silent-degrade paths (`provider/gitlab/reconcile.go`,
@@ -62,24 +60,25 @@ items that went terminal while the app was down "for free" on the next start.
   Deriving the swept set from the result's events is sound only because both
   providers' GraphQL joins return the original events unchanged on enrichment
   *failure* (`provider/github/graphql.go`, `provider/gitlab/graphql.go`) — that
-  never-drop-on-failure behaviour becomes a stated invariant of the join. The one
+  never-drop-on-failure behaviour is a stated invariant of the join. The one
   sanctioned drop is an **archived-repo item** (see the archived-repo bullet in
   Consequences): the join drops it deliberately so it leaves the swept set and is
   reaped, which is safe because it is keyed on a definitive forge fact
   (`isArchived` / `project.archived`), never a transient failure. The diff needs
-  one new store read; the `engine → storage` edge already exists
+  one store read, over the existing `engine → storage` edge
   (`.go-arch-lint.yml`).
-- **Mention-only items are exempt.** An item surfaced purely by a FastPoll
-  mention carries no role, is outside reconcile's authority, and is never
-  reaped by this path.
+- **Mention-only leftovers are confirmed first.** An item surfaced purely by a
+  FastPoll mention carries no role, so a complete sweep missing it proves
+  nothing. The engine asks `Provider.ResolveOpen` (`sdk/provider.go`) which of
+  these leftovers are still open and reaps the rest; a still-open mention is
+  kept, and a lookup error skips leftover reaping that cycle (fail closed)
+  without blocking the roled path.
 - **Per-episode removal, idempotent while gone.** The engine reaps only items
   whose latest stored event is an observed-open (an already-removed item is
   skipped, so a still-gone item is not re-removed every cycle), and keys each
   removal to the superseded observed event so a reopen→re-merge produces a
-  fresh, higher-id removal. This supersedes the "a constant [key] — at most one
-  live removal" rule; `docs/Event_Taxonomy_and_Storage.md` is reworded in the
-  same change to own the mechanics (and to note the emitter and the un-role
-  case).
+  fresh, higher-id removal. The mechanics live in
+  `docs/Event_Taxonomy_and_Storage.md`.
 - **Salted resurrection.** Reappearance after a removal cannot rely on the
   snapshot dedupe key alone: an item re-observed with an *identical* fact set
   hashes to its pre-removal key, `INSERT OR IGNORE` drops it, and the removal
@@ -107,15 +106,14 @@ the GraphQL complexity ceiling, where `Degraded` is common
 
 ## Consequences
 
-- **Reconcile is stateless on cursors.** The per-scope `updated_after` cursors
-  and the not-degraded cursor-advance guard are deleted; `PollState` for
-  reconcile shrinks. FastPoll's own watermark and GitLab's in-memory
-  `openSnapshots` refresh cache are a separate concern and unchanged.
-- **A new store read per complete reconcile** (open roled items for the
-  connection) and synthesized `item.removed` writes on the existing durable
+- **Reconcile carries no cursor state** — no per-scope `updated_after` cursors,
+  no cursor-advance guard. FastPoll's own watermark and each provider's
+  in-memory `openSnapshots` cache are a separate concern.
+- **One store read per complete reconcile** (the latest fact for every item on
+  the connection, which the leftover and resurrection paths also use) and synthesized `item.removed` writes on the existing durable
   events-then-cursors path (`internal/engine/cycle.go`).
 - **Reaping is duplicated in neither provider** — providers only compute the
-  `Complete` flag; the diff lives once in the engine. This is deliberately *not*
+  `Complete` flag and answer `ResolveOpen`; the diff lives once in the engine. This is deliberately *not*
   a shared provider helper (ADR-0003 does not apply to the engine layer).
 - **Un-roling removes the item from your list**, matching the taxonomy's
   "no longer sees the item" case; if a role returns, the salted-resurrection
@@ -126,14 +124,10 @@ the GraphQL complexity ceiling, where `Degraded` is common
   worst case is the item flickering out for one reconcile interval. Accepted —
   a two-strike miss rule remains a possible follow-up if flicker is observed in
   practice, and is deliberately not built now.
-- **Mention-only merged items remain a known residual gap.** Role-less items
-  are outside reconcile's authority and are never reaped; nothing else clears
-  them once merged. On GitHub the same change fixes the cheap half: the
-  FastPoll role-less drop (`provider/github/fastpoll.go`) keeps *non-open*
-  snapshots, since a merged snapshot makes the fold drop the item and can never
-  render as a bare row. GitLab mention-only ghosts (todo-driven, no
-  post-merge todo) are recorded here as a forward-dependency for the sync
-  hardening milestone (`docs/Roadmap.md`).
+- **Mention-only leftovers cost one provider call** per complete reconcile that
+  has any. GitHub's FastPoll role-less drop (`provider/github/fastpoll.go`) also
+  keeps *non-open* snapshots, since a merged snapshot makes the fold drop the
+  item and can never render as a bare row.
 - **A partial sweep never reaps** — any REST scope or sole-approver enumeration
   failure clears `Complete`, so a transient outage cannot mass-remove live
   items.

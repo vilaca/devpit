@@ -32,7 +32,7 @@ Two event streams share one log:
 | Type | Meaning |
 |---|---|
 | `item.observed` | Full normalized fact set. Appended only when the fact set differs from the item's previous snapshot — the poll diff *is* the change detector. The fold reads the latest snapshot per item. |
-| `item.removed` | A complete reconcile sweep no longer sees an open roled item — merged/closed observed by no one, access lost, un-roled, or on a repo the forge reports archived (dropped by the provider join, `ADR/ADR-0024_Reconcile_Item_Reaping.md`). **Emitted by the engine, not a provider** (`internal/engine`, `ADR/ADR-0024_Reconcile_Item_Reaping.md`): providers only sweep open items, so the engine diffs the sweep against the store's open roled items and reaps the misses. Mention-only (role-less) items are exempt. The fold drops the item. |
+| `item.removed` | A complete reconcile sweep no longer sees an open roled item — merged/closed observed by no one, access lost, un-roled, or on a repo the forge reports archived (dropped by the provider join, `ADR/ADR-0024_Reconcile_Item_Reaping.md`). **Emitted by the engine, not a provider** (`internal/engine`, `ADR/ADR-0024_Reconcile_Item_Reaping.md`): providers only sweep open items, so the engine diffs the sweep against the store's open roled items and reaps the misses. Mention-only (role-less) leftovers are reaped only once `Provider.ResolveOpen` confirms them gone. The fold drops the item. |
 
 **Signal stream** — discrete "aimed at you" occurrences, stored raw and never
 collapsed. They feed the Mentioned bucket, the "×N" tag counts, the item's
@@ -190,6 +190,6 @@ requiring the `sqlite3` CLI, apply these rules:
 
 The scripts are named here with their contract; their internals live with the
 scripts themselves (one home per fact). Binary-shipped, user-facing "clear
-history older than X" retention stays **deferred to v0.2** (`docs/Roadmap.md`);
-brew/Docker users have no trim story this release and rely on the maintainer
+history older than X" retention stays **deferred** (`docs/Roadmap.md`);
+brew/Docker users have no trim story until then and rely on the maintainer
 scripts or the disposable Docker DB (ADR-0023).

@@ -28,29 +28,17 @@ for the exact conditions.
 
 ## Signals (v0.1.5)
 
-Nine signals replacing the former six attention states. A WorkItem may carry
-several at once; they render as chips. The signal *vocabulary* is one word-set —
-no separate author/reviewer labels, no authorship tag (the row tints carry that
-context — "Row tints" below). The *conditions* stay role-aware where the fact is inherently about
-a role (see Role scope below).
+A WorkItem may carry several signals at once; they render as chips. The signal
+*vocabulary* is one word-set — no separate author/reviewer labels, no authorship
+tag (the row tints carry that context — "Row tints" below). The *conditions*
+stay role-aware where the fact is inherently about a role (see Role scope
+below).
 
-The nine signal wire values and their precedence order are direct code — the
+The signal wire values and their precedence order are direct code — the
 `State` consts and `precedence` var in
 [`internal/attention/states.go`](../internal/attention/states.go) (index 0 is
 the leading chip; precedence orders chips, not item ranking — see Ranking).
-Their human labels, highest precedence first:
-
-| wire value | label |
-|---|---|
-| `changes_requested` | Changes Requested |
-| `review_requested`  | Review Requested  |
-| `blocked`           | Blocked           |
-| `mentioned`         | Mentioned         |
-| `ready_to_merge`    | Ready to Merge    |
-| `auto_merge_armed`  | Auto-merge Armed  |
-| `checks_running`    | Checks Running    |
-| `checking`          | Checking          |
-| `review_submitted`  | Review Submitted  |
+Their human labels are `STATE_LABELS` in `frontend/src/lib/format.ts`.
 
 The exact firing condition for each signal is **direct code** — the `matches`
 switch in `internal/attention/states.go`; the plain-language meaning and role
@@ -181,7 +169,7 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
   ("Mentioned ×3"); the individual signals remain only in the stored event
   log — the UI shows the count, with hover adding the onset.
 
-## Presentation (Implemented, v0.1.1–v0.1.4)
+## Presentation (Implemented, v0.1.1–v0.1.6)
 
 - A **single ranked list**, one row per item, states as tags; buckets are
   optional client-side filters, not the primary layout. Two filters diverge from

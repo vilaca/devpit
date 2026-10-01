@@ -118,17 +118,19 @@ type Provider interface {
 	// handle manually).
 	ResolveIdentity(ctx context.Context) (Identity, error)
 
-	// Capabilities declares which buckets and optimisations are available.
+	// Capabilities declares which optimisations are available.
 	// Called once after ResolveIdentity; result is stable for the lifetime
 	// of the connection.
 	Capabilities() Capabilities
 
-	// FastPoll runs the lightweight change-signal tier (~60 s cadence).
+	// FastPoll runs the lightweight change-signal tier (cadence: the engine's
+	// defaultFastEvery).
 	// state is nil on the first call; the engine passes back the State from
 	// the previous result. An empty result is valid (nothing changed).
 	FastPoll(ctx context.Context, state PollState) (PollResult, error)
 
-	// Reconcile runs the full identity-scoped sweep (~3 min cadence).
+	// Reconcile runs the full identity-scoped sweep (cadence: the engine's
+	// defaultReconEvery).
 	// Self-heals anything the fast tier may have missed. It is a full
 	// authoritative sweep of every open roled item with no incremental cursor,
 	// so it ignores the passed state and returns none; it sets Complete so the

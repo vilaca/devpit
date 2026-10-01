@@ -14,8 +14,8 @@ so there are no create/delete endpoints.
 
 ## Endpoints
 
-- `GET /attention` — the single ranked list; states as tags. `?state=` is
-  optional client-side sugar.
+- `GET /attention` — the single ranked list; states as tags. `?state=` is an
+  optional server-side filter.
 - `GET /events` — the SSE stream (below).
 - `GET /connections` — provider connections with health/identity, plus the
   self-update hint, read-only.

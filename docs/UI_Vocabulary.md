@@ -12,7 +12,7 @@ ranking semantics: `docs/Attention_Engine.md`; wire shapes: `docs/REST_API.md`.
 ```
 ┌─ Handle next ─────────────────────────────────────────────────────┐
 │ 📌 Fix flaky auth test        [review_requested] [conflict] [stale]│  ← pins: any age,
-│    repo · author · 2w ago · pinned 3w ago                          │    flag order
+│    repo · fix → main · work · 2w ago · author       pinned 3w ago │    flag order
 ├─ fresh (idle < 7d) ───────────────────────────────────────────────┤
 │    Add rate limiter           [review_requested]                   │  ← newest activity
 │    Retry queue draining       [changes_requested] [checks failing] │    first
@@ -159,9 +159,9 @@ four rules, in order:
    resurfaces the item by recency, even though neither adds its own chip
    (`ADR/ADR-0016_Presentation_And_Ranking.md`).
 4. **Signal precedence orders the *chips*, not the items.** When a row carries
-   several signals the highest-precedence one leads (see the Signals table
-   above); the rest ride along. Precedence picks the headline chip — it does not
-   move the row.
+   several signals the highest-precedence one leads (precedence order:
+   `internal/attention/states.go`); the rest ride along. Precedence picks the
+   headline chip — it does not move the row.
 
 Worked example — four open items:
 
@@ -199,5 +199,5 @@ and the provider expose. If you expected an item and don't see it:
   badge. A missing badge means "the provider can't say", never "all clear".
 - **Token reach.** On GitHub the token *kind* changes what you see: a
   fine-grained PAT cannot read the notifications feed, so **mentions never
-  appear** and other fast signals wait for the 3-minute reconcile
+  appear** and other fast signals wait for the reconcile sweep
   (`docs/Token_Setup.md`). A missing item can be a token limitation, not a bug.

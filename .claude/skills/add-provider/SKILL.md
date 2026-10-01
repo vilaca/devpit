@@ -64,7 +64,7 @@ normalization of the provider's payloads into the sdk shapes.
 ## 6. Docs
 
 - Add a `docs/Provider_API_Analysis.md` section for the forge.
-- If the provider is on the roadmap (e.g. Forgejo/Codeberg for v0.2), update
+- If the provider is on the roadmap (e.g. Forgejo/Codeberg), update
   `docs/Roadmap.md` / README status only where they already track providers —
   don't restate timing that lives in the Roadmap.
 

@@ -19,8 +19,10 @@ computes no attention state itself — buckets are folded on read by
 - Run two tiers per connection on a **single goroutine** — a fast change-signal
   poll and a slower full reconcile (cadences: `defaultFastEvery` /
   `defaultReconEvery`, `internal/engine/engine.go`) — never overlapping.
-- Per cycle: load cursors → call the provider → **on success** persist events
-  then cursors → write one `sync_log` row → notify. **On error**, persist
+- Per cycle: load cursors → call the provider → **on success**, after a
+  complete reconcile, reap items that left the sweep
+  (`ADR/ADR-0024_Reconcile_Item_Reaping.md`) → persist events, removals
+  included, then cursors → write one `sync_log` row → notify. **On error**, persist
   nothing and leave cursors untouched.
 - Basic backoff only: honor the provider's rate-limit floor, exponential on
   transient failure. The adaptive rate-budget controller is deferred
@@ -97,14 +99,14 @@ classification the engine applies:
 | unexpected | any other odd status |
 
 Each failing outcome carries a plain-language cause shown in the sync activity
-view; the strings are rendered by `causeText` (and the two special-cased
+view; the strings are rendered by `causeText` (and the three special-cased
 `SyncFailed` calls) in `internal/engine/cycle.go`.
 
 ## Health dot derivation
 
 The connection health dot (served by `internal/api`) reflects the **worst of
 each operation's latest outcome**: for each distinct operation (`fast_poll`,
-`reconcile`), the engine reads the most-recent sync_log row and maps its
+`reconcile`), the API reads the most-recent sync_log row and maps its
 outcome to a status; the worst across all operations wins.
 
 | Latest outcome for an operation | Dot contribution |

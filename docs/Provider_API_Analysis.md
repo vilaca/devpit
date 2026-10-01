@@ -106,6 +106,17 @@ Search notes: since 2025-09-04 all issue searches use "advanced search"
 semantics — multiple `repo:`/`org:`/`user:` qualifiers AND together
 (previously OR). No `advanced_search` param needed anymore.
 
+**Snapshot cache.** Like GitLab, the provider keeps an in-memory
+`openSnapshots` cache of each open PR's last full post-join payload
+(`provider/github/github.go`): when a GraphQL batch degrades, the join carries
+enrichment forward from it, a draft getting only part of it (the split is in
+`carryForwardEnrichment`, `provider/github/graphql.go`). Unlike GitLab's it is
+not a refresh baseline — GitHub has no open-set refresh. An entry leaves when
+its PR is observed non-open or its repo archived; absence-based eviction happens
+only on a complete Reconcile (`pruneClosedSnapshots`,
+`provider/github/reconcile.go`), so FastPoll's partial slice never evicts a PR it
+merely did not hear about.
+
 ### Merge-gate mapping (`mergeStateStatus`)
 
 | Value | Meaning | DevPit state |
@@ -273,7 +284,7 @@ minimum supported GitLab version]**.
 
 | Tier | GitHub | GitLab | Default cadence |
 |----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------|
-| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items (v0.1.3) | `defaultFastEvery` (obey `X-Poll-Interval` on GitHub) |
+| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items | `defaultFastEvery` (obey `X-Poll-Interval` on GitHub) |
 | Detail fetch | included in GraphQL responses | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
 | Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | `defaultReconEvery` |
 

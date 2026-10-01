@@ -41,7 +41,7 @@ deliberately distinct from the signal chips above, and show even on muted rows
 (refresh timing: `labels` in `docs/REST_API.md`). See
 `ADR/ADR-0016_Presentation_And_Ranking.md`.
 
-## Signals (v0.1.5 — fixed chip precedence)
+## Signals (fixed chip precedence)
 
 The signal vocabulary, precedence, and firing conditions are direct code in
 [`internal/attention/states.go`](../internal/attention/states.go); the
@@ -100,9 +100,8 @@ GitHub shows what its API discloses. GitLab's non-gating CI shows through the
 `headPipeline` join; on GitHub a gating CI failure stays opaque inside Blocked.
 
 Both providers use a batched GraphQL join (one query per sync cycle, MRs/PRs
-via aliases) for the GraphQL-sourced signals; on failure the join degrades
-(sync_log entry) and carries the last-known GraphQL facts forward when a
-snapshot exists.
+via aliases) for the GraphQL-sourced signals; how a failed join degrades is in
+`docs/Provider_API_Analysis.md`.
 
 ## Age tags (the one exception — they band the list)
 

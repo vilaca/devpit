@@ -84,39 +84,38 @@ its fields:
   absent as "cannot say", never as false.
 - **Marker fields** — diagnostic booleans that explain why an item is in a given
   state but never change the state itself:
-  - `draft` — item is in draft / WIP mode (pre-existing since v0.1; providers
-    set this from the native draft flag).
-  - `failing_checks` (v0.1.1) — CI/checks red (GitHub: `mergeable_state ==
-    "unstable"`; GitLab: `headPipeline.status` red via the GraphQL join — any
-    pipeline, extended from `ci_must_pass` in v0.1.2). Previously this also
-    included `"dirty"` (narrowed in v0.1.1).
-  - `merge_conflict` (v0.1.1) — manual conflict resolution needed (GitHub:
+  - `draft` — item is in draft / WIP mode (providers set this from the native
+    draft flag).
+  - `failing_checks` — CI/checks red (GitHub: `mergeable_state == "unstable"`;
+    GitLab: `headPipeline.status` red via the GraphQL join — any pipeline, not
+    only one the project requires to pass).
+  - `merge_conflict` — manual conflict resolution needed (GitHub:
     `mergeable_state == "dirty"`; GitLab: `detailed_merge_status == "conflict"`,
     dropped when `shouldBeRebased` — GitLab's `has_conflicts`/`conflicts` booleans
     are not a conflict test, see `docs/Provider_API_Analysis.md`).
-  - `needs_rebase` (v0.1.1) — mechanical rebase / update-branch needed (GitHub:
+  - `needs_rebase` — mechanical rebase / update-branch needed (GitHub:
     `mergeable_state == "behind"`; GitLab: `shouldBeRebased` via the GraphQL join).
-  - `needs_approval` (v0.1.2) — required approvals not met (GitHub:
+  - `needs_approval` — required approvals not met (GitHub:
     `reviewDecision`; GitLab: `approved` — both via the GraphQL join).
-  - `unresolved_discussions` (v0.1.2) — unresolved threads gate the merge
+  - `unresolved_discussions` — unresolved threads gate the merge
     (GitLab: `blocking_discussions_resolved` REST; GitHub excluded — gate rule
     unreadable for non-admins). Set only when the gate is `blocked`.
-  - `policy_denied` (v0.1.2) — security/org policy denies merge (GitLab:
+  - `policy_denied` — security/org policy denies merge (GitLab:
     `policies_denied` / `security_policy_violations` on `detailed_merge_status`;
     GitHub: no signal).
-  - `gate_detail` (v0.1.1) — raw provider vocabulary for the merge gate (opaque
+  - `gate_detail` — raw provider vocabulary for the merge gate (opaque
     string; powers the Blocked tooltip).
-  - `auto_merge_armed` (v0.1.5) — provider's auto-merge / merge-when-pipeline-succeeds
+  - `auto_merge_armed` — provider's auto-merge / merge-when-pipeline-succeeds
     is set. Stored as a boolean; read by the fold as the `auto_merge_armed` signal
     (GitHub: GraphQL `autoMergeRequest{enabledAt}`, non-null ⇒ armed; GitLab:
     REST `merge_when_pipeline_succeeds`).
-  - `checks_running` (v0.1.5) — a pipeline is in progress. Stored as a boolean;
+  - `checks_running` — a pipeline is in progress. Stored as a boolean;
     read by the fold as the `checks_running` signal (GitLab: `headPipeline.status`
     in the running set via GraphQL; GitHub: not set — documented ✗ gap, hidden
     inside `blocked`).
-  Old `item.observed` events lack the v0.1.1/v0.1.2/v0.1.5 fields (unmarshal to
-  `false`/`""`); the fold reads the latest snapshot, so items pick them up on
-  the next poll cycle.
+  An `item.observed` event written before a field existed lacks it (it
+  unmarshals to `false`/`""`); the fold reads the latest snapshot, so items pick
+  it up on the next poll cycle.
 
 The fold rules that turn this fact set into buckets live in
 `docs/Attention_Engine.md`.

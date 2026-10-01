@@ -272,7 +272,10 @@ gate_docrefs() {
     if [[ $p == */* && $tops == *"|${p%%/*}|"* ]]; then
       [[ $p =~ ^ADR/ADR-[0-9]{4}$ ]] && p+="_*"
       [[ -n "$(git ls-files -- "$p" | head -1)" ]] && continue
-      git check-ignore -q -- "$p" && continue   # e.g. docs/plans/, bin/tools
+      # Ignored on purpose (docs/plans/, bin/tools). The "/" form matters: a
+      # dir-only pattern (node_modules/) can't match a path absent from disk,
+      # and a fresh CI checkout has no frontend/node_modules.
+      git check-ignore -q -- "${p%/}/" && continue
     elif [[ $p =~ ^([a-z]+)\.[A-Z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*(\(\))?$ \
             && $pkgs == *"|${BASH_REMATCH[1]}|"* ]]; then
       p="${p%()}"

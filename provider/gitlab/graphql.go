@@ -292,7 +292,7 @@ func (p *Provider) fetchVerdictNotes(ctx context.Context, fullPath string, iid i
 // against the in-memory baseline, and — on first change — fetches page 1 of
 // the MR's system notes to obtain the real provider timestamp for the new verdict.
 //
-// Design (ADR-0016 §2026-07-17):
+// Design (ADR-0016, rank-only signals):
 //   - First sight of an MR (no baseline entry): store as history, emit nothing.
 //     Pre-existing verdicts are already-known facts; they rank by updated_at.
 //   - Changed/new verdict: one REST notes fetch for the MR; emit one event per

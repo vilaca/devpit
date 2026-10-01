@@ -2,14 +2,10 @@
 
 ## Scope
 
-**Implemented**, evolving across the v0.1.x line (formerly a separate
-signal-design ADR, folded here per ADR-0014's mutate-by-default convention and
-the log renumbered; git history preserves the original text). The fold and
-ranking, the presentation (pinned zone, tags, filters), the marker vocabulary
-and age bands, the blocked diagnostic badges, and the nine-signal model with
-reviewed-done muting and age-band-then-recency ranking are built in
-`internal/attention` and `frontend/`. See `docs/Roadmap.md` for the per-version
-timeline.
+Implemented (v0.1.x) — the fold, ranking, and signal model in
+`internal/attention`; the presentation (pinned zone, tags, badges, filters) in
+`frontend/`. This ADR absorbed the formerly separate signal-design ADR
+(ADR-0014's fold-and-renumber convention). See `docs/Roadmap.md` for timing.
 
 ## Context
 
@@ -17,451 +13,196 @@ An engineer needs to know what to do next without tuning knobs or reading a
 per-repository dashboard. Buckets alone fragment attention; a raw feed buries
 it.
 
-The original v0.1 decision tagged rows with a closed set of six **attention
-states** (Needs Review, Changes Requested, Blocked, Ready to Merge, Mentioned,
-Waiting on Author) phrased as "what is *your* move?". Two weaknesses emerged:
-
-- Since v0.1.4 the list also shows open items that match no attention state —
-  an authored MR awaiting review, or one whose merge gate is `unknown`. These
-  render as **bare rows**: the reader cannot tell what state the MR is in.
-- The named states imply a **workflow** — a review lifecycle, an expected order.
-  Teams configure their forges differently; assuming a sequence of phases
-  re-derives org process, which both this decision's predecessor and
-  `ADR/ADR-0003_Provider_Plugin_Model.md` set out to avoid.
+Labelling rows with a closed set of viewer-relative "what is *your* move?"
+states (Needs Review, Waiting on Author, …) has two flaws. An open item that
+matches no state renders as a **bare row** — the reader cannot tell what state
+the MR is in. And named states imply a **workflow** — a review lifecycle, an
+expected order. Teams configure their forges differently; assuming a sequence
+of phases re-derives org process, which `ADR/ADR-0003_Provider_Plugin_Model.md`
+sets out to avoid.
 
 ## Decision
 
-### Signal-based presentation (v0.1.5)
+### One list
+
+- **A single ranked list**, one row per WorkItem, with signals shown as tags.
+  Buckets are optional client-side filters (`frontend/src/lib/buckets.ts`), not
+  the primary layout. Two filters diverge from one-signal-per-bucket: `mine`
+  (items that are yours — the same predicate as the row tint) and `mentioned`,
+  which also gathers your review plate (items where you are a reviewer, read
+  from the `my_roles` wire field).
+- **Every open item you are involved in shows**, even with no signal — it
+  renders as a plain row and ranks like any other. Only merged/closed and
+  removed items drop out (list membership: `docs/Attention_Engine.md`).
+- **A pinned "Handle next" zone** at the top of the unfiltered "All" view:
+  user-flagged items in flag order, lifted out of the ranked list (never shown
+  twice). Under a bucket filter the zone is hidden and a matching pinned item
+  folds into the list at its natural rank — the zone is a whole-list triage aid,
+  not a per-bucket one. Pins are exempt from ranking but still show their age
+  tags and pin age, so rot cannot hide at the top. The flag is local-only
+  (`ADR/ADR-0017_Read_Only_Action_Model.md`).
+
+### Ranking
+
+**Ranking is age band then recency** — no numeric score, no configuration.
+Three tiers, top to bottom: fresh, **stale**, **old**. Within a tier, items
+order by their ranking timestamp, most recent first (newest signal, else the
+latest snapshot's provider-updated time); item ID is the final tiebreak.
+
+- **Signal precedence orders chips, never items.** It only decides which chip
+  leads a row (`States[0]`).
+- **The age band is the single deliberate exception to "cosmetic markers never
+  move items"** — the "stale" and "old" tiers are the anti-rot safety net.
+- **Reviewed-done muting is display-only** — a muted item sorts in its tier by
+  recency like everything else.
+
+**Rank-only signals** advance the ranking clock but add no chip:
+
+- `signal.approved` / `signal.changes_requested` — review verdicts, stamped with
+  the provider's real verdict time (`docs/Provider_API_Analysis.md`; dedupe keys
+  in `docs/Event_Taxonomy_and_Storage.md`). Their visual surface stays the
+  `changes_requested` chip and the approvals count.
+- `signal.ci_failed` — a broken build on an authored MR (GitLab only: GitHub's
+  CI notifications aren't PR-scoped). It resurfaces fresh and stale work, but is
+  **dropped from the clock once the item is old** on its real activity (every
+  signal except `ci_failed`, plus the snapshot): a broken build must not
+  resurrect work the user has let go. Staleness is measured without the CI event
+  — otherwise a failure would always read as fresh activity and the guard could
+  never fire.
+
+### Signals
 
 **A row shows the signals the provider currently reports for the item — neutral
 facts, not an inferred state or lifecycle.** There is no closed set of
-viewer-relative "attention states" and no assumed before/after.
+viewer-relative states and no assumed before/after. This is a read-layer view,
+not a storage change: signals map onto `item.observed` facts plus the aimed-at-you
+signal stream (`docs/Event_Taxonomy_and_Storage.md`).
 
-This is a relabeling of the read layer, not a storage change: it maps directly
-onto the existing event model (`docs/Event_Taxonomy_and_Storage.md`) —
-`item.observed` facts (draft, merge gate, CI, approvals, conflicts) plus the
-aimed-at-you **signal stream** (`signal.mentioned`, `signal.review_requested`,
-…).
+The set is fixed, with no configuration. Wire values, precedence, and firing
+conditions are direct code — the `State` consts, `precedence`, and `matches` in
+`internal/attention/states.go`; labels and plain-language semantics are in
+`docs/Attention_Engine.md`. An item carries **every** signal that applies.
 
-#### Signal set (fixed, no configuration)
+- **Role scope (settled decision — D2).** One signal vocabulary whatever your
+  role — no author/reviewer labels, no authorship tag (the row tint marks items
+  that are yours). The *conditions* stay role-aware where the fact is
+  inherently about a role: the gate signals describe an MR that cannot progress
+  without you (author or sole approver), review signals are reviewer-relative,
+  Mentioned is any-role, and Changes Requested fires both on the author's MR
+  verdict and on a reviewer's own verdict.
+- **Never bare (settled decision — D3).** `checking` fires purely on gate
+  `unknown` — role-neutral, no draft suppression. With the author-guarded gate
+  signals, every authored MR carries at least one signal (`ready_to_merge`,
+  `blocked`, or `checking`).
+- **Sole approver.** When the user is the only account that can merge
+  (`sole_approver` role; discovery in
+  `ADR/ADR-0004_User_Centric_Synchronization.md`), the item has an authored
+  item's urgency: it gets the gate signals, `review_requested` without an
+  explicit request, and is never muted. Always-on and self-limiting.
+- **Muting.** A reviewer — not the author or sole approver — whose review is
+  done has nothing left to do: the row is **muted** (de-emphasized, chips
+  suppressed). The one surviving chip is a reviewer-side `changes_requested`, so
+  a dim row still says *why* it is dim and that the user is the one blocking it.
+- **Provider parity.** Changes Requested, Review Requested, Blocked, Ready to
+  Merge, and Checking behave identically on every provider for any user's token;
+  so does Mentioned, except that on GitHub it needs a classic PAT
+  (`docs/Token_Setup.md`). Auto-merge Armed and Checks Running are best-effort; Checks
+  Running is GitLab-only and not reconstructed on GitHub (parity notes in
+  `docs/UI_Vocabulary.md`).
 
-Nine signals in precedence order, highest first (index 0 is the leading chip;
-precedence orders chips within a row, not the ranking of items — see Ranking). These
-are the `State` constants and their wire strings; the exact firing condition for
-each is **direct code** — the `matches` switch in
-`internal/attention/states.go`. Role scope (D2, below) is the plain-language
-reading of those conditions.
+### Markers and diagnostic badges
 
-| # | wire value | label |
-|---|---|---|
-| 1 | `changes_requested` | Changes Requested |
-| 2 | `review_requested`  | Review Requested  |
-| 3 | `blocked`           | Blocked           |
-| 4 | `mentioned`         | Mentioned         |
-| 5 | `ready_to_merge`    | Ready to Merge    |
-| 6 | `auto_merge_armed`  | Auto-merge Armed  |
-| 7 | `checks_running`    | Checks Running    |
-| 8 | `checking`          | Checking          |
-| 9 | `review_submitted`  | Review Submitted  |
+- **Markers carry gate diagnostics; signals never do.** The signal set is driven
+  by the provider's merge gate, so Blocked stays trustworthy. Everything that
+  explains *why* an item cannot merge is a marker — a provider-normalized
+  boolean in the snapshot, like the gate itself (the `WorkItem` marker fields in
+  `internal/attention/fold.go`). `failing_checks` means exactly "CI/checks red";
+  `merge_conflict` and `needs_rebase` are distinct because they demand different
+  author effort. Cosmetic markers never move items. `signal.ci_failed` stays
+  within this rule: it carries no chip and no reason, only recency.
+- **Parity principle**: a badge ships on a provider only when that provider
+  reports a *verdict* readable by any user — never reconstructed from raw facts
+  plus org rules DevPit would have to re-derive. Otherwise the badge is a
+  documented gap (the parity table in `docs/UI_Vocabulary.md`). Where a provider
+  exposes independent per-fact fields, every applicable reason shows at once.
+- **The Blocked chip is suppressed when a visible marker is the reason the gate
+  names** — a render rule only (signal, bucket, and wire format unchanged), and
+  matched **strictly** against `gate_detail`, never "any marker visible".
 
-An item carries **every** signal that applies; its **highest** (lowest-numbered)
-signal sets its rank, the rest ride as additional tags. `draft` and the approval
-count remain a marker and a meta-row fact respectively, not ranking signals.
+### Row presentation
 
-#### Role scope (settled decision — D2)
-
-The signal *vocabulary* is one word-set — no separate author/reviewer labels,
-no authorship tag (the blue tint carries authorship). The *conditions* stay
-role-aware where the fact is inherently about a role:
-
-- The gate signals (Blocked, Ready to Merge, Auto-merge Armed, Checks Running)
-  describe an MR that cannot progress without you — `roles[author]` or
-  `roles[sole_approver]` (see Sole-approver role below). Changes Requested
-  stays author-only.
-- Review Requested and Review Submitted are reviewer-relative; Review
-  Requested also fires for a sole approver whose review isn't done (an
-  implicit obligation, no explicit request needed).
-- Mentioned is any-role.
-- **Checking (#8) is role-neutral**: it fires on any involved item whose gate
-  is `unknown`, including a draft you only review, so it can backstop a row
-  that would otherwise be bare.
-
-Rationale: "same signal vocabulary regardless of your role" (the folded
-signal-design ADR, above) means
-one *word-set*, **not** role-free conditions. Making `changes_requested`
-role-neutral would tag the reviewer who *requested* the changes with
-`changes_requested` (#1) alongside their `review_submitted` (#9) — a
-contradiction the author/reviewer split exists to avoid.
-
-#### Never-bare guarantee and the `checking` backstop (settled decision — D3)
-
-`checking` fires purely on `Gate == "unknown"`; it is role-neutral and has no
-draft suppression. Drafts report gate `unknown` on both providers
-(`mergeGate` in each provider's normalizer: `"draft"→unknown` on GitHub,
-`"draft_status"→unknown` on GitLab), so a draft carries exactly `["checking"]`
-plus the `Draft` marker. Because the gate/verdict signals (`blocked`,
-`ready_to_merge`, `auto_merge_armed`, `checks_running`) all have both `!Draft`
-and `roles[author]` guards, authored MRs are never bare:
-- gate `ready` → `ready_to_merge`
-- gate `blocked` → `blocked`
-- gate `unknown` → `checking`
-
-Narrowing: a non-authored involved item with a *known* gate and no reviewer or
-mention signal (e.g. a pure assignee on a ready MR) can still render
-marker-only (empty `states` array). The v0.1.4 empty-array case narrows rather
-than disappears (`docs/REST_API.md`).
-
-`checking` does not flap: transient gate values never reach storage; the
-synthesizer carries the last known gate forward. A previously-blocked MR under
-transient recompute keeps gate `blocked` and does not drop to `checking`.
-
-#### Provider parity for primary signals
-
-- **Primary signals guaranteed identical (GitHub and GitLab).** Signals #1–#5
-  and #8 behave identically across providers for any user's token — same wire
-  value, same position, same rank.
-- **Best-effort parity for #6 and #7:**
-  - `auto_merge_armed` (#6): ships on both GitHub (GraphQL
-    `autoMergeRequest{enabledAt}`, non-null ⇒ armed; degrades to false for PATs
-    that cannot read it) and GitLab (REST `merge_when_pipeline_succeeds`).
-  - `checks_running` (#7): **GitLab-only** (settled decision). GitHub cannot
-    report an in-progress *gating* pipeline — it hides inside `blocked` — and
-    we do **not** reconstruct it from `statusCheckRollup`. GitHub leaves
-    `ChecksRunning` false; this is a documented ✗ gap in the parity table.
-
-### Ranking (revised 2026-07-13 — age band then recency)
-
-**Ranking is age band then recency** — three tiers, top to bottom: fresh
-(neither stale nor old), then **stale**, then **old**. Within each tier the list
-is ordered purely by **most-recent update first** (the item's ranking timestamp:
-newest signal, else latest snapshot's provider-updated time). Item ID is the
-final stable tiebreak. The pinned "Handle next" zone stays exempt.
-
-Signal precedence **no longer ranks items** — it survives only as the order
-signals appear as chips within a row (`States[0]` is the leading chip). The
-earlier "highest signal ranks the item" model made the list order swing on
-provider verdicts an engineer reads off the chips anyway; ordering by how
-recently something moved is what actually tells you where the live activity is,
-tier by tier, without re-deriving a workflow. What demands action is still
-legible from the chips; it no longer reorders the tier.
-
-#### Reviewed-done muting is display-only (2026-07-13)
-
-An item where you are a **reviewer** (and not the author) and your review has
-been submitted — `reviewIsDone(MyReviewState)` — has nothing left for *you* to
-do. Such items are **muted** (`muted: true`): the row renders de-emphasized and
-suppresses its signal chips (one exception — a reviewer-side `changes_requested`
-verdict still shows its chip; see the 2026-07-17 amendment). Muting is now a **display cue only — it does not
-move the item**. An earlier revision demoted muted items (first to the very
-bottom, then to a band just above stale); both are superseded. A muted item
-sorts in its natural age tier by recency like everything else: an MR you approved
-that is still moving surfaces exactly when it last moved, dimmed but not buried.
-
-This requires `MyReviewState` to actually be populated, which the v0.1.5 signal
-model defined but no provider filled. It is now populated from provider approval
-data: **GitLab** sets `approved` when the authenticated user appears in
-`approvedBy.nodes` (GitLab exposes no cheap per-user state for comment-only
-reviews, so only approval is detected); **GitHub** maps the user's entry in
-`latestReviews` (`APPROVED`→`approved`, `CHANGES_REQUESTED`→`changes_requested`,
-`COMMENTED`→`reviewed`). `review_requested` (#2) is driven separately — see the
-2026-08-05 amendment below. Wire fields: `my_review_state` (string) and `muted`
-(bool).
-
-#### Sole-approver role and state mappings (2026-07-14)
-
-A new role `sole_approver` is added for items where the authenticated user is the
-**only account that can merge** — the true "blocked on me, nobody else can unblock
-it" signal. It is always-on (no configuration flag) and self-limiting (fires only
-on repos where the user has sole merge-capable permission).
-
-**Mute exemption:** `sole_approver` is **never muted**, even when the user's review
-is done — they still need to approve and merge. The mute predicate becomes:
-```
-muted = roles[reviewer] && !roles[author] && !roles[sole_approver] && reviewIsDone(MyReviewState)
-```
-
-**State mappings:** folded into the signal-set table above — `sole_approver`
-joins the author guard on the gate signals and adds the implicit-obligation arm
-of `review_requested`. Rationale: a sole-approver item has the same urgency as
-an authored item — it cannot progress without this user's action — so it
-inherits the full gate signal set, and `review_requested` fires without an
-explicit review request because the user is the only merge path.
-
-#### Blocked-chip suppression when a marker names the reason (2026-07-16)
-
-The `blocked` chip is now suppressed in the row when a visible marker badge is
-the specific reason the provider gate names — a **render rule only**: the
-`blocked` signal, its bucket (`frontend/src/lib/buckets.ts`), and the wire
-format are all unchanged; only the per-row chip in `StateTags.svelte` is
-affected.
-
-Matching is **strict**: suppression fires only when the displayed marker maps
-to the item's `gate_detail` (GitLab `detailed_merge_status` / GitHub
-`mergeable_state`), not merely when *any* marker is visible. Loose matching was
-rejected — on GitLab, `needs_approval` is true for nearly every unapproved MR,
-so it would make the chip vanish even when the operative blocker is something
-no marker shows (GitHub's opaque `mergeable_state: "blocked"`, GitLab tier
-gates like `jira_association_missing`) — exactly the cases where the chip and
-its `provider says: …` hover earn their keep.
-
-#### Review verdicts advance the ranking clock (2026-07-17)
-
-`signal.approved` and `signal.changes_requested` join the signal stream
-(`docs/Event_Taxonomy_and_Storage.md`) as **rank-only** signals. They advance an
-item's ranking timestamp — the newest `signal.*` (see Ranking above) — so an MR
-that gains an approval or a requested-changes verdict resurfaces by recency
-instead of freezing at its last mention/CI signal. Before this, a review verdict
-was captured only as an `item.observed` fact (approvals count, `review_decision`)
-that drives chips but emits no signal, and GitLab does not bump the MR's
-`updated_at` on approval — so an approved MR could sink to the bottom of the
-fresh band.
-
-They add **no chip**: the nine-signal precedence table is unchanged, and the
-existing `changes_requested` chip (from the `review_decision` fact) and the "N
-approved" meta-row remain the only visual surface. This is consistent with the
-2026-07-13 revision, not a reversal of it — precedence still never ranks;
-**recency** does, and these two verdicts are recency-bearing activity the clock
-previously ignored.
-
-Both providers emit these signals with **real provider-reported timestamps** so
-ranking reflects when the verdict actually occurred:
-
-- **GitLab** has no verdict timestamp on `approvedBy`/`reviewState`, but every
-  approval or requested-changes verdict writes a **system note** with
-  `author` + `created_at`. The provider keeps an in-memory per-MR verdict
-  baseline (actor → verdict). First sight of an MR stores the baseline without
-  emitting — pre-existing verdicts are history and rank by `updated_at`. Only a
-  verdict *appearing on an already-baselined MR* triggers one REST notes fetch
-  (page 1, newest-first) and emits with `OccurredAt` = the note's `created_at`.
-  Dedupe key: `signal.approved:note:<note_id>` / `signal.changes_requested:note:<note_id>`.
-  An unapprove → re-approve produces a new note, so a re-verdict re-ranks.
-  Verdicts during DevPit downtime or predating first sight never advance the
-  GitLab ranking clock — a bounded, honest design, replacing the prior
-  "transient self-correcting over-promotion" consequence.
-
-- **GitHub** `latestReviews` nodes carry `submittedAt` — a real provider
-  timestamp — so no baseline or extra API call is needed. Dedupe key:
-  `signal.approved:review:<login>:<submittedAt>`. A reviewer's latest
-  non-dismissed review per login is exactly "when they last approved".
-
-Both providers implement draft suppression and emit signals via the
-`sdk.SignalApprovedPayload` / `sdk.SignalChangesRequestedPayload` types.
-
-#### Reviewer-side `changes_requested` escapes the mute (2026-07-17)
-
-The `changes_requested` chip (#1) now fires reviewer-side too: its condition ORs
-`roles[reviewer] && MyReviewState == "changes_requested"` onto the author-side
-clause (the two are mutually exclusive — no one is author and reviewer of one
-item). A reviewer who requested changes was previously indistinguishable from one
-who approved or commented — all three are `reviewIsDone`, so the row was muted and
-chipless, hiding *why* it was dim and that the user is the one blocking it.
-
-This is the **sole exception** to "muting suppresses signal chips": a muted row
-renders the `changes_requested` chip alone (all other chips, the draft/marker
-badges and the stale tag stay suppressed — the frontend's `StateTags` self-filters
-on `muted`). The item stays muted and its ranking is unchanged — this is a
-visibility fix, not a promotion. It is a **pure read-layer + frontend** change: the
-`MyReviewState == "changes_requested"` fact was already populated on both
-providers (GitHub `latestReviews`, GitLab own reviewer `reviewState`), and it
-clears itself when the provider drops the verdict (e.g. the author re-requests
-review), needing no dismissal state. `review_submitted` (#9) still fires for the
-approved/commented reviewed-done cases (computed, hidden by the mute).
-
-#### `review_requested` fires on a pending reviewer (2026-08-05)
-
-The `review_requested` reviewer arm was gated on `MyReviewState == "requested"`
-— a value no provider ever emits (a requested-but-not-yet-reviewed reviewer maps
-to an empty `my_review_state`; the wire vocabulary is `approved` /
-`changes_requested` / `reviewed` / empty, never `"requested"`). The arm was
-therefore dead: a plain requested reviewer's MR showed as a bare row with no
-`review_requested` chip and was absent from the bucket. This closes that gap
-(noted above under the 2026-07-13 muting amendment): the trigger is now "review
-not yet done" — `!reviewIsDone(MyReviewState)` — the same predicate the
-sole-approver arm already used, so the two arms are identical and folded into one
-`(reviewer || sole_approver) && !draft && !reviewIsDone(...)`. The `!draft` guard,
-previously carried only by the sole-approver arm, now covers reviewers too: a
-draft MR isn't ready for review and never fires here. Pure read-layer change; the
-predicate lives in `internal/attention/states.go`.
-
-#### Broken builds resurface non-old items, but not old ones (2026-08-07)
-
-`signal.ci_failed` — a broken build on an authored PR — is a **rank-only** signal
-like the review verdicts above: it advances the item's ranking clock so a PR
-whose build just broke floats back into view. Only GitLab emits it: GitHub's CI
-notifications aren't PR-scoped (`docs/Provider_API_Analysis.md`), so on GitHub a
-broken build moves nothing — accepted, as the `failing_checks` marker still
-shows it. It adds **no chip**; the CI-red
-*state* remains the `failing_checks` marker, and this signal is only the *event*
-"go look, it broke". This is the deliberate resolution of the tension with
-"signals never carry gate diagnostics" above — the signal carries no diagnostic
-surface, only recency.
-
-One guard: a broken build must not resurrect work the user has already let go. So
-`ci_failed` is **dropped from the ranking clock once the item is `old`** (idle
-past the old threshold) on its *real activity* — every signal except `ci_failed`,
-plus the provider snapshot. Fresh and stale items resurface as before; only past
-the old threshold does a broken build stop nudging. Staleness is measured from
-real activity, never from the CI event itself — otherwise a failure would always
-read as fresh activity and the guard could never fire. Read-layer change in
-`internal/attention/fold.go`; the `failing_checks` marker is untouched.
-
-### Structural decisions (v0.1 and v0.1.1–v0.1.4, unchanged)
-
-- **A single ranked list**, one row per WorkItem, with signals shown as tags.
-  Buckets are optional client-side filters, not the primary layout.
-- **A pinned "Handle next" zone** at the top of the unfiltered "All" view:
-  user-flagged items in flag order, lifted out of the auto-ranked list (never
-  shown twice). Under a specific bucket filter the zone is hidden and a matching
-  pinned item folds into the ranked list at its natural rank — the zone is a
-  whole-list triage aid, not a per-bucket one. The flag is local-only and never
-  written back to the provider (`ADR/ADR-0017_Read_Only_Action_Model.md`).
-- **Ranking is age band then recency** — no numeric score, no configuration
-  (revised 2026-07-13; formerly fixed signal-precedence + age tiebreak). Three
-  tiers (fresh, stale, old); within a tier, most-recent-update-first. The "stale"
-  and "old" badges are the anti-rot safety net that pushes idle work down.
+- **Hover text adds information beyond the tag label** — never a paraphrase.
+  The universal payload is the tag's onset duration, derived from snapshot
+  history at fold time; tags append genuinely extra facts where they exist.
 - **Repeated same-type signals collapse** to one tag with a count
-  ("Mentioned ×3"); the individual signals remain only in the stored event
-  log — the UI shows the count, with hover adding the onset.
-- **Markers carry gate diagnostics; signals never do** (2026-07-10). The signal
-  set is driven by the provider's merge gate, so Blocked stays trustworthy.
-  Everything that explains *why* an item cannot merge is a marker:
-  `failing_checks` means exactly "CI/checks red"; `merge_conflict` and
-  `needs_rebase` are distinct because they demand different author effort.
-  Markers are provider-normalized booleans in the item snapshot, like the gate
-  itself. (One rank-only exception: `signal.ci_failed` is a chip-less recency
-  nudge on a broken build — no diagnostic chip — see the 2026-08-07 amendment.)
-- **Hover text must add information beyond the tag label** (2026-07-10) —
-  never a paraphrase of the tag name. The universal payload is the tag's onset
-  duration ("for 3d"), derived from the item's snapshot history at fold time;
-  tags append genuinely extra facts where they exist (the provider's raw gate
-  reason on Blocked, the non-required-check note on ready-but-red, the no-decay
-  caveat on Mentioned). A tag with nothing beyond its label to say still shows
-  its duration.
-- **Parity principle for diagnostic badges** (2026-07-10): a badge ships on a
-  provider only when that provider reports a *verdict* readable by any user —
-  never reconstructed from raw facts plus org rules DevPit would have to
-  re-derive. Otherwise the badge is a documented gap for that provider (see the
-  provider-parity table in `docs/UI_Vocabulary.md`).
-- **Three new diagnostic badges** explain *why* an item is `blocked`:
-  `missing approvals`, `discussions`, `policy`. Like `conflict`, `rebase`, and
-  `checks failing` they are cosmetic — cosmetic markers never move items — and
-  are provider-normalized booleans in the `item.observed` payload.
-  `missing approvals` ships on both providers. `discussions` and `policy` are
-  GitLab-only (see parity table).
-- **GitLab shows all applicable reasons simultaneously.** GitLab's
-  `detailed_merge_status` is single-valued, so badges move off it onto
-  independent per-fact signals: `has_conflicts` and
-  `blocking_discussions_resolved` (REST fields, free) plus a batched GraphQL
-  join (`approved`/`approvalsLeft`, `shouldBeRebased`,
-  `headPipeline.status`). Only `policy` stays on `detailed_merge_status`
-  (no independent field exists) and can be masked by a co-present reason —
-  accepted residual. GitHub gets the same batched GraphQL join shape
-  (`reviewDecision`).
-- **GitLab `checks failing` extended** (2026-07-10): moves from
-  `ci_must_pass` (gating only) to `headPipeline.status` red (any pipeline
-  via GraphQL join), closing the documented "GitLab non-gating CI invisible"
-  gap.
-- **Age tiers band the list** (2026-07-10). `stale` (idle 7–30 days) and
-  `old` (idle >30 days) are mutually exclusive tiers, and they are the
-  *single deliberate exception* to "markers never move items": the list sorts
-  by age band (fresh, then stale, then old last) first, keeping fresh work on
-  top. Within a band, most-recent-update-first applies (revised 2026-07-13 —
-  formerly signal precedence). The pinned zone is exempt — a pin is a deliberate
-  user act — but pinned items still show their age tags and pin age, so rot
-  cannot hide at the top.
-- **Age tier presentation** (2026-07-10). Both `stale` and `old` items show
-  a "Stale" tag; the `old` tier is additionally distinguished by a warm amber
-  row background tint (`color-mix` over `--marker-old` at 7% opacity), so the
-  two tiers remain visually distinct without introducing a separate "Old" label.
-  The tag tooltip retains the exact threshold wording so the tier boundary is
-  still discoverable on hover.
-- **Authored-item row tint** (2026-07-10). Items where the authenticated
-  identity of the connection matches the item's author field receive a subtle
-  blue row background (`color-mix` over `--accent` at 7% opacity). This
-  surfaces own-MR context without adding a separate badge or disturbing the
-  ranking.
-- **Approval count in meta-row** (2026-07-10). When at least one reviewer has
-  approved an item, the row's meta-row shows "N approved" between the author
-  and the timestamp. Shown only when N > 0; hidden on drafts. The count is a
-  raw approved-reviewer count (not a gate verdict), so it is informational
-  only and never moves items. GitLab: `approvedBy { count }` from the existing
-  GraphQL join. GitHub: count of `APPROVED` entries in `latestReviews` from
-  the same join. Wire field: `approvals_count int` (-1 = unknown, 0 = hide).
-  The required-approvals denominator is deliberately omitted: GitHub's required
-  count is branch-protection data (admin-only for non-admins) and CODEOWNERS
-  makes raw counts misleading for gate purposes — the existing `needs_approval`
-  badge already carries the honest gate verdict.
-  - **"you + N approved" (2026-07-13).** When the authenticated user is among the
-    approvers (`my_review_state == "approved"`), the meta-row phrases the count as
-    "you approved" (you alone) or "you + N approved" (you plus N others), so your
-    own approval is visible at a glance without a separate chip. Otherwise the
-    count reads "N approved" as before.
-- **Provider labels as plain text names** (2026-07-14). The labels an MR/PR
-  carries on the provider (GitLab MR labels, GitHub PR labels) render on a
-  dedicated 3rd row below the meta-row, full width, as `#`-prefixed muted text
-  names. These are **provider metadata, deliberately distinct from the signal
-  chips** on the title line: signal chips are DevPit's attention verdicts,
-  labels are the team's own taxonomy. Provider colors are deliberately dropped —
-  label names alone are the useful signal, and rendering each in its own
-  provider color competed visually with the attention chips. Labels show even on
-  muted (reviewed-done) rows — unlike signal chips, which the mute suppresses —
-  because the label set is stable context, not an attention cue. Wire field:
-  `labels`, an array of names (see `docs/REST_API.md`); refreshed on reconcile
-  only, not on fastpoll, since labels change rarely and the GraphQL open-set
-  refresh has no complexity headroom to spare.
-- **Open involved items always show, even stateless** (2026-07-10). The fold
-  no longer drops an open item that matches no signal. Every item in the log is
-  one the user is involved in (sync scopes are assigned/authored, plus mention
-  signals), so an open MR waiting on reviewers, or one whose merge gate the
-  provider has not yet computed (`unknown`), stays visible instead of silently
-  disappearing. Signals still drive tags; a signal-less item renders as a plain
-  row and sorts by recency within its age band like any other (revised
-  2026-07-13 — signals no longer rank). Only merged/closed and removed items drop
-  out. Wire effect: `states` may be an empty array for non-authored involved
-  items (`docs/REST_API.md`).
-- **Bucket filters `mine` and the `mentioned` review fold** (2026-07-13). Two
-  client-side filters diverge from the one-signal-per-bucket mapping
-  (`frontend/src/lib/buckets.ts`). The fold and signal table are unchanged; the
-  only wire addition is `my_roles` (see below).
-  - **`mine`** filters the list to items you authored, reusing the same predicate
-    as the authored-item row tint (the connection's identity matches the author).
-    Authorship is derived from connection config, not the event log, so it stays
-    client-side. It shows as the **first filter chip** (after "All", before the
-    signal buckets) and is also reachable directly via `?bucket=mine`. It is an
-    authorship axis, orthogonal to the signal buckets; `Esc` clears it like any
-    active filter.
-  - **`mentioned`** additionally gathers everything on your review plate: an item
-    matches when it carries the `mentioned` signal *or* you are a reviewer. The
-    chip's count badge reflects this expanded set. The `mentioned` signal itself
-    is untouched, so no extra chip appears on reviewer rows. Reviewer-ness is read
-    from the new **`my_roles`** wire field (contains `"reviewer"`), falling back
-    to a non-empty `my_review_state`. `my_roles` is required because a
-    requested-but-not-yet-reviewed reviewer has an empty `my_review_state` and no
-    other wire signal of the reviewer role.
-    `my_roles` is a faithful projection of the item's `MyRoles` fact.
+  ("Mentioned ×3"); the individual signals remain in the event log.
+- **Age tiers**: both `stale` and `old` show a "Stale" tag; the `old` tier is
+  distinguished by a warm row tint, not a separate label.
+- **Context without badges**: a row tint marks items that are yours; the
+  meta-row shows the approvals count ("N approved", or "you + N approved" when
+  you approved) — a raw count, informational only, with no required-approvals
+  denominator.
+- **Provider labels** render as plain-text names on their own row, without
+  provider colors, and show even on muted rows. The GraphQL open-set refresh
+  doesn't carry them; they update when reconcile or a todo/notification
+  re-fetches the item.
 
 ## Rationale
 
 Age-band-then-recency ordering is trustworthy precisely because it cannot be
 tuned into uselessness: fresh work stays on top, rot sinks, and within a tier the
 list mirrors what actually just moved — no provider verdict silently reshuffles
-it. A single list keeps the whole picture in one glance and reduces context
-switching. Showing observed signals rather than an inferred state keeps
-DevPit honest: it reports what the provider says and never assumes a team's
-workflow — the same defer-to-the-provider discipline that keeps Blocked
-trustworthy. Dropping the "your move" framing removes the bare-row gap for
-authored MRs and lets one neutral vocabulary describe an MR whatever your role,
-with the blue tint carrying authorship.
+it. Ranking by signal precedence would make the order swing on verdicts the engineer
+reads off the chips anyway; ordering by recency shows where live activity is
+without re-deriving a workflow. For the same reason muting does not demote: an
+MR you approved that is still moving surfaces when it moves, dimmed but not
+buried. Review verdicts are rank-only signals because a verdict is otherwise a
+fact that emits no signal — and GitLab does not bump an MR's `updated_at` on
+approval — so an approved MR would sink to the bottom of the fresh band.
+
+A single list keeps the whole picture in one glance and reduces context
+switching. Showing observed signals rather than an inferred state keeps DevPit
+honest: it reports what the provider says and never assumes a team's workflow —
+the same defer-to-the-provider discipline that keeps Blocked trustworthy.
+Dropping the "your move" framing removes the bare-row gap for authored MRs and
+lets one neutral vocabulary describe an MR whatever your role. One *word-set* is
+not role-free *conditions*, though: a role-neutral `changes_requested` would tag
+the reviewer who requested the changes with both `changes_requested` and
+`review_submitted` — the contradiction the author/reviewer split avoids.
+
+Blocked-chip suppression is strict because GitLab's `needs_approval` is true for
+nearly every unapproved MR: loose matching would erase the chip exactly when the
+operative blocker is something no marker shows (GitHub's opaque
+`mergeable_state: "blocked"`, GitLab tier gates like `jira_association_missing`),
+which are the cases where the chip and its `provider says: …` hover earn their
+keep.
+
+The approvals count omits a denominator because GitHub's required count is
+branch-protection data (admin-only for non-admins) and CODEOWNERS makes raw
+counts misleading for gate purposes; the `needs_approval` badge carries the
+honest gate verdict. Provider labels are the team's own taxonomy, not DevPit's
+attention verdicts, so they stay visually apart from the chips — per-label
+provider colors competed with them — and, being stable context rather than an
+attention cue, survive the mute. They stay out of the GraphQL open-set refresh
+because they change rarely and that query has no complexity headroom to spare.
 
 ## Consequences
 
-- The signal set, the chip precedence order, and the age thresholds are direct
-  code — they live in `internal/attention/states.go` and
-  `internal/attention/fold.go` (stale: 7 days, old: 30 days), not in prose. The
-  ranking is `sortItems` in `fold.go` (age band, then recency, then ID). The fold
-  and bucket semantics are specified in `docs/Attention_Engine.md`; the wire
-  shape in `docs/REST_API.md`.
+- The signal set, chip precedence, age thresholds, and ranking are direct code —
+  `internal/attention/states.go` and `internal/attention/fold.go` (`sortItems`:
+  age band, then recency, then ID). Fold and bucket semantics are specified in
+  `docs/Attention_Engine.md`, the wire shape in `docs/REST_API.md`, the visual
+  vocabulary in `docs/UI_Vocabulary.md`.
 - Buckets a provider cannot feed simply produce no items
   (`ADR/ADR-0003_Provider_Plugin_Model.md`).
-- Wire renames from v0.1.4: `needs_review` → `review_requested`;
-  `waiting_on_author` → `review_submitted`.
+- "Never bare" holds for authored MRs only: a non-authored involved item with a
+  known gate and no reviewer or mention signal (e.g. a pure assignee on a ready
+  MR) renders marker-only, with an empty `states` array (`docs/REST_API.md`).
+- GitLab exposes no verdict timestamp, so its provider baselines each MR's
+  verdicts on first sight without emitting and stamps only verdicts that appear
+  later (from the system note). Verdicts during DevPit downtime or before first
+  sight never advance the GitLab ranking clock — a bounded, honest gap rather
+  than over-promotion at poll time.
+- On GitHub a broken build moves nothing in the ranking; accepted, since a
+  non-gating failure still shows the `failing_checks` marker and a gating one
+  shows as Blocked.

@@ -62,7 +62,7 @@
   );
 
   // Suppress the "Blocked" chip when a visible marker badge already names the
-  // gate's reason (ADR-0016 amendment). Strict match on gate_detail only —
+  // gate's reason (ADR-0016). Strict match on gate_detail only —
   // GitLab's needs_approval is true for nearly every unapproved MR, so any
   // looser rule would erase the chip even when the operative blocker is
   // something no marker shows (e.g. GitHub's opaque `mergeable_state: "blocked"`).

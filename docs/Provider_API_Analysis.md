@@ -173,6 +173,17 @@ Two cheap calls per cycle:
  `watermark − 1min`) and dedupe on `(id, updated_at)`. No ETag/304
  exists on the public API — don't build on it.
 
+**Open-set refresh.** Todos miss pipeline transitions, so each fast cycle also
+re-queries, in batched GraphQL alias queries, every known-open MR no todo
+covered this cycle (ADR-0004). The baseline is the provider's in-memory
+`openSnapshots` cache of full post-join payloads, written by both Reconcile and
+the fast tier's todo path, so a todo-fresh snapshot is never reverted to an
+older sweep's. The join **overrides** every GraphQL-derived field and keeps the
+REST-derived ones — never ORing with the cached value, which would pin a stale
+`true` forever. `merge_conflict` is GraphQL-derived (conflict note below), so the
+refresh clears it too. No-change cycles dedupe away (`observedDedupeKey`); a
+GraphQL failure is logged, the batch skipped, and the cycle still succeeds.
+
 ### Bucket → call mapping
 
 Global list endpoint, `state=opened`, response includes
@@ -269,6 +280,26 @@ minimum supported GitLab version]**.
 Cadences are proposed defaults (fixed in v0.1); the reconciliation
 sweep also self-heals anything the fast tier missed (deleted todos,
 watermark gaps, GitHub search lag).
+
+## Sole-approver discovery (both providers)
+
+Reconcile's sole-approver scope (ADR-0004) finds open PRs/MRs on repos where the
+user is the only merge-capable account, skipping drafts and self-authored items:
+
+- **GitHub** — candidates from `is:pr is:open user:<handle>` (repos the user
+  owns); sole iff `GET /repos/{owner}/{repo}/collaborators?affiliation=all` lists
+  exactly one account with `push`, `maintain`, or `admin`, and it is the user.
+  `all`, not `direct`, so team/org merge rights count.
+- **GitLab** — candidates are the open MRs of
+  `GET /projects?membership=true&min_access_level=40` (Maintainer+); sole iff
+  `GET /projects/:path/members/all?min_access_level=40` lists exactly one member,
+  and it is the user.
+
+Each provider caches the verdict per repo in memory for 15 min (`approverTTL`).
+On GitHub, a join that sees approvals beyond the user's own marks the repo
+not-sole at once, without waiting for the next probe. Providers cannot reach
+`internal/storage`, so this path never writes the `repo_approvers` table — only
+an explicit `UpsertRepoApprover` call does, and none exists outside tests.
 
 ## Capability declarations
 

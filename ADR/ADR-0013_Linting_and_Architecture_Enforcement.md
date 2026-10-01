@@ -2,9 +2,9 @@
 
 ## Scope
 
-Implemented (v0.1) — every gate runs through `scripts/check.sh`, locally and in CI
-(`.github/workflows/ci.yml`, one job per gate or small group of gates). See
-`docs/Roadmap.md`.
+Implemented (v0.1), extended through v0.1.6 — every gate runs through
+`scripts/check.sh`, locally and in CI (`.github/workflows/ci.yml`, one job per
+gate or small group of gates). See `docs/Roadmap.md`.
 
 ## Context
 
@@ -12,7 +12,9 @@ The codebase has a clear layered structure (ADR-0012): `sdk` is the public
 provider contract and a dependency leaf, providers depend only on `sdk`,
 `internal/*` packages are the application, and `cmd/devpit` is the sole
 composition root. Nothing but tooling stops that structure from eroding over
-time, and Go's default `go vet` catches only a narrow class of issues.
+time, and Go's default `go vet` catches only a narrow class of issues. The repo
+is public and handles forge and Jira tokens, and much of it is written by AI
+agents (ADR-0022), so anything a machine can decide should be decided by one.
 
 ## Decision
 
@@ -20,9 +22,14 @@ time, and Go's default `go vet` catches only a narrow class of issues.
 header lists every gate. Contributors run it before a change is done (an
 agent's push is gated on it — ADR-0022); CI runs the same script, one job per
 gate or small group of gates, so a red check names the failing gate and local
-and CI cannot drift — the gate list and the pinned linter versions live only in
-the script, not in the workflow. The two gates that make ADR-0012's layered
-structure executable (see `.golangci.yml`, `.go-arch-lint.yml`):
+and CI cannot drift — the gate list and the pinned tool versions live only in
+the script, not in the workflow. Green is **deterministic**: a gate's result
+depends only on the tree, never on the machine, the date, or a third party.
+
+### Go lint and layering
+
+The two gates that make ADR-0012's layered structure executable (see
+`.golangci.yml`, `.go-arch-lint.yml`):
 
 1. **golangci-lint (v2)** runs with `default: all` — every bundled linter is
    enabled — minus a curated set of exclusions (below). `depguard` is
@@ -32,8 +39,7 @@ structure executable (see `.golangci.yml`, `.go-arch-lint.yml`):
    it blocks both cross-provider imports and any shared `provider/*` helper —
    providers duplicate shared-looking code rather than share it (ADR-0003).
 2. **go-arch-lint** enforces the full component dependency graph
-   (`.go-arch-lint.yml`): the allowed edges between `sdk`, `cmd`, `config`,
-   `engine`, `storage`, `api`, `attention`, and the two providers. `deepScan`
+   (`.go-arch-lint.yml`). `deepScan`
    is **on** — layering is checked at the method-call / dependency-injection
    level, not just imports, so a violation routed through an interface or an
    injected value is still caught. Its one false positive is the composition
@@ -67,10 +73,70 @@ recorded here:
   cannot trace across the helper boundary, so it false-positives at every call
   site.
 
-Two remaining true-but-intended findings are suppressed locally with justified
-`//nolint` comments rather than disabling the linter globally: `gosec` G304 on
-the config and lock-file opens (caller-controlled paths), and `errchkjson` on
-the dedupe-key `json.Marshal` (JSON-safe scalar payload that cannot error).
+A true-but-intended finding is suppressed at its call site with a justified
+`//nolint` comment rather than by disabling the linter globally — e.g. `gosec`
+G304 on a caller-controlled path, or `errchkjson` on a `json.Marshal` that
+cannot fail.
+
+### Frontend
+
+The frontend takes the same stance as `.golangci.yml`: `svelte-check`, eslint
+(`typescript-eslint` `recommendedTypeChecked` + `eslint-plugin-svelte`
+recommended) with stylistic configs off, and prettier as the frontend's gofmt —
+formatting is enforced, style opinions are not. Vitest runs as its test gate,
+reusing the Vite/Svelte toolchain (`vitest.config.ts`) rather than a second
+build stack. The suite (`frontend/src/lib/*.test.ts`) targets pure logic,
+including drift guards asserting the frontend matches Go — the state precedence
+(`internal/attention/states.go`) and the wire shape (`internal/api/attention.go`)
+— with no component-DOM harness, matching the "smallest thing that works"
+stance.
+
+### Coverage floor
+
+`go test` runs with `-race` and a coverage profile, and the gate fails when
+total statement coverage, or that of a package with its own floor, drops below
+the floor (`scripts/check.sh` holds the numbers). It is a ratchet against
+silent regression, not a target to chase: `cmd/devpit` (composition root, no
+unit tests by design) and `scripts/demo` (a fixture generator) pull the total
+down without needing an exclusion list, and only packages with real logic get a
+floor of their own. A floor also fails when it sits more than `COVERAGE_SLACK`
+points under what's measured, naming the value to raise it to.
+
+### Repository gates
+
+- **`tidy`** (`go mod tidy -diff`) catches `go.mod`/`go.sum` drift.
+- **`shell`** runs the pinned shellcheck over tracked scripts, and runs
+  `scripts/*_test.sh`: a shell script that makes decisions (today, the agent
+  gate hook — ADR-0022) carries a test held to the same failure-and-boundary
+  bar as Go code (`docs/Contributing.md`).
+- **`actionlint`** covers workflow YAML, running the pinned shellcheck against
+  `run:` blocks too.
+- **`links`** (`lychee --offline` over tracked markdown) checks internal links
+  only, so it stays deterministic.
+- **`docrefs`** fails when a backtick path or package-qualified Go identifier in
+  README, `CLAUDE.md`, `docs/`, `ADR/` or the committed skills doesn't resolve
+  against tracked files. Its rules (`gate_docrefs`) and allowlist
+  (`DOCREF_ALLOW`) live in `scripts/check.sh`.
+- **`secrets`** runs gitleaks, pinned, with its **default rules** over the git
+  history reachable from `HEAD`. A root `.gitleaks.toml` / `.gitleaksignore`
+  that differs from `HEAD` fails the gate, so only a committed one can change
+  what it checks.
+
+### Not gates
+
+- **`govulncheck`** runs as a scheduled workflow
+  (`.github/workflows/vulncheck.yml`, weekly + `workflow_dispatch`) with its
+  own pinned version — the one exception to versions-living-in-`check.sh`,
+  because it deliberately isn't a gate. A red run there is a to-do, not a
+  broken build.
+- **Organisation-specific leak patterns** (internal hostnames, ticket keys) live
+  in an optional per-clone config that the agent hook (ADR-0022) applies —
+  `docs/Contributing.md` — not in the `secrets` gate.
+- **Rejected**, so they aren't "helpfully" re-added: markdownlint and vale
+  (prose-style churn, not correctness), yamllint (actionlint already covers the
+  YAML that matters), hadolint (one small Dockerfile doesn't justify a
+  dedicated linter), nilaway (too false-positive-heavy on this codebase's
+  patterns).
 
 ## Rationale
 
@@ -80,122 +146,45 @@ layering in `depguard` + `go-arch-lint` makes ADR-0012's structure executable
 rather than aspirational — a disallowed import fails CI instead of surviving
 review.
 
+Each repository gate closes a gap that had let a class of mistake through
+unnoticed. `docrefs` is the mechanical half of doc-check's stale-claim check
+(ADR-0014) — the half `links` can't do, because lychee skips code spans — so a
+renamed file or a deleted symbol fails the gate instead of waiting for a review
+to notice it. A committed token is the costliest mistake a contributor to a
+public repo can make, and one a machine can decide; the scan is of history, not
+the working tree, because a token deleted in a later commit is still published.
+A coverage floor that relies on someone remembering to raise it stops
+ratcheting, hence the slack check.
+
+Determinism decides what is *not* a gate. A new CVE disclosure can flip
+`govulncheck` red with no code change, which would break "green is
+deterministic, local == CI". Organisation-specific leak patterns can't be
+committed — that would publish the very strings they guard — and CI can't read
+a file that isn't committed.
+
 ## Consequences
 
-New opinionated style linters shipped by future golangci-lint versions may need
-adding to the exclusion list. The two pattern-based disables (`contextcheck`,
-`bodyclose`) should stay off as long as the detached-log-context and
-`do()`/`decodeJSON` patterns remain; revisit them only if those patterns change.
-New packages must be added to `.go-arch-lint.yml` with their allowed edges, or
-the arch check will flag them as unmapped. The `deepScan` exclusion is pinned to
-`cmd/devpit/main.go`: if the `engine.WithNotifier` wiring moves to another file,
-or a second composition-root file is added, `excludeFiles` must be updated in the
-same change or `deepScan` will resurface the `api -> engine` false positive.
-
-A gate's command, flags, and pinned version live only in `scripts/check.sh` —
-the workflow only invokes it — so bumping a version touches the script alone;
-adding a gate also adds or joins a CI job that invokes it. `go-arch-lint` scans the filesystem, so
-local git worktrees under `.claude/` are excluded in `.go-arch-lint.yml`
-(`exclude:`); the gofmt gate checks tracked files only for the same reason. A
-fresh CI checkout has no worktrees.
-
-## Amendment — v0.1.6: frontend lint parity, tidy/actionlint/links gates, scheduled govulncheck
-
-The frontend reaches the same lint stance as `.golangci.yml`: eslint
-(`typescript-eslint` `recommendedTypeChecked` + `eslint-plugin-svelte`
-recommended) with stylistic configs off, and prettier as the frontend's gofmt
-— formatting is enforced, style opinions are not, the same line the Decision
-already draws for Go. Both join `gate_frontend` alongside `svelte-check`.
-
-Three new gates close remaining coverage gaps: `tidy` (`go mod tidy -diff` —
-`go.mod`/`go.sum` drift was previously uncaught), `actionlint` (workflow YAML
-was the one script class no gate covered; it runs the pinned shellcheck
-against `run:` blocks too), and `links` (`lychee --offline` over tracked
-markdown — an offline, internal-link-only check, so it stays deterministic;
-this is the mechanical complement to ADR-0014's link-by-exact-filename
-discipline).
-
-`govulncheck` is deliberately **not** a `scripts/check.sh` gate: a new CVE
-disclosure can flip it red with no code change, which would break "green is
-deterministic, local == CI." It runs instead as a scheduled workflow
-(`.github/workflows/vulncheck.yml`, weekly + `workflow_dispatch`) with its own
-pinned version — the one exception to versions-living-in-`check.sh`, because
-this check deliberately isn't one. A red run there is a to-do, not a broken
-build.
-
-Rejected candidates, so they aren't "helpfully" re-added later: markdownlint
-and vale (prose-style churn, not correctness), yamllint (actionlint already
-covers the YAML that matters), hadolint (one small Dockerfile doesn't
-justify a dedicated linter), nilaway (too false-positive-heavy on this
-codebase's patterns).
-
-Adding eslint pulled in a transitive dependency (`flat-cache` → `flatted`)
-that ships a stray `.go` file inside `frontend/node_modules` — invisible to
-`git ls-files`, but `go build`/`vet`/`test ./...`, golangci-lint, and
-go-arch-lint all discover files by walking the filesystem or the Go module
-graph, not tracked-files-only, so they picked it up as part of this module.
-`frontend/go.mod` declares `frontend/` a separate (source-free) Go module,
-which is the correct fix for the compiler-driven gates; go-arch-lint still
-scans the raw filesystem regardless of module boundaries, so it needed its
-own `frontend/node_modules` entry in `.go-arch-lint.yml`'s `exclude:`,
-alongside the existing `.claude` worktree exclusion.
-
-## Amendment — v0.1.6: frontend test gate
-
-`gate_frontend` now also runs `npm run test` (Vitest), so the frontend has an
-executable-test gate on par with Go's `go test`, not just type/lint checks.
-Vitest reuses the existing Vite/Svelte toolchain (`vitest.config.ts`), so it
-adds a test runner without a second build stack. The CI `frontend` job needs no
-change — it already invokes the whole gate via `scripts/check.sh --ci frontend`.
-The suite deliberately targets pure logic (buckets, relative-time formatting,
-the SSE reconnect state machine, `toggleFlag`) plus one drift guard that asserts
-the frontend state precedence equals Go's `internal/attention/states.go` — no
-component-DOM harness, matching the "smallest thing that works" stance.
-
-## Amendment — v0.1.6: Go coverage floor
-
-`gate_test` runs `go test -race -coverprofile=... ./...` and fails the gate
-when total statement coverage, or that of a package with its own floor, drops
-below the floor (`scripts/check.sh` holds the numbers). It is a ratchet against
-silent regression, not a target to chase: `cmd/devpit` (composition root, no
-unit tests by design) and `scripts/demo` (a fixture generator, not shipped
-product code) pull the total down without needing an exclusion list, and only
-packages with real logic get a floor of their own. A floor also fails when it
-sits more than `COVERAGE_SLACK` points under what's measured, naming the value
-to raise it to: a floor that relies on someone remembering to raise it stops
-ratcheting (these had drifted 4–8 points below actual). The CI `build` job
-runs `test` via `scripts/check.sh --ci build vet test tidy`.
-
-## Amendment — v0.1.6: docrefs gate and script tests
-
-`docrefs` fails when a backtick path or package-qualified Go identifier in
-README, `CLAUDE.md`, `docs/`, `ADR/` or the committed skills doesn't resolve
-against tracked files. It is the mechanical half of doc-check's stale-claim
-check (ADR-0014) — the half `links` can't do, because lychee skips code spans —
-so drift like a renamed file or a deleted symbol fails the gate instead of
-waiting for a review to notice it. Its rules (`gate_docrefs`) and allowlist
-(`DOCREF_ALLOW`) live in `scripts/check.sh`; CI runs it in the `docs` job beside
-`links`.
-
-The `shell` gate also runs `scripts/*_test.sh`. Shell scripts that make
-decisions (today, the agent gate hook — ADR-0022) carry a test held to the same
-failure-and-boundary bar as Go code (`docs/Contributing.md`).
-
-## Amendment — v0.1.6: secrets gate
-
-`secrets` runs gitleaks, pinned like the other linters, with its **default
-rules** over the git history reachable from `HEAD`. (gitleaks also picks up a
-`.gitleaks.toml` / `.gitleaksignore` at the repo root; the gate fails when one
-differs from `HEAD`, so only a committed one can change what it checks.) DevPit handles forge and
-Jira tokens and the repo is public, so a committed token is the costliest
-mistake a contributor can make, and it is one a machine can decide. The scan is
-of history, not the working tree: a token deleted in a later commit is still
-published. It is scoped to `HEAD` rather than gitleaks' default `--all` so a
-local run can't differ from CI's by scanning other local branches, and the CI
-jobs that run it check out with `fetch-depth: 0` for the same reason.
-
-Organisation-specific patterns (internal hostnames, ticket keys) are
-deliberately **not** in this gate: committing them would publish the very
-strings they guard, and CI can't have a file that isn't committed. They live
-in an optional per-clone config that the agent hook (ADR-0022) applies instead
-— see `docs/Contributing.md`.
+- New opinionated style linters shipped by future golangci-lint versions may
+  need adding to the exclusion list. The two pattern-based disables
+  (`contextcheck`, `bodyclose`) should stay off as long as the
+  detached-log-context and `do()`/`decodeJSON` patterns remain; revisit them
+  only if those patterns change.
+- New packages must be added to `.go-arch-lint.yml` with their allowed edges, or
+  the arch check will flag them as unmapped. The `deepScan` exclusion is pinned
+  to `cmd/devpit/main.go`: if the `engine.WithNotifier` wiring moves to another
+  file, or a second composition-root file is added, `excludeFiles` must be
+  updated in the same change or `deepScan` will resurface the `api -> engine`
+  false positive.
+- A gate's command, flags, and pinned version live only in `scripts/check.sh` —
+  the workflow only invokes it — so bumping a version touches the script alone;
+  adding a gate also adds or joins a CI job that invokes it.
+- Tools that walk the filesystem rather than tracked files need explicit
+  exclusions. `go-arch-lint` excludes local git worktrees under `.claude/` and
+  `frontend/node_modules` in `.go-arch-lint.yml` (`exclude:`); gofmt, shell, and
+  links check tracked files only for the same reason. A dependency under
+  `frontend/node_modules` ships a stray `.go` file, so `frontend/go.mod` declares
+  `frontend/` a separate (source-free) Go module, keeping it out of
+  `go build`/`vet`/`test ./...` and golangci-lint.
+- `secrets` is scoped to `HEAD` rather than gitleaks' default `--all`, so a
+  local run can't differ from CI's by scanning other local branches; the CI jobs
+  that run it check out with `fetch-depth: 0` for the same reason.

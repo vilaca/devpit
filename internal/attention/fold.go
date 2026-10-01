@@ -207,7 +207,7 @@ func foldItem(
 	// signal except ci_failed, plus the provider snapshot), ci_failed is dropped
 	// from the ranking time and the item stays put. Fresh and stale items are
 	// unaffected: only past the old threshold does a broken build stop nudging.
-	// (ADR-0016 2026-08-07 amendment; docs/Semantic_Invariants.md INV-5.)
+	// (ADR-0016, rank-only signals; docs/Semantic_Invariants.md INV-5.)
 	if oldThreshold > 0 {
 		base := rankingTimeExcludingCIFailed(signals, facts, latestObserved.ObservedAt)
 		if now.Sub(base) > oldThreshold {
@@ -395,7 +395,7 @@ func rankingTime(signals []storage.StoredEvent, facts sdk.ItemObservedPayload, s
 // rankingTimeExcludingCIFailed is rankingTime computed as if the item had no
 // signal.ci_failed events — the item's "real activity" clock. foldItem compares
 // it to the old threshold to decide whether a broken build may resurface the
-// item (see the ci_failed note in foldItem; ADR-0016 2026-08-07 amendment).
+// item (see the ci_failed note in foldItem; ADR-0016, rank-only signals).
 func rankingTimeExcludingCIFailed(
 	signals []storage.StoredEvent, facts sdk.ItemObservedPayload, snapshotObservedAt time.Time,
 ) time.Time {

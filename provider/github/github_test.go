@@ -1465,7 +1465,7 @@ func TestDoGraphQLRefusesNonQueryDocuments(t *testing.T) {
 // TestSignalsFromNotificationReasons pins the reason → signal mapping. In
 // particular `ci_activity` yields nothing: Actions notifications concern a
 // check suite, not a PR, so GitHub emits no signal.ci_failed
-// (docs/Provider_API_Analysis.md; ADR-0016 2026-08-07 is GitLab-only).
+// (docs/Provider_API_Analysis.md; per ADR-0016 the CI nudge is GitLab-only).
 func TestSignalsFromNotificationReasons(t *testing.T) {
 	p, err := New(sdk.ConnectionConfig{ID: "conn1", Type: "github", Token: "test-token"})
 	if err != nil {

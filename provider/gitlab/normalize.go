@@ -143,7 +143,7 @@ func (p *Provider) observedFromMR(mr glMergeRequest) sdk.Event {
 		// means GitLab is telling the user to resolve a conflict. The GraphQL join
 		// overrides this and additionally drops it when shouldBeRebased.
 		MergeConflict: mr.DetailedMergeStatus == dmsConflict,
-		// GraphQL join overrides via shouldBeRebased + divergedFromTargetBranch.
+		// GraphQL join overrides via shouldBeRebased alone (divergence is not a verdict).
 		NeedsRebase:           mr.DetailedMergeStatus == "need_rebase",
 		NeedsApproval:         mr.DetailedMergeStatus == "not_approved",
 		UnresolvedDiscussions: unresolvedDiscussions,

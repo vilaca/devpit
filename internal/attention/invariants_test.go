@@ -27,9 +27,9 @@ func TestSignalRankingRatchet(t *testing.T) {
 		sdk.SignalReviewRequested:  "attention signal — ADR-0016 Ranking (age band then recency)",
 		sdk.SignalReviewSubmitted:  "attention signal — ADR-0016 Ranking (age band then recency)",
 		sdk.SignalAssigned:         "attention signal — ADR-0016 Ranking (age band then recency)",
-		sdk.SignalApproved:         "rank-only — ADR-0016 Review verdicts advance the ranking clock",
-		sdk.SignalChangesRequested: "rank-only — ADR-0016 Review verdicts advance the ranking clock",
-		sdk.SignalCIFailed:         "rank-only, suppressed once old — ADR-0016 2026-08-07 amendment",
+		sdk.SignalApproved:         "rank-only — ADR-0016 Ranking (rank-only signals)",
+		sdk.SignalChangesRequested: "rank-only — ADR-0016 Ranking (rank-only signals)",
+		sdk.SignalCIFailed:         "rank-only, suppressed once old — ADR-0016 Ranking (rank-only signals)",
 	}
 
 	found := 0

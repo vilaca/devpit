@@ -547,7 +547,7 @@ func TestFoldRankingTimeAdvancesOnVerdictSignal(t *testing.T) {
 
 // TestFoldCIFailedResurfacesNonOldItem: signal.ci_failed is rank-only — a broken
 // build advances the ranking clock, so a PR whose real activity has gone stale
-// (but not old) floats back to the fresh band. ADR-0016 (2026-08-07), INV-5.
+// (but not old) floats back to the fresh band. ADR-0016 (rank-only signals), INV-5.
 func TestFoldCIFailedResurfacesNonOldItem(t *testing.T) {
 	f := openFacts()
 	f.MyRoles = []string{"author"}
@@ -574,7 +574,7 @@ func TestFoldCIFailedResurfacesNonOldItem(t *testing.T) {
 
 // TestFoldCIFailedSuppressedWhenOld: past the old threshold a broken build must
 // not resurrect an abandoned PR — ci_failed is dropped from the ranking clock, so
-// the item stays old at its real-activity time. ADR-0016 (2026-08-07), INV-5.
+// the item stays old at its real-activity time. ADR-0016 (rank-only signals), INV-5.
 func TestFoldCIFailedSuppressedWhenOld(t *testing.T) {
 	f := openFacts()
 	f.MyRoles = []string{"author"}

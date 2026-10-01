@@ -6,139 +6,47 @@ references point to the owning ADR.
 
 ## v0.1 — Personal core (GitHub + GitLab)
 
-The complete single-user product for two providers.
-
-- Single-user instance: own SQLite (WAL), own client, localhost, no auth
-  (ADR-0001, ADR-0007).
-- Multiple named connections per provider, including two accounts on one host
-  (ADR-0015).
-- Token-only setup: base URL + token, `/user` identity with manual fallback
-  (ADR-0003).
-- Event-sourced engine: events synthesized by diffing polls, fold-on-read
-  (ADR-0005).
-- Buckets: Needs Review, Blocked, Ready to Merge, Mentioned, Changes Requested,
-  Waiting on Author (ADR-0016). Needs Backport excluded.
-- Single ranked list + pinned "Handle next" zone; precedence + newest-first +
-  stale badge (ADR-0016).
-- Discovery: notifications/todos change-signal + identity-scoped queries
-  (ADR-0004).
-- Sync: tiered polling + conditional requests + basic `Retry-After` backoff
-  (ADR-0004).
-- Read-only: deep-link out; no snooze/dismiss; local "Handle next" flag
-  (ADR-0017).
-- Graceful failure UX: per-provider health (ADR-0018).
-- User-facing sync/poll log with progressive disclosure (ADR-0018).
-- Frontend: Svelte SPA over REST + SSE (ADR-0008, ADR-0010).
-- Secrets: plaintext config with 0600 + least-privilege scopes (ADR-0019).
-
-**Built so far:** the sync engine, both providers, storage, config, the
-attention fold, the REST API + SSE stream, and the full Svelte SPA — build
-tooling, REST/SSE data layer, `go:embed` binary embedding, pinned zone, state
-tags, bucket filters, sync-log drawer, failure banner, health dots, keyboard
-navigation, and URL state (`frontend/`, `internal/web`). **v0.1 is complete.**
-See `docs/High_Level_Architecture.md` for the component status.
+The single-user product for two providers, **complete**: local single-user
+instance (ADR-0001, ADR-0007), multi-account connections (ADR-0015),
+token-only setup (ADR-0003), event-sourced engine (ADR-0005), user-centric
+tiered sync (ADR-0004), one ranked list + pinned zone (ADR-0016), read-only
+actions (ADR-0017), sync health + log (ADR-0018), Svelte SPA over REST + SSE
+(ADR-0008, ADR-0010), plaintext-config secrets (ADR-0019). Component status:
+`docs/High_Level_Architecture.md`.
 
 ## v0.1.1 — Marker vocabulary + age bands ✓ Built
 
-Decided 2026-07-10 (ADR-0016).
-
-- Markers: `failing_checks` narrowed to CI-only; new `merge_conflict` and
-  `needs_rebase`; GitLab starts setting `failing_checks` (`ci_must_pass`).
-- Age tiers: `stale` 7–30 days, `old` >30 days (exclusive); list sorts
-  in age bands (fresh / stale / old) before state precedence; pinned
-  zone exempt.
-- UX: combined "ready to merge · optional checks red" rendering; raw
-  `gate_detail` as blocked-tooltip; visual separation of state chips /
-  diagnostic badges / age tags; pin zone shows age tags + pin age
-  (`flagged_at` added to the API).
-- Hover text on every tag: onset duration ("for 3d") from snapshot history
-  (new `since` map in the API), plus extra facts where they exist
-  (ADR-0016 tooltip principle).
+CI-only `failing_checks` plus the `merge_conflict` / `needs_rebase` markers, age
+bands in the ranking, and onset hover text on every tag (ADR-0016).
 
 ## v0.1.2 — Blocked diagnostic badges ✓ Built
 
-Decided 2026-07-10 (ADR-0016).
-
-- Three new cosmetic diagnostic badges: `missing approvals`, `discussions`, `policy`.
-- Parity principle: badge ships only where the provider reports a user-readable verdict.
-- Both providers use a batched GraphQL join (one query per sync cycle).
-- GitLab shows all blocked reasons at once (moved off single-valued `detailed_merge_status`).
-- GitLab `checks failing` now covers any pipeline (closes the non-gating CI gap).
-- Provider parity table in `docs/UI_Vocabulary.md`.
-- `discussions` badge is gate-gated: `blocking_discussions_resolved` is a raw "threads
-  exist" fact — it returns false even when the project allows merging with open threads.
-  Badge is only set when `gate = blocked`; ready MRs may have unresolved threads.
+The `missing approvals`, `discussions`, and `policy` badges, shipped only where
+the provider reports the verdict (ADR-0016; parity table in
+`docs/UI_Vocabulary.md`).
 
 ## v0.1.3 — GraphQL badge freshness ✓ Built
 
-Decided 2026-07-10 (ADR-0004).
-
-- Fast_poll now refreshes the three volatile GraphQL-derived booleans
-  (`failing_checks`, `needs_approval`, `needs_rebase`) for **all open items**
-  on every ~60 s cycle — not just todo-bearing ones.
-- Mechanism: Reconcile populates an in-memory `openSnapshots` cache (full
-  REST+GraphQL payloads keyed by native ID). Fast_poll's open-set refresh
-  issues a batched GraphQL query for uncovered items, merges only the three
-  booleans onto the cached payload, and emits `item.observed` events.
-  REST-derived fields (state, title, `merge_conflict`, etc.) are never
-  clobbered. Dedup absorbs no-change cycles.
-- Graceful degradation: GraphQL failure logs to sync_log and skips the
-  open-set refresh; the cycle still succeeds.
-- Fixes the live bug where an MR showed `failing_checks: true` while GitLab
-  reported `headPipeline: RUNNING` until the next reconcile.
-- _Note: the "merge_conflict never clobbered" and OR-join semantics for
-  `needs_rebase` were later revised in v0.1.6 — see ADR-0004 amendment._
+GitLab's FastPoll open-set refresh keeps the GraphQL-derived badges fresh for every
+open item, not only todo-bearing ones (ADR-0004; merge semantics revised in
+v0.1.6).
 
 ## v0.1.4 — Show all involved open items ✓ Built
 
-Decided 2026-07-10 (ADR-0016).
-
-- The fold no longer drops an open item that matches no attention state. Every
-  item in the log is one the user is involved in (assigned/authored sync scopes
-  plus mention signals), so authored MRs waiting on review and MRs with an
-  `unknown` merge gate stay visible instead of silently disappearing.
-- Stateless items render as a plain row (authored blue tint + `draft` marker
-  carry the context) and sort below every stated item within their age band.
-- Fixes the live bug where ~16 of a user's 26 open authored MRs were hidden:
-  11 had gate `unknown` (CI running / gate not yet computed) and 5 were drafts.
-- Wire effect: `states` may be an empty array (`docs/REST_API.md`).
+The fold keeps every involved open item, including one that carries no signal
+(ADR-0016; wire effect in `docs/REST_API.md`).
 
 ## v0.1.5 — Signal-based presentation ✓ Built
 
-Decided 2026-07-13 (ADR-0016). Rows show the neutral provider signals present
-on the item instead of a closed set of viewer-relative "attention states" — no
-inferred workflow. Supersedes the attention-state set of ADR-0016.
-
-- Signal set + fixed precedence (nine signals): Changes requested, Review
-  requested, Blocked (+ why-badges), Mentioned, Ready to merge, Auto-merge
-  armed, Checks running, Checking (gate `unknown`, replaces the bare row);
-  Review submitted lowest.
-- Authorship is the blue row tint only — no authorship tag; same vocabulary
-  regardless of role.
-- Primary signal guaranteed identical across GitHub and GitLab; best-effort
-  signals documented: `auto_merge_armed` ships on both where readable;
-  `checks_running` is GitLab-only (GitHub ✗ — gating pipeline hidden inside
-  `blocked`).
-- Authored MRs are never bare (worst case `["checking"]`); non-authored
-  involved items with no reviewer or mention signal may still carry an empty
-  `states` array (marker-only).
-- Wire renames: `needs_review` → `review_requested`;
-  `waiting_on_author` → `review_submitted`.
-
-(The `blocked` chip is suppressed in v0.1.6 when a visible marker badge already
-names the gate's reason; see the ADR-0016 amendment.)
+Rows show neutral provider signals in a fixed precedence instead of
+viewer-relative attention states (ADR-0016). The `blocked` chip's suppression
+when a marker already names the reason followed in v0.1.6 (ADR-0016).
 
 ## v0.1.5 — Jira ticket enrichment ✓ Built
 
-Decided 2026-07-13 (ADR-0021), shipped alongside the signal work. Providers
-extract Jira keys at normalize time (`sdk.ExtractTicketKeys`: title → source
-branch → description, first source wins); a config-gated `internal/jira`
-enricher refreshes the persisted `jira_tickets` cache on a 15-minute sweep (a
-decorator, not a provider — it never emits events); attention items carry an
-optional `jira` ref (key, status, URL) rendered as a status link on the title
-row. Off unless the optional `jira:` config block is present. (The refresh
-cadence was subsequently lowered to 5 min in v0.1.6; see the ADR-0021
-amendment.)
+Jira keys extracted at normalize time and ticket status shown on the title from
+a persisted cache; off unless configured (ADR-0021; refresh cadence revised in
+v0.1.6).
 
 ## v0.1.6 — First public release (beta) — packaging & distribution
 
@@ -284,10 +192,7 @@ Noted, not committed to any release.
   provider observes the user's own reply/review after it. Requires a new
   own-activity signal from providers; preferred over time decay or a local
   dismiss, which are quieter but less honest.
-- ~~Night mode (dark theme), remembered so it is set once.~~ ✓ Built — sun/moon
-  toggle in TopBar; `localStorage("theme")` persists the choice; falls back to
-  OS `prefers-color-scheme`; inline script in `index.html` prevents paint flash.
-  See ADR-0020.
+- ~~Night mode (dark theme), remembered so it is set once.~~ ✓ Built (ADR-0020).
 
 - App menu + quieter SSE status: replace the always-on live-stream dot in the
   top bar with a small app menu after the "DevPit" brand (desktop-app style),
@@ -380,14 +285,7 @@ Noted, not committed to any release.
   - Whether label tracking and user tracking are additive (union) or
     configurable per-subscription.
 
-- ~~Number of reviewers~~: ✓ Built (2026-07-10, ADR-0016). Shows "N approved"
-  in the meta-row (between author and timestamp) when at least one reviewer
-  has approved. Raw approved-reviewer count — not a gate verdict, never moves
-  items. GitLab: `approvedBy { count }` via GraphQL join; GitHub: APPROVED
-  count from `latestReviews`. Required-approvals denominator omitted:
-  branch-protection data is admin-only on GitHub and CODEOWNERS makes raw
-  counts misleading for gate purposes — the `needs_approval` badge carries
-  the honest gate verdict.
+- ~~Number of reviewers~~ ✓ Built — the "N approved" meta-row count (ADR-0016).
 
 - Surface rebase need earlier: today the `rebase` diagnostic badge is
   driven purely by GitLab's `shouldBeRebased` (GraphQL), which only turns

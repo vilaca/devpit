@@ -64,7 +64,10 @@ compaction necessary — revisit then").
 
 **Mutate an ADR in place by default.** An ADR records the *current* decision,
 not a frozen snapshot — the git history is the archive of prior versions, so
-editing loses nothing. Create a *new* ADR only when there is a reason to: a
+editing loses nothing. Mutating means folding the change into the Decision,
+Rationale, and Consequences it changes — not appending a dated `Amendment`
+section, which turns the ADR back into a log the reader must replay to learn
+what currently holds. Create a *new* ADR only when there is a reason to: a
 genuinely distinct decision, or a shift large enough to deserve its own record
 and rationale. When you do, you still **mutate the affected existing ADR(s)** —
 move content to its new home, drop what no longer holds, cross-link — rather than
@@ -76,7 +79,7 @@ the log carries no gaps; one only *partly* affected is edited down to what
 still stands. There is no tombstone status — nothing stale survives to carry
 one.
 
-### README and Contributing (2026-07-15)
+### README, Contributing, and CLAUDE.md
 
 The **README is the public front door**: written for a stranger at release
 time — pitch, feature list, quickstart — never a project log. It carries no

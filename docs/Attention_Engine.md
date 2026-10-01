@@ -3,7 +3,7 @@
 > **Status:** the fold (read-time computation of buckets and ranking) is
 > **implemented** in `internal/attention`. The user-facing presentation
 > (pinned zone, tags, filters, marker vocabulary, age bands, blocked
-> diagnostic badges) is **implemented** in `frontend/` through v0.1.5.
+> diagnostic badges) is **implemented** in `frontend/` through v0.1.6.
 > Decision: `ADR/ADR-0005_Event_Based_Attention_Engine.md` and
 > `ADR/ADR-0016_Presentation_And_Ranking.md`.
 
@@ -110,7 +110,9 @@ They explain *why* an item is in its state but never change the state itself —
 with one deliberate exception: age bands (see Ranking below). Since v0.1.2 the
 GitLab markers no longer read a single `detailed_merge_status` value — they come
 from independent REST fields plus a batched GraphQL join, so every applicable
-reason shows at once (`docs/UI_Vocabulary.md` has the provider-parity table).
+reason shows at once — except conflict and policy, which read
+`detailed_merge_status` (conflict note in `docs/Provider_API_Analysis.md`;
+`docs/UI_Vocabulary.md` has the provider-parity table).
 
 The marker set is the diagnostic boolean fields on `WorkItem`
 (`internal/attention/fold.go`) — `failing_checks` (CI/checks red),
@@ -154,8 +156,8 @@ already in the hover text).
 
 ## Ranking
 
-Age bands plus recency — **no numeric score, no configuration** (revised
-2026-07-13; signal precedence no longer ranks items). The principle is that fresh
+Age bands plus recency — **no numeric score, no configuration**; signal
+precedence orders chips, not items. The principle is that fresh
 work stays on top and, within a tier, the list mirrors what actually just moved.
 
 - **Age bands sort the list first** (the single deliberate marker exception):

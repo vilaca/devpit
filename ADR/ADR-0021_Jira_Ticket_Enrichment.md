@@ -3,7 +3,7 @@
 ## Scope
 
 Implemented (v0.1.5) — `sdk.ExtractTicketKeys` (both providers), the
-`internal/jira` enricher (Client + Refresher, 15-minute sweep), the
+`internal/jira` enricher (Client + Refresher), the
 `jira_tickets` cache table, and read-time decoration in `internal/api`. See
 `docs/Roadmap.md`.
 
@@ -40,13 +40,15 @@ persisted cache; presentation is a status prefix on the item title.**
   `ticket_keys` across open items, fetches issue status/summary/assignee from
   Jira Cloud REST (`/rest/api/3/issue/{key}`), and upserts into a new
   `jira_tickets` table. It never emits events; the event log remains
-  provider facts only (ADR-0006). Cadence mirrors the reconcile tier
-  (15 min, engine constant per ADR-0004). Per-key failures record
-  `fetch_error` and keep the last good data.
+  provider facts only (ADR-0006). Every sweep refetches every referenced key
+  unconditionally, every 5 min (a constant, per ADR-0004) — independent of the
+  reconcile tier, which serves the forge rate budget, not Jira staleness.
+  Per-key failures record `fetch_error` and keep the last good data.
 - **Persisted cache.** `jira_tickets` lives in SQLite (migration), so ticket
   context survives restarts and renders offline, consistent with local-first
-  (ADR-0001). `fetched_at` drives refresh; rows for keys no longer referenced
-  by any open item are pruned on the same sweep.
+  (ADR-0001). `fetched_at` records when a row was last fetched; it does not
+  gate refresh. Rows for keys no longer referenced by any open item are pruned
+  on the same sweep.
 - **Read-time decoration.** The fold carries `ticket_keys` through to the
   WorkItem; the API layer joins against `jira_tickets` (reader pool) and adds
   an optional `jira {key, status, url}` object to the attention item. The
@@ -62,6 +64,11 @@ persisted cache; presentation is a status prefix on the item title.**
 - The `sdk.ItemObservedPayload` gains `ticket_keys`; because the dedupe key
   hashes the payload, each open item re-emits one `item.observed` on first
   run after upgrade (harmless, self-deduping thereafter).
+- No per-row staleness guard: one whose threshold equals the cadence lets a row
+  fetched by sweep N read fresh at sweep N+1, doubling the effective staleness.
+  Jira Cloud limits are nowhere near binding at one fetch per ticket per 5 min.
+- The client is fire-and-forget (no 429/backoff handling): a failure is logged
+  and retried on the next sweep.
 - Jira outages degrade gracefully: items render without a prefix (no cached
   row) or with the last cached status (stale row); sync of forge data is
   unaffected.
@@ -70,17 +77,3 @@ persisted cache; presentation is a status prefix on the item title.**
   until the pattern proves itself.
 - A second enricher (e.g. Linear) would generalize this shape; we deliberately
   do not build the abstraction now (one concrete case first).
-
-## Amendment — v0.1.6: 5-minute unconditional refresh
-
-- Cadence 15 min → 5 min; it no longer mirrors the reconcile tier — the tiers
-  serve different budgets (forge rate budget vs. Jira staleness), and Jira
-  Cloud limits are nowhere near binding at one fetch per ticket per 5 min.
-- The per-row staleness guard is removed; `fetched_at` is now a record, not a
-  refresh trigger (supersedes "`fetched_at` drives refresh" in the Decision).
-- Why: the guard's threshold equaled the cadence, so rows fetched by sweep N
-  always read fresh at sweep N+1 — effective cadence 2×, observed as ~12 min
-  stale status in the wild. The guard protected nothing: `sweep` only ever
-  runs on the ticker.
-- Note the client stays fire-and-forget (no 429/backoff handling); failures
-  are logged and retried next sweep, unchanged.

@@ -19,6 +19,8 @@ second decision log — the ADRs are it.
 - One decision per ADR; number sequentially (`ADR-NNNN_Title.md`), no gaps —
   when an ADR is folded into another (mutate-by-default, `ADR/ADR-0014`),
   renumber the later ADRs and update references in the same change.
+- Change a decision by editing it in place — fold it into Decision, Rationale,
+  and Consequences; never append an `Amendment` section (`ADR/ADR-0014`).
 - Every ADR carries `Scope` (`Implemented (vX)` / `Planned` / `Deferred` /
   `Uncommitted`); there is no `Status` field — being in the log is what makes
   it the accepted decision.

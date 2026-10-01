@@ -9,8 +9,8 @@ import (
 )
 
 // refreshEvery is the Jira staleness budget — every sweep fetches every
-// referenced ticket unconditionally (ADR-0004: cadence is an engine constant,
-// not config; see ADR-0021 amendment for the change from 15 min).
+// referenced ticket unconditionally (ADR-0021; a constant, not config, per
+// ADR-0004).
 const refreshEvery = 5 * time.Minute
 
 // Notifier is satisfied by *api.Server; the refresher calls AttentionChanged
@@ -21,8 +21,8 @@ type Notifier interface {
 
 // Refresher keeps the jira_tickets cache current. It runs one goroutine that
 // wakes on the cadence, collects the union of ticket_keys across open items,
-// fetches keys that are stale or absent, upserts results, prunes orphaned rows,
-// and notifies the SSE hub.
+// fetches every one, upserts results, prunes orphaned rows, and notifies the
+// SSE hub.
 type Refresher struct {
 	client   *Client
 	db       *storage.DB

@@ -207,7 +207,7 @@ a gate diagnostic as a *chip*, and nothing moves an item in the ranking except
 two deliberate, ADR-0016-sanctioned levers: the age-band tiering (a marker that
 tiers the list) and `signal.ci_failed` (a chip-less rank-only nudge that
 resurfaces a broken build's PR by recency, and is suppressed once the item is
-old — ADR-0016 2026-08-07). Any *other* signal carrying a gate reason, or any
+old — ADR-0016, rank-only signals). Any *other* signal carrying a gate reason, or any
 *other* diagnostic feeding the ranking, is a violation.
 
 **Home:** `ADR/ADR-0016_Presentation_And_Ranking.md` ("Markers carry gate
@@ -221,8 +221,8 @@ diagnostics; signals never do"; "cosmetic markers never move items").
   the sanctioned `signal.ci_failed` nudge (gated by `rankingTimeExcludingCIFailed`
   so it never resurrects an old item).
 - (b) A signal's firing condition or payload carrying a gate *reason* (conflict,
-  missing-approval, policy) that belongs on a marker — `signal.ci_failed` is the
-  one sanctioned exception, and only because it adds no chip or reason surface.
+  missing-approval, policy) that belongs on a marker — `signal.ci_failed` is not
+  one, and stays sanctioned only while it adds no chip or reason surface.
 - (c) A new sort key, tiebreak, or promotion/demotion driven by a cosmetic fact.
 - (d) A diagnostic badge that fires without a provider-reported verdict —
   reconstructed from raw facts plus org rules (the parity principle).
@@ -246,7 +246,7 @@ a numeric score, or a user-tunable ranking knob.
 - (b) A config key or UI control that changes ranking (buckets are *filters*, not
   a reordering — a filter that secretly reorders is a violation).
 - (c) Signal precedence leaking back into item ranking (precedence orders chips
-  within a row only; it must not rank items — the 2026-07-13 revision).
+  within a row only; it must not rank items — ADR-0016 Ranking).
 
 ---
 
@@ -277,7 +277,7 @@ not an inferred state or lifecycle"); `ADR/ADR-0003_Provider_Plugin_Model.md`
 
 **Claim:** Synchronization discovers work only from the user's own involvement —
 review requests, mentions, assigned, authored items, and repos where the user is
-the **sole merge-capable approver** (ADR-0004's v0.1.5 discovery scope); it never
+the **sole merge-capable approver** (ADR-0004's discovery scope); it never
 mirrors whole repositories or retains work the user has no stake in. A
 repo/project-wide *query* is permitted only when its results are filtered down to
 one of these involvement axes.

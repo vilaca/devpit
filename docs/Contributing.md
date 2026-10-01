@@ -91,8 +91,9 @@ second decision log — the ADRs are it.
 - Implement the `sdk.Provider` contract (`sdk/provider.go`); see
   `docs/Provider_SDK.md` for the contract's semantics and
   `docs/Provider_API_Analysis.md` for the per-provider API research.
-- Declare capabilities honestly; the engine never asks a provider to produce a
-  bucket it declared unavailable.
+- Declare capabilities honestly (`sdk.Capabilities`; semantics in
+  `docs/Provider_SDK.md`; capability-gated buckets are deferred,
+  `ADR/ADR-0003_Provider_Plugin_Model.md`).
 - Prefer duplicating helper code (JSON decode, time parse, status mapping) over
   a shared `provider/*` helper — providers evolve independently by design
   (`ADR/ADR-0003_Provider_Plugin_Model.md`).

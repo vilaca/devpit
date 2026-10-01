@@ -40,7 +40,8 @@ items that went terminal while the app was down "for free" on the next start.
 - **Full sweep, no incremental cursor.** Every reconcile enumerates *all* open
   roled items, dropping the incremental `updated_after` / `updated:>` filter and
   its per-scope cursor bookkeeping. The absolute cost is the startup sweep
-  repeated each cycle (`docs/Roadmap.md` cadence); enrichment batching is
+  repeated each cycle (cadence: `defaultReconEvery` in `internal/engine/engine.go`,
+  rationale in ADR-0004); enrichment batching is
   unchanged (`provider/gitlab/graphql.go`, `provider/github/graphql.go`) and the
   `item.observed` dedupe-hash makes an unchanged re-sweep a write/notify no-op
   (`docs/Event_Taxonomy_and_Storage.md`).

@@ -179,8 +179,9 @@ review/approval/assignment payload actor fields — see the "Actor attribution &
 activity timeline" roadmap entry; and `Identity.DisplayName` — see the "Show the
 resolved account display name" roadmap entry.)
 
-**Home:** `ADR/ADR-0003_Provider_Plugin_Model.md` (capabilities are direct code,
-"the engine never asks a provider to produce a bucket it declared unavailable");
+**Home:** `ADR/ADR-0003_Provider_Plugin_Model.md` (the capability set is direct
+code, `sdk.Capabilities`; capability-gated bucket production is deferred until a
+forge needs it);
 `ADR/ADR-0006_Normalized_Data_Model.md` (facts are not pre-modeled).
 
 **Anchors:** `sdk/`, `provider/github/`, `provider/gitlab/`, `internal/attention/`,

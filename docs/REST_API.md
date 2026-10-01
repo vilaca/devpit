@@ -70,6 +70,10 @@ Each item carries:
   `changes_requested`, or `reviewed` (comment-only). Omitted when empty/unknown.
   Both providers populate all three from your own reviewer state. Drives
   `review_submitted`/`muted` and the "you + N approved" meta-row.
+- `approvals_count` — the raw approval count behind the "N approved" meta-row;
+  `-1` when unknown or suppressed (a draft, or the provider couldn't read it),
+  omitted when `0`. Either way the UI
+  shows nothing; there is no required-approvals denominator.
 - `my_roles` — your roles on the item, any of `author`, `reviewer`, `assignee`,
   `sole_approver`.
   Omitted when empty. A faithful projection of the provider fact; the client uses
@@ -106,7 +110,9 @@ Each item carries:
   appear. Onset = start of latest contiguous run of snapshots where the
   condition holds. `mentioned` onset = earliest mention signal time.
 - `labels` — optional; the provider label names the item carries (GitLab MR
-  labels, GitHub PR labels). Array of strings. Refreshed on reconcile only. The
+  labels, GitHub PR labels). Array of strings. Not part of the GraphQL open-set
+  refresh; updated whenever reconcile or a todo/notification re-fetches the
+  item. The
   UI renders these as plain text on a dedicated row — provider metadata, distinct
   from the outline signal chips (ADR-0016).
 - `source_branch` / `target_branch` — optional; the MR/PR's source and target

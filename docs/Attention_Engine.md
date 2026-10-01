@@ -14,9 +14,9 @@ derived at read time from the latest facts and signals.
 
 **List membership.** Every open item you are involved in appears — the sync
 scopes (assigned/authored) plus mention signals define involvement, so an open
-item in the log is one you have a stake in. States drive tags and ranking, but
-an item that matches *no* state still appears as a plain row (an authored one
-carries the blue "mine" tint; a draft carries the Draft marker). Only
+item in the log is one you have a stake in. States drive tags, but an item
+that matches *no* state still appears as a plain row (one you authored or are
+assigned carries the blue "mine" tint; a draft carries the Draft marker). Only
 merged/closed items and items removed after their last snapshot drop out. This
 is deliberate: an authored MR quietly waiting on reviewers, or one whose merge
 gate the provider has not yet computed (`unknown`), should not vanish.
@@ -30,8 +30,8 @@ for the exact conditions.
 
 Nine signals replacing the former six attention states. A WorkItem may carry
 several at once; they render as chips. The signal *vocabulary* is one word-set —
-no separate author/reviewer labels, no authorship tag (the blue tint carries
-authorship). The *conditions* stay role-aware where the fact is inherently about
+no separate author/reviewer labels, no authorship tag (the row tints carry that
+context — "Row tints" below). The *conditions* stay role-aware where the fact is inherently about
 a role (see Role scope below).
 
 The nine signal wire values and their precedence order are direct code — the
@@ -98,7 +98,7 @@ review, so it can backstop a row that would otherwise be bare.
   turn); Review Submitted is lowest-precedence (informational — the stale badge is the
   safety net for round-trips the author has forgotten). Where the org's merge
   gate enforces approvals, Changes Requested co-occurs with Blocked; the item
-  carries both tags and ranks by Changes Requested.
+  carries both tags, Changes Requested leading.
 - **Checking does not flap.** Transient gate values never reach storage; the
   synthesizer carries the last known gate forward. A previously-blocked MR under
   transient recompute keeps gate `blocked` and does not drop to `checking`.
@@ -108,11 +108,9 @@ review, so it can backstop a row that would otherwise be bare.
 Markers are diagnostic booleans on the item snapshot, normalized per provider.
 They explain *why* an item is in its state but never change the state itself —
 with one deliberate exception: age bands (see Ranking below). Since v0.1.2 the
-GitLab markers no longer read a single `detailed_merge_status` value — they come
-from independent REST fields plus a batched GraphQL join, so every applicable
-reason shows at once — except conflict and policy, which read
-`detailed_merge_status` (conflict note in `docs/Provider_API_Analysis.md`;
-`docs/UI_Vocabulary.md` has the provider-parity table).
+GitLab markers come from independent REST fields plus a batched GraphQL join
+rather than a single `detailed_merge_status` value (which reasons can show
+together, and the provider-parity table: `docs/UI_Vocabulary.md`).
 
 The marker set is the diagnostic boolean fields on `WorkItem`
 (`internal/attention/fold.go`) — `failing_checks` (CI/checks red),
@@ -146,7 +144,7 @@ already in the hover text).
 ### Known gaps
 
 - **GitHub gating-CI failures** are hidden inside `mergeable_state: "blocked"` and
-  cannot be distinguished from other block causes; they simply rank `blocked`
+  cannot be distinguished from other block causes; they show only as `blocked`,
   with no CI marker.
 - **GitHub `behind`** is reported only when branch protection *requires*
   up-to-date branches; absence of `needs_rebase` is not proof of freshness.
@@ -188,7 +186,7 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
 - A **single ranked list**, one row per item, states as tags; buckets are
   optional client-side filters, not the primary layout. Two filters diverge from
   the one-signal-per-bucket mapping (`ADR/ADR-0016_Presentation_And_Ranking.md`):
-  a `mine` filter (first chip) narrows to items you authored,
+  a `mine` filter (first chip) narrows to items you authored or are assigned,
   and `mentioned` also gathers items where you are a reviewer (via the `my_roles`
   wire field). The fold is unchanged — `my_roles` is a projection of an existing
   fact.
@@ -204,8 +202,9 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
   raw gate detail; ready_to_merge with failing_checks notes the non-required
   check; mentioned notes it never clears while open).
 - **Pin age**: pinned items show "pinned N ago" from `flagged_at`.
-- **Row tints** carry context without a badge: a blue tint on items authored by
-  the connection's identity, a warm amber tint on the `old` tier.
+- **Row tints** carry context without a badge — the blue "mine" tint and the
+  amber `old` tint (`docs/UI_Vocabulary.md` "Row context"; "mine" is `isMine` in
+  `frontend/src/lib/buckets.ts`).
 - **Approved count**: the meta-row shows "N approved" when at least one reviewer
   has approved — a raw count, informational only (never moves the item), hidden
   on drafts.

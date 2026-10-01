@@ -53,6 +53,8 @@ rate-limit headers) that a shared abstraction would accrete conditionals anyway.
   dependency: reintroduce capability-gated bucket production and the
   "unsupported" marker when a third forge (e.g. Forgejo/Gitea) cannot feed a
   bucket GitHub/GitLab do — revisit then, not before.
+- A Needs Backport bucket is deferred: it needs label/branch heuristics and
+  per-repo config, which token-only setup doesn't carry (`docs/Roadmap.md`).
 - Providers may import neither `internal/*` nor each other — enforced in CI
   (`ADR/ADR-0013_Linting_and_Architecture_Enforcement.md`).
 - Accepted cost: a fix to genuinely shared logic must be applied to each

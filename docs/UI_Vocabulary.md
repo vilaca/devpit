@@ -14,8 +14,8 @@ ranking semantics: `docs/Attention_Engine.md`; wire shapes: `docs/REST_API.md`.
 │ 📌 Fix flaky auth test        [review_requested] [conflict] [stale]│  ← pins: any age,
 │    repo · author · 2w ago · pinned 3w ago                          │    flag order
 ├─ fresh (idle < 7d) ───────────────────────────────────────────────┤
-│    Add rate limiter           [review_requested]                   │  ← signal precedence,
-│    Retry queue draining       [changes_requested] [checks failing] │    newest first
+│    Add rate limiter           [review_requested]                   │  ← newest activity
+│    Retry queue draining       [changes_requested] [checks failing] │    first
 │    Bump SDK                   [ready to merge] [optional checks    │
 │                                red]                                │
 ├─ stale (idle 7–30d) ──────────────────────────────────────────────┤
@@ -28,7 +28,7 @@ ranking semantics: `docs/Attention_Engine.md`; wire shapes: `docs/REST_API.md`.
 Three kinds of tags, three visual weights:
 
 ```
-[STATE CHIP]   colored, primary   — why the item ranks where it does
+[STATE CHIP]   colored, primary   — what the item needs (fixed chip order)
 [diag badge]   alert styling      — why it can't merge (cosmetic, never ranks)
 [age tag]      muted              — how long it has sat (bands the list)
 ```
@@ -37,11 +37,11 @@ Below these, a separate class: **provider labels**. The labels an MR/PR carries
 on the provider (GitLab MR labels, GitHub PR labels) render as **plain text
 label names, `#`-prefixed and muted** — on a dedicated row below the meta-row.
 These are the team's own taxonomy, not a DevPit verdict, so they are
-deliberately distinct from the signal chips above. They refresh on reconcile
-only and show even on muted rows. See
+deliberately distinct from the signal chips above, and show even on muted rows
+(refresh timing: `labels` in `docs/REST_API.md`). See
 `ADR/ADR-0016_Presentation_And_Ranking.md`.
 
-## Signals (v0.1.5 — drive ranking, fixed precedence)
+## Signals (v0.1.5 — fixed chip precedence)
 
 The signal vocabulary, precedence, and firing conditions are direct code in
 [`internal/attention/states.go`](../internal/attention/states.go); the
@@ -94,9 +94,10 @@ renders.
 
 Legend: ✓ full signal · ⚠ partial/conditional · ✗ structurally unavailable.
 
-GitLab shows every applicable reason at once (except the `policy` residual);
-GitHub shows what its API discloses. The old "GitLab non-gating CI invisible"
-gap is closed by the `headPipeline` join; GitHub's gating-CI opacity remains.
+GitLab shows every applicable reason at once, except `conflict` and `policy`,
+which read `detailed_merge_status` and so show only when it names them;
+GitHub shows what its API discloses. GitLab's non-gating CI shows through the
+`headPipeline` join; on GitHub a gating CI failure stays opaque inside Blocked.
 
 Both providers use a batched GraphQL join (one query per sync cycle, MRs/PRs
 via aliases) for the GraphQL-sourced signals; on failure the join degrades
@@ -125,7 +126,8 @@ Facts a row carries without a tag:
 
 | what | where | means |
 |---|---|---|
-| blue row tint | whole row | you authored the item (the connection's identity matches the author) — the only mark of authorship; the tag vocabulary is the same whatever your role |
+| blue row tint | whole row | "mine": you authored the item (the connection's identity matches the author) or are an assignee (`isMine`, `frontend/src/lib/buckets.ts`); the tag vocabulary is the same whatever your role |
+| "assigned to you" | meta-row (after author) | you are an assignee but not the author — tells an assigned item from your own under the shared tint |
 | amber row tint | whole row | the `old` age tier (idle > 30 days) — see Age tags above |
 | de-emphasized row | whole row | reviewed-done (`muted`): you are a reviewer — not the author or sole approver — who has submitted your review, so nothing is left for you — the row dims and suppresses its chips (a display cue only; muting does not change its position, which is age band + recency); full opacity on hover |
 | source → target branch | meta-row (after repo) | which branch the MR/PR is from and where it merges; raw provider fact, never ranks. Full `source → target` names on hover. GitHub: REST head/base, or the GraphQL join when REST omitted them. |

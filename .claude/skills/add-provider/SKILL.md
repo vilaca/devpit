@@ -38,8 +38,9 @@ mirroring an existing provider, not by inventing structure.
 
 Provider name (package + config `type`), host/base-URL model, API style
 (GraphQL/REST), auth (token scopes), and which capabilities the forge can
-honestly support. Declare capabilities honestly — the engine never asks a
-provider for a bucket it declared unavailable.
+honestly support. Declare capabilities honestly (`sdk.Capabilities`,
+`sdk/provider.go`); capability-gated buckets are deferred
+(`ADR/ADR-0003_Provider_Plugin_Model.md`).
 
 ## 3. Scaffold provider/<name>/
 

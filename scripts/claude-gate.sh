@@ -104,7 +104,10 @@ if (( is_push )); then
 Review what this push adds ($base...HEAD) before pushing:
   1. Run /doc-check $base in a subagent, and at the same time run
      /semantic-check $base yourself (it fans out its own subagents).
-  2. Fix what they find, or surface it to the user; commit any fixes.
+  2. Fix what they find, or surface it to the user. Fold each fix into the
+     unpushed commit it belongs to (git commit --amend, or
+     git commit --fixup=<sha> then git rebase --autosquash $base) — a separate
+     fix-up commit only records that the review ran after the commit.
   3. Run scripts/claude-gate.sh --reviewed, then retry the push."
 fi
 exit 0

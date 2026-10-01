@@ -7,8 +7,9 @@ description: >
   instead of linking it, doc claims whose referenced code has changed, stale
   version/Scope tags, duplicated facts, dead internal links, ADR convention
   violations, and stale agent instructions (CLAUDE.md and the committed
-  skills). Two modes: default scopes to a diff (the docs it touches and the
-  docs that reference code it touches); `audit` checks every doc. Use in the
+  skills). Modes: default scopes to a diff (the docs it touches and the docs
+  that reference code it touches); `audit` checks every doc; `corpus` runs the
+  judge's regression cases. Use in the
   DevPit repo when the user says "check the docs", "are the docs stale",
   "doc-check", "audit ADRs", "docs consistency", before a push (diff mode), or
   before a release (`audit`). Reports findings; only edits when asked.
@@ -54,6 +55,13 @@ skill — but its own claims are audited like any doc's.
   nothing is in scope, say so and stop.
 - **`/doc-check audit`** — **audit mode**. Every target, every check. Use it
   before a release.
+- **`/doc-check corpus`** — **calibration mode** (see Calibration). For each
+  case in `corpus/cases.yaml`, run diff mode with the case's `.diff` as the
+  whole changed set — reason over it as if applied; never apply it to the tree —
+  and compare the outcome with `expect` (and, for a `FINDING`, its `check` and
+  `target`). Run the cases in parallel subagents, each given only its case's
+  diff, so one case's findings can't leak into another's. Report a table — id ·
+  expected · got · one-line reason — and a pass count. Edit nothing.
 
 ## 1. Prose that restates a code shape (should link instead)
 
@@ -96,6 +104,10 @@ Read a couple of recent ADRs to learn the current template, then check every
   and references to a number that has since been renumbered away.
 - Timing is **linked to `docs/Roadmap.md`, not restated**; flag milestone dates
   copied into an ADR.
+- Changes are **folded in place** (`ADR/ADR-0014` "Amending vs. adding ADRs"):
+  flag an `Amendment` heading, or any section heading stamped with a version or
+  date, and prose that narrates a change ("previously…", "revised…",
+  "supersedes item 2 of…") instead of stating the current decision.
 - One decision per ADR; a decision with a known future trigger has a
   forward-dependency note in Consequences.
 
@@ -127,3 +139,12 @@ Group by the sections above. Lead with drift and dead links (correctness), then
 redundancy and convention. End with a one-line count. If asked to fix, prefer
 "replace restated shape with a link to the source" over rewording, update stale
 claims to match code, and re-run `scripts/check.sh` if any code files changed.
+
+## Calibration
+
+This is an AI judge that runs on every agent push, so a model or prompt change
+can make it lenient or noisy without failing any gate. Run `/doc-check corpus`
+whenever this skill's prompt or the model changes. If it misses a `FINDING`
+case, that check's instructions are too vague — sharpen them. If it flags the
+restraint case, it is too eager — tighten the check that fired. Fix the skill,
+not the corpus.

@@ -1,0 +1,19 @@
+# Synthetic check-2 case: a code-only diff renames a method that an ADR names as
+# a bare backtick identifier. The docrefs gate skips bare names, so only
+# doc-check's diff-mode routing (git grep the removed identifiers) can catch it.
+# Expected: FINDING (check 2, ADR/ADR-0013_Linting_and_Architecture_Enforcement.md
+# still names `writeLog`).
+--- a/internal/engine/cycle.go
++++ b/internal/engine/cycle.go
+@@ func (c *conn) runCycle(...)
+-	c.writeLog(storage.SyncLogEntry{
++	c.recordOutcome(storage.SyncLogEntry{
+@@
+-// writeLog persists one sync_log row. A failure here (storage itself is down)
++// recordOutcome persists one sync_log row. A failure here (storage itself is down)
+ // cannot be recorded in storage, so it is logged to stderr and dropped rather
+ // than derailing the cycle.
+-func (c *conn) writeLog(entry storage.SyncLogEntry) {
++func (c *conn) recordOutcome(entry storage.SyncLogEntry) {
+ 	// Use a detached context so a shutdown mid-cycle still records the outcome.
+# (every other c.writeLog call site renamed the same way)

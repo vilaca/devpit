@@ -1,0 +1,51 @@
+# Regression corpus for /doc-check. See README.md.
+# Each case pins the outcome the diff-mode check must reproduce: FINDING (with
+# the check and the doc it must name) or CLEAN.
+cases:
+  - id: restated-config-keys
+    kind: diff
+    file: restated_config_keys.diff
+    expect: FINDING
+    check: 1
+    target: docs/Synchronization_Engine.md
+    note: >
+      A prose copy of the connection key schema. Guards check 1 going blind to
+      a restated code shape.
+
+  - id: renamed-symbol-in-prose
+    kind: diff
+    file: renamed_symbol_in_prose.diff
+    expect: FINDING
+    check: 2
+    target: ADR/ADR-0013_Linting_and_Architecture_Enforcement.md
+    note: >
+      A code-only rename of a symbol an ADR names bare. The docrefs gate can't
+      see it; this guards diff-mode routing (git grep the removed identifiers).
+
+  - id: stale-scope-claim
+    kind: diff
+    file: stale_scope_claim.diff
+    expect: FINDING
+    check: 2
+    target: ADR/ADR-0018_Sync_Observability.md
+    note: >
+      A Scope tag claiming built what code and the Roadmap say isn't. Guards the
+      version-claim cross-check.
+
+  - id: appended-amendment
+    kind: diff
+    file: appended_amendment.diff
+    expect: FINDING
+    check: 3
+    target: ADR/ADR-0018_Sync_Observability.md
+    note: >
+      A decision change appended as an Amendment section. Guards the
+      mutate-in-place convention.
+
+  - id: clean-link-to-code
+    kind: diff
+    file: clean_link_to_code.diff
+    expect: CLEAN
+    note: >
+      RESTRAINT test. A true sentence that links code instead of copying it.
+      The audit must stay silent; if it flags this, it is too eager.

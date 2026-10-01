@@ -1,0 +1,12 @@
+# Synthetic check-2 case: an ADR's Scope is bumped to claim something is built
+# that the code doesn't have and docs/Roadmap.md still lists as planned for a
+# later milestone. Expected: FINDING (check 2, ADR/ADR-0018_Sync_Observability.md
+# — no per-call row in internal/storage/schema.go; Roadmap disagrees).
+--- a/ADR/ADR-0018_Sync_Observability.md
++++ b/ADR/ADR-0018_Sync_Observability.md
+@@ ## Scope
+ Sync-log persistence and per-cycle rows **Implemented (v0.1)**
+-(`internal/storage`, `internal/engine`). Per-call detail rows **Deferred**. The
++(`internal/storage`, `internal/engine`). Per-call detail rows **Implemented
++(v0.1.6)**. The
+ user-facing health indicators and sync-log view are **Implemented (v0.1)** —

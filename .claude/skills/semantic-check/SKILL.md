@@ -5,8 +5,9 @@ description: >
   linter can enforce (read-only, provider isolation, sdk neutrality/honesty,
   signals-vs-markers, one ranked list, no workflow inference, user-centric sync,
   monotonic live client state).
-  Two modes: default routes a diff to the invariants its files touch; `audit`
-  scans the whole tree, one invariant at a time. Each finding is adversarial —
+  Modes: default routes a diff to the invariants its files touch; `audit`
+  scans the whole tree, one invariant at a time; `corpus` runs the judge's
+  regression cases. Each finding is adversarial —
   construct a concrete scenario where the claim breaks — then verified by a
   skeptic pass, and resolves to fix / write-an-ADR / amend-the-invariant. Use in
   the DevPit repo when the user says "semantic-check", "check invariants",
@@ -55,7 +56,16 @@ it separately with the scenario and the test seam.
   the changed set from step 1 (working diff, staged, and untracked files, plus
   `<base>...HEAD` if a base is named). Route only the *touched* invariants.
 - **`/semantic-check audit`** — **audit mode**. Scope is the whole tree; run
-  every invariant. This is also the calibration run (see Calibration).
+  every invariant. The first audit also doubles as the invariant set's
+  acceptance test (see Calibration).
+- **`/semantic-check corpus`** — **calibration mode** (see Calibration). For
+  each case in `corpus/cases.yaml`, run steps 2–3 with the case's invariant
+  entry (`ALL` routes the diff as in step 1) and its scope — the `.diff` for a
+  `diff` case, reasoned over as if applied and never applied to the tree; the
+  live tree for a `live` case — then compare the surviving verdict with
+  `expect`. One hunter per case, each given only its case, so findings can't
+  leak between cases. Report a table — id · expected · got · one-line reason —
+  and a pass count. Edit nothing.
 
 ## Procedure
 
@@ -136,8 +146,8 @@ invariant.
 ## Calibration
 
 The first audit doubles as the acceptance test for the invariant set itself. Run
-the runnable regression corpus (`corpus/cases.yaml`) whenever this skill's prompt
-or the model changes, so judge drift (an upgrade silently making the audit
+the regression corpus (`/semantic-check corpus`) whenever this skill's prompt or
+the model changes, so judge drift (an upgrade silently making the audit
 lenient) is visible.
 
 The audit has found three VIOLATED findings — a dead / one-sided `sdk` surface

@@ -1,0 +1,12 @@
+# Synthetic check-1 case: a spec copies the connection key schema into prose
+# instead of linking internal/config/config.go, the schema of record. Expected:
+# FINDING (check 1, docs/Synchronization_Engine.md) — replace the list with a
+# link to the source.
+--- a/docs/Synchronization_Engine.md
++++ b/docs/Synchronization_Engine.md
+@@ ## Responsibilities
+ - Build one provider per connection from a **static** connection list read once
+   at startup. Connections do not change while running (no runtime add/remove).
++  Each connection entry carries `id`, `type`, `token`, `base_url`, `label`, and
++  `handle`; `type` is `github` or `gitlab`.
+ - Resolve identity, distinguishing **permanent** from **transient** failure.

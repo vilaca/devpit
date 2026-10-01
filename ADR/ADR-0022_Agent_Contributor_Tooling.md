@@ -85,3 +85,12 @@ than forgetful.
   fresh one (the record is per `HEAD`). Both skills report their routing first,
   and a diff that pulls in no doc and no invariant anchor leaves them nothing to
   check, so a small change stays cheap.
+- The review runs after the commit it reviews, so its fixes are folded into the
+  unpushed commits they belong to rather than added as fix-up commits — those
+  would reproduce the after-the-fact history this ADR's Context reads as a
+  skipped step.
+- `doc-check` and `semantic-check` are AI judges that no gate checks, so each
+  carries a regression corpus (`.claude/skills/doc-check/corpus/`,
+  `.claude/skills/semantic-check/corpus/`), run by the skill's
+  `corpus` mode whenever its prompt or the model changes; a judge drifting
+  lenient or noisy would otherwise pass silently.

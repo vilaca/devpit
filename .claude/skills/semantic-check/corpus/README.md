@@ -18,7 +18,6 @@ A case pins an `expect` verdict. The two `HOLDS` cases are **restraint** tests �
 the audit fails if it flags them, which is how we catch an over-eager skeptic
 pass (step 3) that would drown real findings in false alarms.
 
-To run: for each case, give the invariant's entry plus the scope (the live tree,
-or the `.diff`) to a hunter as in the skill's step 2–3, and assert the returned
-verdict equals `expect`. A mismatch means the Hunt or the skeptic pass drifted —
-fix the skill, not the corpus.
+To run: `/semantic-check corpus` (the skill's calibration mode) feeds each case
+to a hunter and the skeptic pass and reports expected vs. got. A mismatch means
+the Hunt or the skeptic pass drifted — fix the skill, not the corpus.

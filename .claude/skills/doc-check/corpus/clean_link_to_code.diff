@@ -1,0 +1,12 @@
+# RESTRAINT case: a spec gains a true sentence that links the schema of record
+# instead of copying it, plus a pointer to a script that exists. Nothing is
+# restated, stale, or duplicated. Expected: CLEAN — the audit must report no
+# finding.
+--- a/docs/Synchronization_Engine.md
++++ b/docs/Synchronization_Engine.md
+@@ ## Responsibilities
+ - Build one provider per connection from a **static** connection list read once
+   at startup. Connections do not change while running (no runtime add/remove).
++  The connection schema is `internal/config/config.go`; to probe a token before
++  starting, run `scripts/check-tokens.sh`.
+ - Resolve identity, distinguishing **permanent** from **transient** failure.

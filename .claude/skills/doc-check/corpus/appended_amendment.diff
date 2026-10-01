@@ -1,0 +1,13 @@
+# Synthetic check-3 case: a decision change appended as a dated Amendment section
+# instead of folded into the ADR body (mutate in place, ADR-0014). Expected:
+# FINDING (check 3, ADR/ADR-0018_Sync_Observability.md).
+--- a/ADR/ADR-0018_Sync_Observability.md
++++ b/ADR/ADR-0018_Sync_Observability.md
+@@ ## Consequences
+ - Health and the sync-log view live behind the same SSE events as the rest of
+   the UI (`ADR/ADR-0008_API_Design.md`).
++
++## Amendment — v0.1.7: degraded rows age out
++
++A `degraded` row older than one reconcile cycle no longer turns the health dot
++amber; the dot reads only rows newer than the last successful reconcile.

@@ -22,7 +22,7 @@ comes only from that feed, so the two token kinds are not equivalent:
 
 | | Classic PAT | Fine-grained PAT |
 |---|---|---|
-| Fast signals (mentions, review requests, CI) | ✓ via the notifications feed | ✗ not available |
+| Fast signals (mentions, review requests, assignments) | ✓ via the notifications feed | ✗ not available |
 | Item discovery (authored / reviewing / assigned) | ✓ | ✓ — 3-minute reconcile only |
 | Merge gate + diagnostic badges | ✓ | ✓ |
 | Read-only (no write access) | ✓ public-only (`notifications` alone); ✗ private repos need `repo`, which grants write | ✓ always |
@@ -50,7 +50,7 @@ grant these **read-only** permissions:
 Settings → Developer settings → Personal access tokens → **Tokens (classic)** →
 Generate new token. Select:
 
-- **`notifications`** — the fast feed (mentions, review requests, CI activity).
+- **`notifications`** — the fast feed (mentions, review requests, assignments).
   This alone also reads *public* PR details, so for public repositories it is
   the only scope you need.
 - add **`repo`** *only* for private repositories (to read their PR details).

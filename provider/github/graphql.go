@@ -439,7 +439,9 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 		}
 		pl.NeedsApproval = r.reviewDecision == ghReviewRequired && !pl.Draft && pl.Gate == gateBlocked
 		pl.ReviewDecision = ghReviewDecision(r.reviewDecision)
-		pl.ApprovalsCount = r.approvalsCount
+		if !pl.Draft { // a draft hides its approvals count, as carryForwardEnrichment does
+			pl.ApprovalsCount = r.approvalsCount
+		}
 		pl.AutoMergeArmed = r.autoMergeArmed
 		pl.MyReviewState = r.myReviewState
 		pl.SourceBranch = r.sourceBranch

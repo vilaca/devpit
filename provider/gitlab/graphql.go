@@ -170,7 +170,8 @@ type glGraphQLMR struct {
 // The engine derives the reconcile swept set from the result's events (ADR-0024) and
 // relies on this; preserve it.
 // Draft suppression: NeedsApproval, NeedsRebase, FailingChecks, ChecksRunning,
-// ApprovalsCount, and MyReviewState are zeroed for draft MRs. MergeConflict
+// and MyReviewState are zeroed for draft MRs, and ApprovalsCount keeps its -1
+// (hidden) default. MergeConflict
 // needs no suppression — GitLab reports DRAFT_STATUS as a draft's blocker, so
 // its detailedMergeStatus is never CONFLICT.
 // glBatchItem identifies one MR to enrich via GraphQL: evIdx is its index in the
@@ -540,7 +541,8 @@ func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPay
 
 // applyGraphQL merges the GraphQL-derived booleans onto a payload.
 // Draft items have NeedsApproval, NeedsRebase, FailingChecks, ChecksRunning,
-// ApprovalsCount, and MyReviewState suppressed (forced false/zero/empty).
+// ApprovalsCount, and MyReviewState suppressed (left false/empty, and -1 for
+// ApprovalsCount).
 // MergeConflict needs no draft suppression: a draft's detailedMergeStatus is
 // DRAFT_STATUS, never CONFLICT. handle is the authenticated user's
 // username; MyReviewState records the user's own submitted verdict, derived

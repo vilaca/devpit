@@ -1132,6 +1132,44 @@ func TestGraphQLJoinNullNodeKeepsREST(t *testing.T) {
 	}
 }
 
+// TestGraphQLJoinDraftHidesApprovals pins that a draft's approvals count stays
+// hidden (-1) even when GraphQL reports approvals — the join used to copy the
+// count onto drafts while the degraded carry-forward suppressed it, so a draft
+// read "1 approved" or not depending on whether the batch had failed.
+func TestGraphQLJoinDraftHidesApprovals(t *testing.T) {
+	approved := `{"reviewDecision":"APPROVED",` +
+		`"latestReviews":{"nodes":[{"state":"APPROVED","author":{"login":"someone"}}]}}`
+	p := newStubProvider(t, stubRT{status: 200,
+		body: `{"data":{"a0":{"pullRequest":` + approved + `},"a1":{"pullRequest":` + approved + `}}}`})
+	p.handle = "octocat"
+
+	draft := makePR("draft")
+	draft.Draft = true
+	ready := makePR("blocked")
+	ready.Number = 2
+	ready.HTMLURL = "https://github.com/acme/api/pull/2"
+	events := []sdk.Event{p.observedFromPull(draft), p.observedFromPull(ready)}
+
+	out, _, err := p.graphqlJoin(context.Background(), events)
+	if err != nil {
+		t.Fatalf("graphqlJoin: %v", err)
+	}
+	byID := map[string]sdk.ItemObservedPayload{}
+	for _, e := range out {
+		pl, ok := e.Payload.(sdk.ItemObservedPayload)
+		if !ok {
+			t.Fatalf("payload type %T", e.Payload)
+		}
+		byID[e.NativeID] = pl
+	}
+	if got := byID["acme/api#1"].ApprovalsCount; got != -1 {
+		t.Errorf("draft approvals_count = %d, want -1 (hidden on drafts)", got)
+	}
+	if got := byID["acme/api#2"].ApprovalsCount; got != 1 {
+		t.Errorf("non-draft approvals_count = %d, want 1 (the same GraphQL reply enriches it)", got)
+	}
+}
+
 // reconcileGraphQLDegradeRT lets every REST call succeed (a self-authored PR on
 // every scope, no sole-approver probe needed) but degrades the GraphQL join.
 type reconcileGraphQLDegradeRT struct{}

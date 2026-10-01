@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isMine,
+  isAssignedNotAuthored,
   isReviewer,
   matchesFilter,
   visibleBuckets,
@@ -32,6 +33,66 @@ describe("isMine", () => {
 
   it("is false with empty connections", () => {
     expect(isMine(makeItem({ author: "me" }), [])).toBe(false);
+  });
+
+  it("is true for an assignee on someone else's item", () => {
+    expect(
+      isMine(
+        makeItem({
+          connection_id: "c1",
+          author: "other",
+          my_roles: ["assignee"],
+        }),
+        conns,
+      ),
+    ).toBe(true);
+  });
+});
+
+// The badge's whole job is the case isMine folds in: before this helper the row
+// gated it on !isMine, which is false for every assignee, so it never rendered.
+describe("isAssignedNotAuthored", () => {
+  const conns = [makeConnection({ id: "c1", identity: "me" })];
+
+  it("is true for an assignee on someone else's item — and that item is mine", () => {
+    const item = makeItem({
+      connection_id: "c1",
+      author: "other",
+      my_roles: ["assignee"],
+    });
+    expect(isAssignedNotAuthored(item, conns)).toBe(true);
+    expect(isMine(item, conns)).toBe(true);
+  });
+
+  it("is false when you authored the item you're assigned to", () => {
+    expect(
+      isAssignedNotAuthored(
+        makeItem({ connection_id: "c1", author: "me", my_roles: ["assignee"] }),
+        conns,
+      ),
+    ).toBe(false);
+  });
+
+  it("is false when you aren't an assignee", () => {
+    expect(
+      isAssignedNotAuthored(
+        makeItem({
+          connection_id: "c1",
+          author: "other",
+          my_roles: ["reviewer"],
+        }),
+        conns,
+      ),
+    ).toBe(false);
+  });
+
+  it("is true for an assignee when authorship can't be resolved", () => {
+    expect(
+      isAssignedNotAuthored(
+        makeItem({ author: "", my_roles: ["assignee"] }),
+        [],
+      ),
+    ).toBe(true);
   });
 });
 

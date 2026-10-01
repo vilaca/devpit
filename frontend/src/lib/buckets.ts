@@ -39,7 +39,24 @@ export function isMine(
   item: AttentionItem,
   connections: Connection[],
 ): boolean {
-  if (item.my_roles?.includes("assignee")) return true;
+  return isAssignee(item) || isAuthor(item, connections);
+}
+
+// isAssignedNotAuthored reports whether you're an assignee on an item someone
+// else authored — what the "assigned to you" badge tells apart from your own
+// work, since isMine counts both.
+export function isAssignedNotAuthored(
+  item: AttentionItem,
+  connections: Connection[],
+): boolean {
+  return isAssignee(item) && !isAuthor(item, connections);
+}
+
+function isAssignee(item: AttentionItem): boolean {
+  return item.my_roles?.includes("assignee") ?? false;
+}
+
+function isAuthor(item: AttentionItem, connections: Connection[]): boolean {
   if (!item.author) return false;
   return (
     connections.find((c) => c.id === item.connection_id)?.identity ===
@@ -59,8 +76,8 @@ export function isReviewer(item: AttentionItem): boolean {
 }
 
 // matchesFilter reports whether an item belongs under the active filter: null
-// means "All", "mine" is the authorship axis (needs connections to resolve your
-// identity), "mentioned" also gathers your review plate, anything else is a
+// means "All", "mine" is isMine — authored or assigned (needs connections to
+// resolve your identity), "mentioned" also gathers your review plate, anything else is a
 // plain signal-state match. connections is only consulted for "mine".
 export function matchesFilter(
   item: AttentionItem,
@@ -81,7 +98,7 @@ export interface VisibleBucket {
 }
 
 // visibleBuckets is the ordered chip list for the filter bar and the "/" cycle:
-// "Mine" first (when you have authored items), then each signal bucket that has
+// "Mine" first (when any item is yours), then each signal bucket that has
 // items, empty ones omitted so the bar stays uncluttered. Counts use
 // matchesFilter so each badge matches what the bucket shows (e.g. "mentioned"
 // folds in your review plate). Pinned items sit outside the ranked list.

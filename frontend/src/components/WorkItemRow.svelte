@@ -2,7 +2,7 @@
   import type { AttentionItem } from "../lib/types";
   import { relativeTime } from "../lib/format";
   import { dashboard } from "../lib/dashboard.svelte";
-  import { isMine } from "../lib/buckets";
+  import { isMine, isAssignedNotAuthored } from "../lib/buckets";
   import StateTags from "./StateTags.svelte";
   import Labels from "./Labels.svelte";
 
@@ -19,6 +19,9 @@
   } = $props();
 
   const mine = $derived(isMine(item, dashboard.connections));
+  const assignedNotAuthored = $derived(
+    isAssignedNotAuthored(item, dashboard.connections),
+  );
 
   // Approval count, phrased to surface that *you* approved when you did.
   const approvalsLabel = $derived.by(() => {
@@ -114,7 +117,7 @@
         <span class="sep">·</span>
         <span class="author">{item.author}</span>
       {/if}
-      {#if !mine && item.my_roles?.includes("assignee")}
+      {#if assignedNotAuthored}
         <span class="sep">·</span>
         <span class="assigned">assigned to you</span>
       {/if}

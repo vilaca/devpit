@@ -62,7 +62,10 @@ permissions (results scoped to token visibility).
 `Last-Modified` / `If-Modified-Since`; 304 responses **do not count**
 against the rate limit; honor the `X-Poll-Interval` header (default
 60s). Relevant `reason` values: `review_requested`, `mention`,
-`team_mention`, `assign`, `author`, `state_change`, `ci_activity`.
+`team_mention`, `assign`, `author`, `state_change`. (`ci_activity`, an
+Actions run you triggered finishing, is about a check suite rather than a
+pull request, so it gives the PR-scoped fast poll nothing to attach a signal
+to — GitHub emits no `signal.ci_failed`.)
 
 Without a classic PAT the fast tier is the GraphQL search poll below,
 run at the same cadence — costs a few points per cycle, which the budget

@@ -1461,3 +1461,35 @@ func TestDoGraphQLRefusesNonQueryDocuments(t *testing.T) {
 		t.Errorf("a query document must be sent: err=%v, requests sent=%d", err, sent)
 	}
 }
+
+// TestSignalsFromNotificationReasons pins the reason → signal mapping. In
+// particular `ci_activity` yields nothing: Actions notifications concern a
+// check suite, not a PR, so GitHub emits no signal.ci_failed
+// (docs/Provider_API_Analysis.md; ADR-0016 2026-08-07 is GitLab-only).
+func TestSignalsFromNotificationReasons(t *testing.T) {
+	p, err := New(sdk.ConnectionConfig{ID: "conn1", Type: "github", Token: "test-token"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	want := map[string]string{
+		"mention":          sdk.SignalMentioned,
+		"team_mention":     sdk.SignalMentioned,
+		"review_requested": sdk.SignalReviewRequested,
+		"assign":           sdk.SignalAssigned,
+		"ci_activity":      "",
+		"state_change":     "",
+		"subscribed":       "",
+	}
+	for reason, wantType := range want {
+		var n ghNotification
+		n.Reason = reason
+		n.UpdatedAt = "2026-10-01T00:00:00Z"
+		got := p.signalsFromNotification(n, "acme/api#1")
+		switch {
+		case wantType == "" && len(got) != 0:
+			t.Errorf("reason %q: got %d signal(s) (%s), want none", reason, len(got), got[0].EventType)
+		case wantType != "" && (len(got) != 1 || got[0].EventType != wantType):
+			t.Errorf("reason %q: got %v, want one %s", reason, got, wantType)
+		}
+	}
+}

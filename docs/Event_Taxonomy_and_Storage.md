@@ -44,7 +44,7 @@ ranking timestamp, and "what's new since last visit":
 | `signal.review_requested` | entering the review-requested result set; GitLab todo `review_requested` |
 | `signal.review_submitted` | review-decision / reviewer-state transitions; GitLab todo `review_submitted` |
 | `signal.assigned` | assigned result set / todos `assigned` |
-| `signal.ci_failed` | red checks on authored PRs (incl. non-gating); GitLab todo `build_failed` |
+| `signal.ci_failed` | a failed pipeline on an authored MR — GitLab todo `build_failed`; GitHub emits none (`docs/Provider_API_Analysis.md`) |
 | `signal.approved` | a reviewer's approval verdict (GitLab: system-note `created_at`; GitHub: `latestReviews.submittedAt`) |
 | `signal.changes_requested` | a reviewer's requested-changes verdict (same sources) |
 

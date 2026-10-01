@@ -77,7 +77,7 @@ Fix: FastPoll now drops a notification whose reason produces no signal *and*
 whose PR carries none of my roles (author/reviewer/assignee) — the item is
 neither actionable nor mine, so it is never snapshotted
 (`provider/github/fastpoll.go`). Notifications that do carry a signal (mention,
-review_requested, assign, ci_activity) or a role are unaffected.
+review_requested, assign) or a role are unaffected.
 
 ## Amendment — v0.1.5: sole-approver discovery scope
 

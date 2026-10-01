@@ -287,7 +287,10 @@ predicate lives in `internal/attention/states.go`.
 
 `signal.ci_failed` — a broken build on an authored PR — is a **rank-only** signal
 like the review verdicts above: it advances the item's ranking clock so a PR
-whose build just broke floats back into view. It adds **no chip**; the CI-red
+whose build just broke floats back into view. Only GitLab emits it: GitHub's CI
+notifications aren't PR-scoped (`docs/Provider_API_Analysis.md`), so on GitHub a
+broken build moves nothing — accepted, as the `failing_checks` marker still
+shows it. It adds **no chip**; the CI-red
 *state* remains the `failing_checks` marker, and this signal is only the *event*
 "go look, it broke". This is the deliberate resolution of the tension with
 "signals never carry gate diagnostics" above — the signal carries no diagnostic

@@ -172,8 +172,6 @@ func (p *Provider) signalsFromNotification(n ghNotification, nid string) []sdk.E
 		return []sdk.Event{base(sdk.SignalReviewRequested, sdk.SignalReviewRequestedPayload{})}
 	case "assign":
 		return []sdk.Event{base(sdk.SignalAssigned, sdk.SignalAssignedPayload{})}
-	case "ci_activity":
-		return []sdk.Event{base(sdk.SignalCIFailed, sdk.SignalCIFailedPayload{})}
 	default:
 		return nil
 	}

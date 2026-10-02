@@ -1,8 +1,8 @@
 # Provider API Analysis — GitHub & GitLab (v0.1)
 
 External API research behind the two v0.1 providers
-(`ADR/ADR-0003_Provider_Plugin_Model.md`). Maps each attention bucket to exact
-GitHub/GitLab API calls, defines the merge-gate field mapping (consumed by the
+(`ADR/ADR-0003_Provider_Plugin_Model.md`). Maps discovery and the attention
+buckets to exact GitHub/GitLab API calls, defines the merge-gate field mapping (consumed by the
 fold in `docs/Attention_Engine.md`), sets token guidance, and budgets a poll
 cycle (`docs/Synchronization_Engine.md`).
 
@@ -17,17 +17,19 @@ implementation.
  (classic)" with `notifications` or `repo` scope. Fine-grained PATs
  cannot call it. Classic `repo` grants *write* to private repos — there
  is no read-only classic scope for private repos. Consequence: the
- "notifications as change-signal" tier is **optional** on GitHub and
- the plugin must work without it (search-based polling covers all
- buckets). This is a capability declaration, driven by token type.
+ "notifications as change-signal" tier is **optional** on GitHub.
+ Without it the reconcile search still discovers authored,
+ review-requested, and assigned work, but there are no mentions or fast
+ signals (Change signal below; `docs/Token_Setup.md`).
 2. **GitLab's public REST API has no ETag/304 support.** Conditional
  requests are a GitHub-only optimization. GitLab change detection
  uses `updated_after` watermark polling plus the todos feed.
 3. **GitHub REST `mergeable_state` is officially undocumented** (OpenAPI
  type: free-form string). GraphQL `mergeStateStatus` is GA, enum-typed,
- and fetchable in bulk via `search()` — the GitHub plugin should use
- **GraphQL** for its identity-scoped queries, avoiding an N+1 REST call
- per PR for merge-gate state.
+ and fetchable in bulk, which avoids an N+1 REST call per PR for
+ merge-gate state. DevPit reads REST `mergeable_state` from the single-PR
+ GET only; its REST search rows and GraphQL join carry no merge-gate
+ state (Discovery and enrichment below).
 4. **GitLab returns `detailed_merge_status` in list responses** — no N+1
  for the merge gate; REST is sufficient for the GitLab plugin.
 5. **GitLab "request changes" only blocks the merge gate on
@@ -39,9 +41,9 @@ implementation.
 
 ### Identity
 
-`GET /user` (REST) or `viewer { login databaseId }` (GraphQL). Works for
-both PAT types. Search supports `@me`, so most queries don't need the
-resolved login, but store it for provenance and team-view use.
+`GET /user` (REST; GraphQL `viewer { login databaseId }` is equivalent).
+Works for both PAT types. DevPit resolves the login once and uses it in its
+search qualifiers (`@me` would also work).
 
 ### Token guidance
 
@@ -60,47 +62,70 @@ permissions (results scoped to token visibility).
 
 `GET /notifications` (classic PAT only): optimized for polling with
 `Last-Modified` / `If-Modified-Since`; 304 responses **do not count**
-against the rate limit; honor the `X-Poll-Interval` header (default
-60s). Relevant `reason` values: `review_requested`, `mention`,
+against the rate limit; GitHub sends an `X-Poll-Interval` header (default
+60s), which DevPit does not read — the fast cadence is the fixed
+`defaultFastEvery`. Relevant `reason` values: `review_requested`, `mention`,
 `team_mention`, `assign`, `author`, `state_change`. (`ci_activity`, an
 Actions run you triggered finishing, is about a check suite rather than a
 pull request, so it gives the PR-scoped fast poll nothing to attach a signal
 to — GitHub emits no `signal.ci_failed`.)
 
-Without a classic PAT the fast tier is the GraphQL search poll below,
-run at the same cadence — costs a few points per cycle, which the budget
-absorbs easily.
+Each PR notification on the first unread page — open, merged, or closed, and
+including watched-only repos — triggers a single-PR
+`GET /repos/{owner}/{repo}/pulls/{number}`, the only source of
+`mergeable_state` (Merge-gate mapping below). An open PR with no role and no
+signal is then dropped (`ADR/ADR-0004_User_Centric_Synchronization.md`); the
+rest go through the GraphQL join. Only the `mention` reason yields
+`signal.mentioned`, and non-PR notifications (issues) are skipped.
 
-> **Implementation note (as of v0.1.6):** this search-poll fallback and the
-> token-driven capability degradation are **not yet implemented**. `FastPoll`
-> polls `/notifications` unconditionally and GitHub mention signals arrive only
-> from it, so a fine-grained PAT loses the fast tier and mentions entirely (only
-> the reconcile sweep runs). The practical token trade-off users face is in
-> `docs/Token_Setup.md`; the "recommended default" and "optional tier" framing
-> here is aspirational until the fallback lands.
+Without a classic PAT there is no working fast tier. A GraphQL search-poll
+fallback and token-driven capability degradation were designed but are **not
+implemented**: `Capabilities` declares `FastSignal` unconditionally, so
+`FastPoll` still calls `/notifications` every cycle and fails — a 403 without a
+rate signal is reported as an auth failure — and GitHub mention signals arrive
+only from it. A fine-grained PAT therefore gets its discovery from the
+reconcile sweep alone, and no mentions. Until the fallback exists, the "recommended
+default" framing in Token guidance is aspirational; the practical trade-off is
+in `docs/Token_Setup.md`.
 
-### Bucket → call mapping
+### Discovery and enrichment
 
-One GraphQL request per cycle, aliasing multiple `search()` calls
-(`type: ISSUE`), each selecting on PullRequest:
-`number, title, url, updatedAt, isDraft, mergeStateStatus,
-reviewDecision, latestReviews { nodes { state submittedAt author { login } } },
-repository { nameWithOwner }`. The `latestReviews` nodes (latest non-dismissed
-review per reviewer) power the rank-only `signal.approved` /
-`signal.changes_requested` verdict signals; `submittedAt` is the real provider
-timestamp used as `OccurredAt` (`docs/Event_Taxonomy_and_Storage.md`,
-`ADR/ADR-0016`).
+Reconcile runs one REST search per involvement scope —
+`GET /search/issues?q=is:pr is:open <qualifier>:<login>` for `review-requested`,
+`assignee`, and `author`, plus `user:` for sole-approver candidates (Sole-approver
+discovery below) — following `Link: rel="next"` so a result set is not
+truncated to page one (the Search API itself caps a query at 1,000 results;
+`provider/github/reconcile.go`). Roles accumulate per PR across scopes into one
+`item.observed`, and every member of the review-requested set emits a
+`signal.review_requested` keyed on the PR's `updated_at`, so a PR updated while
+you are still requested fires it again (dedupe keys:
+`docs/Event_Taxonomy_and_Storage.md`). Search rows carry no `mergeable_state`,
+so a sweep snapshot reports the gate as `unknown`; only the fast tier's
+single-PR GET supplies a real gate.
 
-| Bucket | Search query | Post-filter |
-|--------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| Review Requested | `is:open is:pr review-requested:@me archived:false` | — (`user-review-requested:@me` additionally distinguishes direct from team requests) |
-| Changes Requested | `is:open is:pr author:@me archived:false` | `reviewDecision == CHANGES_REQUESTED` |
-| Blocked | same authored query | merge-gate mapping below, non-draft |
-| Ready to Merge | same authored query | merge-gate mapping below, non-draft |
-| Mentioned | `is:open mentions:@me archived:false` | includes issues by design |
-| Review Submitted | `is:open is:pr reviewed-by:@me -review-requested:@me -author:@me archived:false` | — |
+Known gaps in the sweep's scopes:
 
-Assigned work (discovery per ADR-0004): `is:open assignee:@me`.
+- **Mentions** arrive only through the notifications feed; no scope searches
+  them.
+- **Reviewed PRs.** GitHub stops matching `review-requested:` once you submit a
+  review, and no scope searches `reviewed-by:`, so a PR you reviewed (and
+  don't author or hold another role on) leaves the sweep.
+- **Team review requests.** `review-requested:` also matches requests to a team
+  you belong to (`user-review-requested:` would match direct requests only),
+  while the fast tier's single-PR GET derives the reviewer role from user
+  reviewers alone (`provider/github/normalize.go`), so the two tiers can
+  disagree on a team-requested PR.
+
+Every observed PR, from either tier, is then enriched by a GraphQL join:
+aliased `repository(owner:, name:) { isArchived pullRequest(number:) { … } }`
+lookups in batches (`batchSize` in `runGHBatches`; query `prQueryFmt`,
+`provider/github/graphql.go`). It supplies `reviewDecision`, the head/base
+branch names, auto-merge state, and `latestReviews` — the latest non-dismissed
+review per reviewer, which yields the approvals count, your own review state,
+and the rank-only `signal.approved` / `signal.changes_requested` verdict
+signals, with `submittedAt` as their real `OccurredAt`
+(`docs/Event_Taxonomy_and_Storage.md`, `ADR/ADR-0016`). A PR on an archived
+repo is dropped from the sweep (`ADR/ADR-0024_Reconcile_Item_Reaping.md`).
 
 Search notes: since 2025-09-04 all issue searches use "advanced search"
 semantics — multiple `repo:`/`org:`/`user:` qualifiers AND together
@@ -117,35 +142,45 @@ only on a complete Reconcile (`pruneClosedSnapshots`,
 `provider/github/reconcile.go`), so FastPoll's partial slice never evicts a PR it
 merely did not hear about.
 
-### Merge-gate mapping (`mergeStateStatus`)
+### Merge-gate mapping (`mergeable_state`)
 
-| Value | Meaning | DevPit state |
+REST `mergeable_state`, from the single-PR GET, mapped by `mergeGate`
+(`provider/github/normalize.go`); GraphQL's `mergeStateStatus` is believed to
+be the same enum, upper-cased (Verify at implementation, item 2).
+
+| Value | Meaning | DevPit gate (+ marker) |
 |-------------|---------------------------------------|------------------------------------------------------|
-| `CLEAN` | Mergeable, checks passing | Ready to Merge |
-| `HAS_HOOKS` | Mergeable, passing + pre-receive hooks | Ready to Merge |
-| `UNSTABLE` | Mergeable with non-passing status | failure notification, **not** Blocked |
-| `BLOCKED` | Merge blocked (protection rules) | Blocked |
-| `DIRTY` | Merge commit can't be created (conflict) | Blocked |
-| `BEHIND` | Head out of date (strict checks) | Blocked |
-| `UNKNOWN` | Being computed | transient — keep previous state, re-poll |
-| `DRAFT` | deprecated | use `isDraft` instead (drafts never Blocked/RTM) |
+| `clean` | Mergeable, checks passing | `ready` |
+| `has_hooks` | Mergeable, passing + pre-receive hooks | `ready` |
+| `unstable` | Mergeable with non-passing status | `ready` + `failing_checks` — **not** Blocked |
+| `blocked` | Merge blocked (protection rules) | `blocked` |
+| `dirty` | Merge commit can't be created (conflict) | `blocked` + `merge_conflict` |
+| `behind` | Head out of date (strict checks) | `blocked` + `needs_rebase` |
+| `unknown` | Being computed | `unknown` |
+| `draft` | deprecated | `unknown`; the PR's `draft` flag says draft |
+| anything else, or empty | undocumented / absent | `unknown` |
 
-Caveat **[verify]**: `mergeStateStatus` is actor-agnostic — it reports
-`BLOCKED` even for users whose bypass rights would let them merge
+A `blocked` gate also gets `needs_approval` from the GraphQL join when
+`reviewDecision` is `REVIEW_REQUIRED` (non-drafts only).
+
+Caveat **[verify]**: the merge state is actor-agnostic — it reports
+`blocked` even for users whose bypass rights would let them merge
 (community-sourced, not official docs).
 
 ### Rate budget
 
-- GraphQL: 5,000 points/hour; a multi-search query costs ~1 point per
- 100 nodes requested per connection (min 1). A 4-search × 50-node cycle
- is ~2–4 points → polling every 60s ≈ 150–250 points/hour. **~5% of
- budget.**
-- REST search (if used instead): 30 requests/min — 4 queries/min fits,
- but GraphQL is preferred anyway.
-- REST core: 5,000 req/hour; authorized conditional 304s are free.
-- Secondary limits: ≤100 concurrent; ≤2,000 GraphQL points/min; on 429 /
- `retry-after`, honor the header, else wait ≥60s with exponential
- backoff (basic backoff).
+- REST core: 5,000 req/hour; authorized conditional 304s are free, so an
+  unchanged `/notifications` poll costs nothing. A changed (200) poll re-fetches
+  every PR on the first unread page (up to 50), not just new ones — the
+  request sets no `since`. Collaborator probes for sole-approver candidates
+  also count here, cached per repo (`approverTTL`).
+- REST search: 30 requests/min. A reconcile issues one paginated search per
+  scope (four) every `defaultReconEvery` (`internal/engine/engine.go`) —
+  about 4% of the search limit at the 3-minute cadence.
+- GraphQL: 5,000 points/hour, ≤2,000 points/min; the join is one query (about a
+  point) per batch of PRs it enriches.
+- Secondary limits: ≤100 concurrent; on 429 / `retry-after`, honor the
+  header, else wait ≥60s with exponential backoff (basic backoff).
 
 ## GitLab
 
@@ -284,9 +319,9 @@ minimum supported GitLab version]**.
 
 | Tier | GitHub | GitLab | Default cadence |
 |----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------|
-| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT) **or** GraphQL search poll | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items | `defaultFastEvery` (obey `X-Poll-Interval` on GitHub) |
-| Detail fetch | included in GraphQL responses | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
-| Reconciliation sweep | full bucket query set, no watermark | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | `defaultReconEvery` |
+| Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT only) | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items | `defaultFastEvery` |
+| Detail fetch | single-PR GET per notified PR (merge gate); GraphQL join for reviews, branches, auto-merge | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
+| Reconciliation sweep | four scoped REST searches, no watermark; GraphQL join | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | `defaultReconEvery` |
 
 Cadences are engine constants (`internal/engine/engine.go`, ADR-0004); the reconciliation
 sweep also self-heals anything the fast tier missed (deleted todos,
@@ -324,9 +359,10 @@ an explicit `UpsertRepoApprover` call does, and none exists outside tests.
 
 ## Verify at implementation
 
-1. GitHub `mergeStateStatus` actor-agnosticism (community-sourced).
-2. REST `mergeable_state` value set — undocumented; irrelevant if the
- plugin stays on GraphQL, revisit only if REST fallback is added.
+1. GitHub merge-state actor-agnosticism (community-sourced).
+2. REST `mergeable_state` value set — undocumented, and it is what DevPit
+ reads (`mergeGate`, `provider/github/normalize.go`); confirm it tracks
+ GraphQL's `mergeStateStatus` enum.
 3. GitLab `/todos` accepting `action=review_requested` (source says yes,
  docs omit it).
 4. `GET /user` behavior for GitLab project/group access tokens

@@ -26,7 +26,7 @@ The bucket predicates and the precedence order are **direct code**
 the design behind them. Where the two ever disagree, the code is authoritative
 for the exact conditions.
 
-## Signals (v0.1.5)
+## Signals
 
 A WorkItem may carry several signals at once; they render as chips. The signal
 *vocabulary* is one word-set — no separate author/reviewer labels, no authorship
@@ -91,12 +91,12 @@ review, so it can backstop a row that would otherwise be bare.
   synthesizer carries the last known gate forward. A previously-blocked MR under
   transient recompute keeps gate `blocked` and does not drop to `checking`.
 
-## Markers (v0.1.1–v0.1.2)
+## Markers
 
 Markers are diagnostic booleans on the item snapshot, normalized per provider.
 They explain *why* an item is in its state but never change the state itself —
-with one deliberate exception: age bands (see Ranking below). Since v0.1.2 the
-GitLab markers come from independent REST fields plus a batched GraphQL join
+with one deliberate exception: age bands (see Ranking below). The GitLab
+markers come from independent REST fields plus a batched GraphQL join
 rather than a single `detailed_merge_status` value (which reasons can show
 together, and the provider-parity table: `docs/UI_Vocabulary.md`).
 
@@ -110,10 +110,8 @@ each — which GitHub/GitLab field feeds it and where a provider is structurally
 blind — is the parity table in `docs/UI_Vocabulary.md` (raw API facts in
 `docs/Provider_API_Analysis.md`), not restated here.
 
-The gate mapping (`mergeGate` in each provider) is **unchanged** — `dirty`,
-`behind`, `conflict`, `need_rebase`, and `ci_must_pass` still produce gate
-`blocked`; `unstable` still produces `ready`. Markers are additional fields,
-not a re-derivation of the gate.
+Markers are additional fields, not a re-derivation of the gate (the gate
+mappings, `mergeGate` in each provider: `docs/Provider_API_Analysis.md`).
 
 ### Onset timestamps (`since` map)
 
@@ -137,8 +135,8 @@ already in the hover text).
 - **GitHub `behind`** is reported only when branch protection *requires*
   up-to-date branches; absence of `needs_rebase` is not proof of freshness.
 
-(The earlier "GitLab non-gating CI invisible" gap was closed in v0.1.2 by the
-`headPipeline` GraphQL join — GitLab now surfaces any red pipeline.)
+(GitLab surfaces any red pipeline, gating or not, through the `headPipeline`
+GraphQL join.)
 
 ## Ranking
 
@@ -169,7 +167,7 @@ work stays on top and, within a tier, the list mirrors what actually just moved.
   ("Mentioned ×3"); the individual signals remain only in the stored event
   log — the UI shows the count, with hover adding the onset.
 
-## Presentation (Implemented, v0.1.1–v0.1.6)
+## Presentation
 
 - A **single ranked list**, one row per item, states as tags; buckets are
   optional client-side filters, not the primary layout. Two filters diverge from

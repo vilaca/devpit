@@ -206,11 +206,11 @@ Noted, not committed to any release.
   we're relying purely on polling) should escalate from the quiet menu line to
   something more noticeable, or stay quiet always. Not a priority.
 - Issues as first-class attention items (GitHub issues / GitLab issues).
-  Issues already appear in the data model (`object_type = issue`) and in
-  the Mentioned bucket (`mentions:@me` search includes issues by design,
-  GitLab todos cover `mentioned` and `directly_addressed` for issues
-  too). The `signal.assigned` type exists in the taxonomy. So the
-  infrastructure is partially there; what is missing is issue-specific
+  Issues have a place in the data model (`object_type = issue`) and the
+  `signal.assigned` type exists in the taxonomy, but both providers drop
+  non-PR/MR notifications and todos today, so no issue reaches the list
+  (GitLab todos do report `mentioned` and `directly_addressed` on issues). So
+  the infrastructure is partially there; what is missing is issue-specific
   attention states and their fold rules.
 
   The "owner or write access" framing is a red herring. The right frame

@@ -40,7 +40,7 @@ ranking timestamp, and "what's new since last visit":
 
 | Type | Synthesized from |
 |---|---|
-| `signal.mentioned` | GitHub `mentions:@me` / notification `mention`; GitLab todos `mentioned`, `directly_addressed` |
+| `signal.mentioned` | GitHub notification `mention`; GitLab todos `mentioned`, `directly_addressed` |
 | `signal.review_requested` | entering the review-requested result set; GitLab todo `review_requested` |
 | `signal.review_submitted` | review-decision / reviewer-state transitions; GitLab todo `review_submitted` |
 | `signal.assigned` | assigned result set / todos `assigned` |

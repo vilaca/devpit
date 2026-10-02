@@ -49,12 +49,13 @@ With the fast tier keeping known-open items fresh, the sweep's unique jobs are
 new-item discovery and self-heal (deleted todos, watermark gaps, GitHub search
 lag) — on a fine-grained GitHub PAT it is the *only* discovery path
 (`docs/Token_Setup.md`) — so its interval is the worst-case latency for a new
-item to appear at all. Rate budget does not bind: the fast tier is ~5% of
-GitHub's budget and <1% of GitLab's, and a 3-minute sweep adds single-digit
-percent (`docs/Provider_API_Analysis.md`). The sweep stays well above the fast
-cadence because the two-tier design only holds while the full sweep runs
-meaningfully less often; driving it toward 60 s collapses the tiers into
-constant full sweeps for a latency the fast tier already delivers.
+item to appear at all. Rate budget does not bind: GitHub's fast tier costs
+nothing on an unchanged poll and at most a page of PR fetches on a changed one,
+GitLab's is <1% of its budget, and a 3-minute sweep adds single-digit percent
+(`docs/Provider_API_Analysis.md`). The sweep stays
+well above the fast cadence because the two-tier design only holds while the
+full sweep runs meaningfully less often; driving it toward 60 s collapses the
+tiers into constant full sweeps for a latency the fast tier already delivers.
 
 ## Consequences
 

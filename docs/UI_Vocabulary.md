@@ -99,8 +99,8 @@ which read `detailed_merge_status` and so show only when it names them;
 GitHub shows what its API discloses. GitLab's non-gating CI shows through the
 `headPipeline` join; on GitHub a gating CI failure stays opaque inside Blocked.
 
-Both providers use a batched GraphQL join (one query per sync cycle, MRs/PRs
-via aliases) for the GraphQL-sourced signals; how a failed join degrades is in
+Both providers use batched, aliased GraphQL queries for the GraphQL-sourced
+signals; how a failed join degrades is in
 `docs/Provider_API_Analysis.md`.
 
 ## Age tags (the one exception — they band the list)

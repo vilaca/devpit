@@ -471,18 +471,6 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 	return out, degraded, nil
 }
 
-// carryForwardEnrichment merges the GraphQL-sourced fields from a prior snapshot
-// onto pl so a failed batch does not wipe previously-known approval / auto-merge
-// state. The REST payload never populates these fields (they are GraphQL-only),
-// so the snapshot is their sole source while a batch is degraded and each is
-// assigned from it directly — never OR-ed, which would let a stale true survive
-// a REST-observed false if REST ever began reporting one. Draft suppression: on
-// a PR that has since become a draft the approval / auto-merge / needs-approval
-// fields are NOT carried (a draft hides the merge-gate chips), so a stale
-// non-draft snapshot cannot resurrect them. review_decision is not a merge-gate
-// fact and is carried regardless of draft, matching the live GraphQL apply.
-// Source/target branches are carried when REST left them empty (search-path
-// snapshots omit head/base).
 // updateSoleApprover performs the opportunistic downgrade: if a PR already has
 // approvals beyond the user's own, another account can approve — mark the repo
 // as not-sole-approver immediately. repoKey is "" when the lookup is absent.
@@ -499,6 +487,18 @@ func (p *Provider) updateSoleApprover(repoKey string, r ghResult) {
 	}
 }
 
+// carryForwardEnrichment merges the GraphQL-sourced fields from a prior snapshot
+// onto pl so a failed batch does not wipe previously-known approval / auto-merge
+// state. The REST payload never populates these fields (they are GraphQL-only),
+// so the snapshot is their sole source while a batch is degraded and each is
+// assigned from it directly — never OR-ed, which would let a stale true survive
+// a REST-observed false if REST ever began reporting one. Draft suppression: on
+// a PR that has since become a draft the approval / auto-merge / needs-approval
+// fields are NOT carried (a draft hides the merge-gate chips), so a stale
+// non-draft snapshot cannot resurrect them. review_decision is not a merge-gate
+// fact and is carried regardless of draft, matching the live GraphQL apply.
+// Source/target branches are carried when REST left them empty (search-path
+// snapshots omit head/base).
 func carryForwardEnrichment(pl, snap sdk.ItemObservedPayload) sdk.ItemObservedPayload {
 	pl.ReviewDecision = snap.ReviewDecision
 	if pl.SourceBranch == "" {

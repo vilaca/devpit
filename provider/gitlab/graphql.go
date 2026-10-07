@@ -489,6 +489,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 				continue
 			}
 			pl = applyGraphQL(pl, mr, p.handle)
+			pl = gateFromJoin(pl, mr.DMS)
 			if pl.State == stateOpen {
 				verdicts = append(verdicts, p.emitNewVerdictSignals(ctx, ev.NativeID, it.fullPath, it.iid, mr, pl.Draft)...)
 			}
@@ -497,6 +498,9 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 			// enriched fields so a transient failure never downgrades good data.
 			// No fresh verdict data, so no verdict signal — a prior cycle emitted it.
 			pl = carryForwardEnrichment(pl, snap)
+		}
+		if snap, ok := p.openSnapshots[ev.NativeID]; ok {
+			pl = carryForwardGate(pl, snap)
 		}
 		ev.Payload = pl
 		ev.DedupeKey = observedDedupeKey(pl)
@@ -536,6 +540,43 @@ func carryForwardEnrichment(pl sdk.ItemObservedPayload, snap sdk.ItemObservedPay
 	pl.FailingChecks = pl.FailingChecks || snap.FailingChecks
 	pl.ChecksRunning = pl.ChecksRunning || snap.ChecksRunning
 	pl.NeedsRebase = pl.NeedsRebase || snap.NeedsRebase
+	return pl
+}
+
+// gateFromJoin fills a transient REST gate from the join's own
+// detailedMergeStatus — the list row's status is often stale ("unchecked")
+// while GraphQL already has a verdict — along with the markers REST would have
+// read from it; applyGraphQL has already set the rest. A known REST value
+// stands, and a draft's DRAFT_STATUS maps to unknown, so neither is filled.
+func gateFromJoin(pl sdk.ItemObservedPayload, gqlDMS string) sdk.ItemObservedPayload {
+	dms := strings.ToLower(gqlDMS)
+	if pl.Gate != gateUnknown || mergeGate(dms) == gateUnknown {
+		return pl
+	}
+	pl.Gate = mergeGate(dms)
+	pl.GateDetail = dms
+	pl.PolicyDenied = isPolicyDenied(dms)
+	pl.UnresolvedDiscussions = dms == "discussions_not_resolved"
+	return pl
+}
+
+// carryForwardGate keeps the last known merge gate when this read's
+// detailed_merge_status is transient ("checking", "unchecked", …, mapped to
+// "unknown") in both REST and the join, so a transient read never reaches storage
+// (docs/Event_Taxonomy_and_Storage.md). The markers read from the same status —
+// conflict, policy, and the blocked-gated discussions badge — come with it. A
+// draft is not carried: it has no gate, and a stale non-draft one must not
+// resurface on it.
+func carryForwardGate(pl, snap sdk.ItemObservedPayload) sdk.ItemObservedPayload {
+	if pl.Gate != gateUnknown || pl.Draft || pl.State != stateOpen ||
+		snap.Gate == gateUnknown || snap.Gate == "" {
+		return pl
+	}
+	pl.Gate = snap.Gate
+	pl.GateDetail = snap.GateDetail
+	pl.MergeConflict = snap.MergeConflict
+	pl.PolicyDenied = snap.PolicyDenied
+	pl.UnresolvedDiscussions = snap.UnresolvedDiscussions
 	return pl
 }
 

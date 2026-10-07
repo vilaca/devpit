@@ -27,9 +27,9 @@ implementation.
 3. **GitHub REST `mergeable_state` is officially undocumented** (OpenAPI
  type: free-form string). GraphQL `mergeStateStatus` is GA, enum-typed,
  and fetchable in bulk, which avoids an N+1 REST call per PR for
- merge-gate state. DevPit reads REST `mergeable_state` from the single-PR
- GET only; its REST search rows and GraphQL join carry no merge-gate
- state (Discovery and enrichment below).
+ merge-gate state. DevPit reads REST `mergeable_state` from the fast
+ tier's single-PR GET, and `mergeStateStatus` in its GraphQL join, which
+ is where the sweep's gate comes from (Discovery and enrichment below).
 4. **GitLab returns `detailed_merge_status` in list responses** — no N+1
  for the merge gate; REST is sufficient for the GitLab plugin.
 5. **GitLab "request changes" only blocks the merge gate on
@@ -72,7 +72,7 @@ to — GitHub emits no `signal.ci_failed`.)
 
 Each PR notification on the first unread page — open, merged, or closed, and
 including watched-only repos — triggers a single-PR
-`GET /repos/{owner}/{repo}/pulls/{number}`, the only source of
+`GET /repos/{owner}/{repo}/pulls/{number}`, the fast tier's source of
 `mergeable_state` (Merge-gate mapping below). An open PR with no role and no
 signal is then dropped (`ADR/ADR-0004_User_Centric_Synchronization.md`); the
 rest go through the GraphQL join. Only the `mention` reason yields
@@ -99,9 +99,8 @@ truncated to page one (the Search API itself caps a query at 1,000 results;
 `item.observed`, and every member of the review-requested set emits a
 `signal.review_requested` keyed on the PR's `updated_at`, so a PR updated while
 you are still requested fires it again (dedupe keys:
-`docs/Event_Taxonomy_and_Storage.md`). Search rows carry no `mergeable_state`,
-so a sweep snapshot reports the gate as `unknown`; only the fast tier's
-single-PR GET supplies a real gate.
+`docs/Event_Taxonomy_and_Storage.md`). Search rows carry no `mergeable_state`;
+the GraphQL join below supplies the sweep's gate.
 
 Known gaps in the sweep's scopes:
 
@@ -119,8 +118,10 @@ Known gaps in the sweep's scopes:
 Every observed PR, from either tier, is then enriched by a GraphQL join:
 aliased `repository(owner:, name:) { isArchived pullRequest(number:) { … } }`
 lookups in batches (`batchSize` in `runGHBatches`; query `prQueryFmt`,
-`provider/github/graphql.go`). It supplies `reviewDecision`, the head/base
-branch names, auto-merge state, and `latestReviews` — the latest non-dismissed
+`provider/github/graphql.go`). It supplies `mergeStateStatus` — the gate and
+its markers, through the same mapping, wherever REST left the gate `unknown` —
+plus `reviewDecision`, the head/base branch names, auto-merge state, and
+`latestReviews` — the latest non-dismissed
 review per reviewer, which yields the approvals count, your own review state,
 and the rank-only `signal.approved` / `signal.changes_requested` verdict
 signals, with `submittedAt` as their real `OccurredAt`
@@ -135,8 +136,10 @@ semantics — multiple `repo:`/`org:`/`user:` qualifiers AND together
 `openSnapshots` cache of each open PR's last full post-join payload
 (`provider/github/github.go`): when a GraphQL batch degrades, the join carries
 enrichment forward from it, a draft getting only part of it (the split is in
-`carryForwardEnrichment`, `provider/github/graphql.go`). Unlike GitLab's it is
-not a refresh baseline — GitHub has no open-set refresh. An entry leaves when
+`carryForwardEnrichment`, `provider/github/graphql.go`). A read that still has
+no gate — GraphQL computing, or the batch failing — keeps the cached gate and
+its markers (`carryForwardGate`), drafts excepted. Unlike GitLab's it is not a
+refresh baseline — GitHub has no open-set refresh. An entry leaves when
 its PR is observed non-open or its repo archived; absence-based eviction happens
 only on a complete Reconcile (`pruneClosedSnapshots`,
 `provider/github/reconcile.go`), so FastPoll's partial slice never evicts a PR it
@@ -144,9 +147,10 @@ merely did not hear about.
 
 ### Merge-gate mapping (`mergeable_state`)
 
-REST `mergeable_state`, from the single-PR GET, mapped by `mergeGate`
-(`provider/github/normalize.go`); GraphQL's `mergeStateStatus` is believed to
-be the same enum, upper-cased (Verify at implementation, item 2).
+REST `mergeable_state` from the single-PR GET, and GraphQL's `mergeStateStatus`
+lower-cased in the join, both mapped by `mergeGate`
+(`provider/github/normalize.go`); the two are believed to be the same enum
+(Verify at implementation, item 2).
 
 | Value | Meaning | DevPit gate (+ marker) |
 |-------------|---------------------------------------|------------------------------------------------------|
@@ -291,10 +295,13 @@ separated from. Consequence: because `detailed_merge_status` names only the
 and the conflict stays hidden until they clear.
 
 Staleness note: list endpoints "might not proactively update"
-merge status — `unchecked` is common on lists. For items stuck
-transient, do a targeted single-MR GET; use
-`with_merge_status_recheck=true` sparingly (async, not guaranteed,
-can be restricted by a feature flag for sub-Developer roles).
+merge status — `unchecked` is common on lists. DevPit makes no targeted
+re-fetch: where the list status is transient the GraphQL join fills the gate
+from its own `detailedMergeStatus` (lower-cased, same mapping; `gateFromJoin`,
+`provider/gitlab/graphql.go`), and where that is transient too keeps the last
+known gate (`carryForwardGate`). `with_merge_status_recheck=true` exists but is
+async, not guaranteed, and can be restricted by a feature flag for
+sub-Developer roles — DevPit does not use it.
 `merge_status` (the old field) is deprecated since 15.6 — never read it.
 
 Version floor: `detailed_merge_status` needs GitLab ≥ 15.6; reviewer
@@ -305,7 +312,7 @@ minimum supported GitLab version]**.
 ### Rate budget
 
 - gitlab.com: 2,000 authenticated API requests/min per user. A poll
- cycle is ~4–6 requests + bounded reviewer-state fetches → even 30s
+ cycle is ~4–6 requests + bounded verdict-note fetches → even 30s
  polling uses **<1%** of budget. Per-endpoint caps exist (e.g.
  `GET /users/:id` 300/10min — avoid; we don't need it) but none on
  `/todos` or `/merge_requests` lists. Heavy use of the `search` param
@@ -320,8 +327,8 @@ minimum supported GitLab version]**.
 | Tier | GitHub | GitLab | Default cadence |
 |----------------------|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------|
 | Fast (change signal) | notifications w/ `If-Modified-Since` (classic PAT only) | `/todos?state=pending` + `updated_after` watermark; + batched GraphQL refresh of volatile booleans for all known-open items | `defaultFastEvery` |
-| Detail fetch | single-PR GET per notified PR (merge gate); GraphQL join for reviews, branches, auto-merge | reviewers endpoint for changed MRs; single-MR GET for stuck-transient gate | on change only |
-| Reconciliation sweep | four scoped REST searches, no watermark; GraphQL join | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | `defaultReconEvery` |
+| Detail fetch | single-PR GET per notified PR (merge gate); GraphQL join for merge state, reviews, branches, auto-merge | single-MR GET per pending todo; GraphQL join (merge state, reviews, verdicts); notes GET per new/changed verdict | on change only |
+| Reconciliation sweep | four scoped REST searches, no watermark; GraphQL join (merge gate) | full `scope=` list set, no `updated_after`; populates open-set snapshot cache | `defaultReconEvery` |
 
 Cadences are engine constants (`internal/engine/engine.go`, ADR-0004); the reconciliation
 sweep also self-heals anything the fast tier missed (deleted todos,
@@ -360,9 +367,9 @@ an explicit `UpsertRepoApprover` call does, and none exists outside tests.
 ## Verify at implementation
 
 1. GitHub merge-state actor-agnosticism (community-sourced).
-2. REST `mergeable_state` value set — undocumented, and it is what DevPit
- reads (`mergeGate`, `provider/github/normalize.go`); confirm it tracks
- GraphQL's `mergeStateStatus` enum.
+2. REST `mergeable_state` value set — undocumented; DevPit maps it and
+ GraphQL's `mergeStateStatus` through one `mergeGate`
+ (`provider/github/normalize.go`), so confirm the two enums match.
 3. GitLab `/todos` accepting `action=review_requested` (source says yes,
  docs omit it).
 4. `GET /user` behavior for GitLab project/group access tokens

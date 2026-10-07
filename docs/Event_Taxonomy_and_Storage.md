@@ -77,9 +77,12 @@ its fields:
 
 - **`gate`** (normalized `ready | blocked | unknown`) uses the per-provider
   merge-gate mappings in `docs/Provider_API_Analysis.md`. **Transient gate
-  values never reach storage**: the synthesizer carries the previous known gate
-  forward, so a mid-computation read causes neither churn snapshots nor bucket
-  flapping.
+  values do not reach storage once an item has a known gate**: each provider's
+  GraphQL join keeps the previous known gate, and the markers read with it,
+  from its snapshot cache (`carryForwardGate`; drafts excepted), so a
+  mid-computation read causes neither churn snapshots nor bucket flapping. The
+  cache is in-memory, so the first transient read after a restart stores
+  `unknown`.
 - **Unknown/ungranted facts** (capability gaps) are omitted; the fold treats
   absent as "cannot say", never as false.
 - **Marker fields** — diagnostic booleans that explain why an item is in a given

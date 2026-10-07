@@ -30,9 +30,8 @@ const (
 )
 
 // mergeGate maps GitHub's mergeable_state to the normalized gate class.
-// Transient values ("unknown", "") map to "unknown" and per the taxonomy
-// never overwrite a known gate downstream (the synthesizer carries forward);
-// the provider simply reports what it saw.
+// Transient values ("unknown", "") map to "unknown"; graphqlJoin keeps the last
+// known gate in their place (carryForwardGate).
 func mergeGate(mergeableState string) string {
 	switch mergeableState {
 	case msClean, msHasHooks:
@@ -45,6 +44,16 @@ func mergeGate(mergeableState string) string {
 	default: // "unknown", "draft", ""
 		return gateUnknown
 	}
+}
+
+// applyMergeState sets the gate and the markers GitHub reports through the same
+// mergeable_state value (REST; GraphQL's mergeStateStatus lower-cased).
+func applyMergeState(pl *sdk.ItemObservedPayload, state string) {
+	pl.Gate = mergeGate(state)
+	pl.GateDetail = state
+	pl.FailingChecks = state == msUnstable
+	pl.MergeConflict = state == msDirty
+	pl.NeedsRebase = state == msBehind
 }
 
 func nativeID(repo string, number int) string {
@@ -92,20 +101,14 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 		roles = append(roles, "assignee")
 	}
 
-	gate := mergeGate(pr.MergeableState)
 	payload := sdk.ItemObservedPayload{
-		Title:         pr.Title,
-		URL:           pr.HTMLURL,
-		Repo:          repo,
-		State:         state,
-		Draft:         pr.Draft,
-		Author:        pr.User.Login,
-		MyRoles:       roles,
-		Gate:          gate,
-		GateDetail:    pr.MergeableState,
-		FailingChecks: pr.MergeableState == msUnstable,
-		MergeConflict: pr.MergeableState == msDirty,
-		NeedsRebase:   pr.MergeableState == msBehind,
+		Title:   pr.Title,
+		URL:     pr.HTMLURL,
+		Repo:    repo,
+		State:   state,
+		Draft:   pr.Draft,
+		Author:  pr.User.Login,
+		MyRoles: roles,
 		// -1 = unknown until the GraphQL join sets the real count; a PR first seen
 		// while GraphQL is degraded must read unknown, not 0/hide-count (A6).
 		ApprovalsCount:    -1,
@@ -115,6 +118,7 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 		SourceBranch:      pr.Head.Ref,
 		TargetBranch:      pr.Base.Ref,
 	}
+	applyMergeState(&payload, pr.MergeableState)
 
 	nid := nativeID(repo, pr.Number)
 	return sdk.Event{
@@ -129,8 +133,8 @@ func (p *Provider) observedFromPull(pr ghPull) sdk.Event {
 }
 
 // observedFromSearch builds an item.observed from a search row (no merge-gate
-// data — the REST search result omits mergeable_state, so gate is unknown and
-// the fold keeps the last known value).
+// data — the REST search result omits mergeable_state, so gate is unknown until
+// graphqlJoin fills it from mergeStateStatus or keeps the last known one).
 func (p *Provider) observedFromSearch(it ghSearchItem, repo string, roles []string) sdk.Event {
 	payload := sdk.ItemObservedPayload{
 		Title:   it.Title,

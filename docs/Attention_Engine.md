@@ -87,9 +87,10 @@ review, so it can backstop a row that would otherwise be bare.
   safety net for round-trips the author has forgotten). Where the org's merge
   gate enforces approvals, Changes Requested co-occurs with Blocked; the item
   carries both tags, Changes Requested leading.
-- **Checking does not flap.** Transient gate values never reach storage; the
-  synthesizer carries the last known gate forward. A previously-blocked MR under
-  transient recompute keeps gate `blocked` and does not drop to `checking`.
+- **Checking does not flap.** A previously-blocked MR under transient
+  recompute keeps gate `blocked` and does not drop to `checking` (the
+  transient-gate rule and its restart caveat:
+  `docs/Event_Taxonomy_and_Storage.md`).
 
 ## Markers
 

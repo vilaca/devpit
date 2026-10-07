@@ -38,8 +38,9 @@ const (
 )
 
 // mergeGate maps detailed_merge_status to the normalized gate class.
-// Transient/draft statuses map to "unknown"; the fold carries the last known
-// gate forward so transient reads don't flap buckets (docs/Event_Taxonomy_and_Storage.md).
+// Transient/draft statuses map to "unknown"; graphqlJoin keeps the last known
+// gate in a transient one's place (carryForwardGate), so buckets don't flap
+// (docs/Event_Taxonomy_and_Storage.md).
 func mergeGate(status string) string {
 	switch status {
 	case dmsMergeable:

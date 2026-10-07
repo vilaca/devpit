@@ -16,8 +16,8 @@ import (
 )
 
 const prQueryFmt = `a%d:repository(owner:"%s",name:"%s")` +
-	`{isArchived pullRequest(number:%d){reviewDecision headRefName baseRefName ` +
-	`latestReviews{nodes{state submittedAt author{login}}} autoMergeRequest{enabledAt}}}`
+	`{isArchived pullRequest(number:%d){reviewDecision mergeStateStatus headRefName baseRefName ` +
+	`latestReviews(first:100){nodes{state submittedAt author{login}}} autoMergeRequest{enabledAt}}}`
 
 const (
 	ghReviewStateApproved = "APPROVED"
@@ -52,6 +52,7 @@ type ghResult struct {
 	// than enriched.
 	archived       bool
 	reviewDecision string
+	mergeState     string // mergeStateStatus, lower-cased to the REST mergeable_state vocabulary
 	approvalsCount int
 	autoMergeArmed bool
 	myReviewState  string
@@ -70,10 +71,11 @@ type ghPRNode struct {
 	// struct — the caller then keeps the REST payload rather than overwriting it
 	// with zeros (A3).
 	PullRequest *struct {
-		ReviewDecision string `json:"reviewDecision"`
-		HeadRefName    string `json:"headRefName"`
-		BaseRefName    string `json:"baseRefName"`
-		LatestReviews  struct {
+		ReviewDecision   string `json:"reviewDecision"`
+		MergeStateStatus string `json:"mergeStateStatus"`
+		HeadRefName      string `json:"headRefName"`
+		BaseRefName      string `json:"baseRefName"`
+		LatestReviews    struct {
 			Nodes []struct {
 				State       string `json:"state"`
 				SubmittedAt string `json:"submittedAt"`
@@ -168,6 +170,7 @@ func mergeGHBatchResults(
 		}
 		results[it.evIdx] = ghResult{
 			reviewDecision: node.PullRequest.ReviewDecision,
+			mergeState:     strings.ToLower(node.PullRequest.MergeStateStatus),
 			approvalsCount: count,
 			autoMergeArmed: node.PullRequest.AutoMergeRequest != nil,
 			myReviewState:  myReviewState,
@@ -425,7 +428,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 			// Batch for this item degraded: carry forward the last-known GraphQL-
 			// enriched fields so a transient failure never downgrades good data.
 			if snap, ok := p.openSnapshots[ev.NativeID]; ok {
-				pl = carryForwardEnrichment(pl, snap)
+				pl = carryForwardGate(carryForwardEnrichment(pl, snap), snap)
 				ev.Payload = pl
 				ev.DedupeKey = observedDedupeKey(pl)
 				enriched[it.evIdx] = ev
@@ -437,6 +440,7 @@ func (p *Provider) graphqlJoin(ctx context.Context, events []sdk.Event) ([]sdk.E
 			delete(p.openSnapshots, ev.NativeID)
 			continue
 		}
+		pl = p.gateFromJoin(pl, r.mergeState, ev.NativeID)
 		pl.NeedsApproval = r.reviewDecision == ghReviewRequired && !pl.Draft && pl.Gate == gateBlocked
 		pl.ReviewDecision = ghReviewDecision(r.reviewDecision)
 		if !pl.Draft { // a draft hides its approvals count, as carryForwardEnrichment does
@@ -514,6 +518,39 @@ func carryForwardEnrichment(pl, snap sdk.ItemObservedPayload) sdk.ItemObservedPa
 	pl.MyReviewState = snap.MyReviewState
 	pl.AutoMergeArmed = snap.AutoMergeArmed
 	pl.NeedsApproval = snap.NeedsApproval
+	return pl
+}
+
+// gateFromJoin fills an unknown gate from the join's mergeStateStatus — search
+// rows carry no mergeable_state, so this is the sweep's gate, while a known REST
+// value from the single-PR GET stands — then keeps the cached gate if the read
+// still has none.
+func (p *Provider) gateFromJoin(pl sdk.ItemObservedPayload, mergeState, nativeID string) sdk.ItemObservedPayload {
+	if pl.Gate == gateUnknown && mergeGate(mergeState) != gateUnknown {
+		applyMergeState(&pl, mergeState)
+	}
+	if snap, ok := p.openSnapshots[nativeID]; ok {
+		pl = carryForwardGate(pl, snap)
+	}
+	return pl
+}
+
+// carryForwardGate keeps the last known merge gate when this read has none — a
+// search row carries no mergeable_state, and GitHub reports "unknown" while it
+// computes — so a transient read never reaches storage
+// (docs/Event_Taxonomy_and_Storage.md). The markers read from the same
+// mergeable_state value come with it. A draft is not carried: it has no gate,
+// and a stale non-draft one must not resurface on it.
+func carryForwardGate(pl, snap sdk.ItemObservedPayload) sdk.ItemObservedPayload {
+	if pl.Gate != gateUnknown || pl.Draft || pl.State != stateOpen ||
+		snap.Gate == gateUnknown || snap.Gate == "" {
+		return pl
+	}
+	pl.Gate = snap.Gate
+	pl.GateDetail = snap.GateDetail
+	pl.FailingChecks = snap.FailingChecks
+	pl.MergeConflict = snap.MergeConflict
+	pl.NeedsRebase = snap.NeedsRebase
 	return pl
 }
 

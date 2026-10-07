@@ -888,6 +888,87 @@ func (rt *complexityCeilingRT) RoundTrip(req *http.Request) (*http.Response, err
 	}, nil
 }
 
+// TestGraphQLJoinCarriesKnownGate: a transient detailed_merge_status
+// ("checking", "unchecked", …) maps to gate "unknown", and storing that made a
+// blocked MR flap to Checking and drop its conflict badge until the next
+// reconcile. The join now keeps the last known gate and the markers read with
+// it (the transient-gate rule in docs/Event_Taxonomy_and_Storage.md). A draft,
+// or an MR never seen with a gate, stays unknown.
+func TestGraphQLJoinCarriesKnownGate(t *testing.T) {
+	const checkingReply = `{"data":{"a0":{"mergeRequest":{"approved":false,"shouldBeRebased":false,` +
+		`"detailedMergeStatus":"CHECKING","headPipeline":null,"approvedBy":{"count":0,"nodes":[]}}}}}`
+	mergeableReply := strings.Replace(checkingReply, "CHECKING", "MERGEABLE", 1)
+	known := sdk.ItemObservedPayload{
+		State: stateOpen, Gate: gateBlocked, GateDetail: dmsConflict,
+		MergeConflict: true, UnresolvedDiscussions: true,
+	}
+	cases := []struct {
+		name     string
+		rt       stubRT
+		status   string
+		draft    bool
+		snapshot bool
+		wantGate string
+	}{
+		{
+			name: "transient status", rt: stubRT{status: 200, body: checkingReply},
+			status: "preparing", snapshot: true, wantGate: gateBlocked,
+		},
+		{
+			name: "transient status, batch failed", rt: stubRT{status: 500, body: `{}`},
+			status: "unchecked", snapshot: true, wantGate: gateBlocked,
+		},
+		{
+			name: "draft is not carried", rt: stubRT{status: 200, body: checkingReply},
+			status: "draft_status", draft: true, snapshot: true, wantGate: gateUnknown,
+		},
+		{
+			name: "no prior gate", rt: stubRT{status: 200, body: checkingReply},
+			status: "approvals_syncing", wantGate: gateUnknown,
+		},
+		{
+			name: "a real status replaces it", rt: stubRT{status: 200, body: checkingReply},
+			status: dmsMergeable, snapshot: true, wantGate: gateReady,
+		},
+		{
+			// The list row is stale but GraphQL already says mergeable: the cached
+			// conflict must not overwrite that fresh verdict.
+			name: "graphql verdict beats the cache", rt: stubRT{status: 200, body: mergeableReply},
+			status: "ci_still_running", snapshot: true, wantGate: gateReady,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := newStubProvider(t, c.rt)
+			p.handle = "octocat"
+			mr := makeMR(c.status)
+			mr.Draft = c.draft
+			ev := p.observedFromMR(mr)
+			if c.snapshot {
+				p.openSnapshots[ev.NativeID] = known
+			}
+			out, _ := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+			var pl sdk.ItemObservedPayload
+			for _, e := range out {
+				if e.EventType == sdk.EventItemObserved {
+					pl, _ = e.Payload.(sdk.ItemObservedPayload)
+				}
+			}
+			if pl.Gate != c.wantGate {
+				t.Fatalf("gate=%q, want %q", pl.Gate, c.wantGate)
+			}
+			if c.wantGate == gateBlocked && (!pl.MergeConflict || !pl.UnresolvedDiscussions || pl.GateDetail != dmsConflict) {
+				t.Errorf("carried gate lost its markers: conflict=%v discussions=%v detail=%q",
+					pl.MergeConflict, pl.UnresolvedDiscussions, pl.GateDetail)
+			}
+			if c.wantGate != gateBlocked && (pl.MergeConflict || pl.UnresolvedDiscussions) {
+				t.Errorf("stale markers on a %q gate: conflict=%v discussions=%v",
+					pl.Gate, pl.MergeConflict, pl.UnresolvedDiscussions)
+			}
+		})
+	}
+}
+
 // TestGraphQLBatchingUnderCeiling verifies that graphqlJoin never sends a batch
 // larger than graphQLBatchSize, so the complexity ceiling (250 complexity / ≈23
 // per MR → safe up to 10) is never hit. Uses a fake transport that returns a

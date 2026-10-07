@@ -1170,6 +1170,138 @@ func TestGraphQLJoinDraftHidesApprovals(t *testing.T) {
 	}
 }
 
+// TestPRQueryPaginatesConnections pins GitHub's schema rule that every
+// connection takes `first` or `last`: without one the whole aliased query fails
+// validation and every join degrades. The hand-made fixtures can't catch it —
+// they answer any query — so the query text itself is the observable.
+func TestPRQueryPaginatesConnections(t *testing.T) {
+	if !strings.Contains(prQueryFmt, "latestReviews(first:") {
+		t.Errorf("prQueryFmt selects latestReviews without first/last: %s", prQueryFmt)
+	}
+	if !strings.Contains(prQueryFmt, "mergeStateStatus") {
+		t.Errorf("prQueryFmt no longer selects mergeStateStatus, the sweep's only gate source: %s", prQueryFmt)
+	}
+}
+
+// joinOne runs graphqlJoin over a single item.observed against a stubbed
+// GraphQL reply for alias a0 and returns the resulting payload.
+func joinOne(t *testing.T, p *Provider, ev sdk.Event) sdk.ItemObservedPayload {
+	t.Helper()
+	out, _, err := p.graphqlJoin(context.Background(), []sdk.Event{ev})
+	if err != nil {
+		t.Fatalf("graphqlJoin: %v", err)
+	}
+	for _, e := range out {
+		if e.EventType == sdk.EventItemObserved {
+			pl, ok := e.Payload.(sdk.ItemObservedPayload)
+			if !ok {
+				t.Fatalf("payload type %T", e.Payload)
+			}
+			return pl
+		}
+	}
+	t.Fatal("no item.observed in join output")
+	return sdk.ItemObservedPayload{}
+}
+
+func mergeStateReply(state, decision string) string {
+	return `{"data":{"a0":{"pullRequest":{"reviewDecision":"` + decision + `","mergeStateStatus":"` + state +
+		`","latestReviews":{"nodes":[]}}}}}`
+}
+
+// TestGraphQLJoinFillsGateFromMergeState: a reconcile search row carries no
+// mergeable_state, so before mergeStateStatus joined the query every sweep
+// stored gate "unknown" and the row read Checking until a notification
+// re-fetched the PR. The join now fills the gate and its markers.
+func TestGraphQLJoinFillsGateFromMergeState(t *testing.T) {
+	cases := []struct {
+		state, decision                  string
+		gate                             string
+		conflict, rebase, failing, needs bool
+	}{
+		{state: "CLEAN", gate: gateReady},
+		{state: "BLOCKED", gate: gateBlocked},
+		{state: "BLOCKED", decision: ghReviewRequired, gate: gateBlocked, needs: true},
+		{state: "DIRTY", gate: gateBlocked, conflict: true},
+		{state: "BEHIND", gate: gateBlocked, rebase: true},
+		{state: "UNSTABLE", gate: gateReady, failing: true},
+		{state: "UNKNOWN", gate: gateUnknown},
+	}
+	for _, c := range cases {
+		t.Run(c.state+"/"+c.decision, func(t *testing.T) {
+			p := newStubProvider(t, stubRT{status: 200, body: mergeStateReply(c.state, c.decision)})
+			p.handle = "octocat"
+			item := ghSearchItem{Number: 1, HTMLURL: "https://github.com/acme/api/pull/1", User: ghUser{Login: "jdoe"}}
+			pl := joinOne(t, p, p.observedFromSearch(item, "acme/api", nil))
+			if pl.Gate != c.gate || pl.MergeConflict != c.conflict || pl.NeedsRebase != c.rebase ||
+				pl.FailingChecks != c.failing || pl.NeedsApproval != c.needs {
+				t.Errorf("gate=%q conflict=%v rebase=%v failing=%v needsApproval=%v; want %q %v %v %v %v",
+					pl.Gate, pl.MergeConflict, pl.NeedsRebase, pl.FailingChecks, pl.NeedsApproval,
+					c.gate, c.conflict, c.rebase, c.failing, c.needs)
+			}
+		})
+	}
+}
+
+// TestGraphQLJoinKeepsKnownRESTGate: the single-PR GET's mergeable_state is
+// read seconds before the join, so a GraphQL value that disagrees (or is still
+// computing) does not override a gate REST already knew.
+func TestGraphQLJoinKeepsKnownRESTGate(t *testing.T) {
+	p := newStubProvider(t, stubRT{status: 200, body: mergeStateReply("BLOCKED", "")})
+	p.handle = "octocat"
+	pl := joinOne(t, p, p.observedFromPull(makePR("clean")))
+	if pl.Gate != gateReady || pl.GateDetail != "clean" {
+		t.Errorf("gate=%q detail=%q, want ready/clean (REST stands)", pl.Gate, pl.GateDetail)
+	}
+}
+
+// TestGraphQLJoinCarriesKnownGate: a read with no gate — GraphQL still
+// computing, or the batch failing outright — keeps the last known gate and
+// its markers instead of storing "unknown" (the transient-gate rule in
+// docs/Event_Taxonomy_and_Storage.md). A draft, or a PR never seen with a
+// gate, stays unknown.
+func TestGraphQLJoinCarriesKnownGate(t *testing.T) {
+	known := sdk.ItemObservedPayload{State: stateOpen, Gate: gateBlocked, GateDetail: "dirty", MergeConflict: true}
+	cases := []struct {
+		name     string
+		rt       stubRT
+		draft    bool
+		snapshot bool
+		wantGate string
+	}{
+		{
+			name: "graphql still computing", rt: stubRT{status: 200, body: mergeStateReply("UNKNOWN", "")},
+			snapshot: true, wantGate: gateBlocked,
+		},
+		{name: "batch failed", rt: stubRT{status: 500, body: `{}`}, snapshot: true, wantGate: gateBlocked},
+		{
+			name: "draft is not carried", rt: stubRT{status: 200, body: mergeStateReply("DRAFT", "")},
+			draft: true, snapshot: true, wantGate: gateUnknown,
+		},
+		{name: "no prior gate", rt: stubRT{status: 200, body: mergeStateReply("UNKNOWN", "")}, wantGate: gateUnknown},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := newStubProvider(t, c.rt)
+			p.handle = "octocat"
+			item := ghSearchItem{
+				Number: 1, HTMLURL: "https://github.com/acme/api/pull/1", User: ghUser{Login: "jdoe"}, Draft: c.draft,
+			}
+			ev := p.observedFromSearch(item, "acme/api", nil)
+			if c.snapshot {
+				p.openSnapshots = map[string]sdk.ItemObservedPayload{ev.NativeID: known}
+			}
+			pl := joinOne(t, p, ev)
+			if pl.Gate != c.wantGate {
+				t.Fatalf("gate=%q, want %q", pl.Gate, c.wantGate)
+			}
+			if c.wantGate == gateBlocked && (!pl.MergeConflict || pl.GateDetail != "dirty") {
+				t.Errorf("carried gate lost its markers: conflict=%v detail=%q", pl.MergeConflict, pl.GateDetail)
+			}
+		})
+	}
+}
+
 // reconcileGraphQLDegradeRT lets every REST call succeed (a self-authored PR on
 // every scope, no sole-approver probe needed) but degrades the GraphQL join.
 type reconcileGraphQLDegradeRT struct{}

@@ -319,14 +319,39 @@ case "${1:-}" in
   *)             gates=("$@") ;;
 esac
 
-FAILED=()
 for g in "${gates[@]}"; do
   if ! declare -F "gate_$g" >/dev/null; then
     echo "unknown gate: $g (valid: ${ALL_GATES[*]})" >&2
     exit 2
   fi
+done
+
+# The gates are independent, so they run concurrently, each into its own log;
+# the logs are then printed in gate order, so the output reads as if serial.
+# The one tool two gates install is ShellCheck (shell, actionlint), so it is
+# installed up front rather than raced.
+[[ " ${gates[*]} " == *" shell "* || " ${gates[*]} " == *" actionlint "* ]] && ensure_shellcheck
+LOGS="$(mktemp -d)"
+trap 'rm -rf "$LOGS"' EXIT
+# Job control puts each gate in its own process group, so an interrupt can kill
+# a gate's whole tree (go test, golangci-lint, …), not just its subshell.
+set -m
+trap 'for p in "${PIDS[@]}"; do kill -TERM -- "-$p" 2>/dev/null; done; exit 130' INT TERM
+PIDS=()
+for g in "${gates[@]}"; do
+  ( start=$SECONDS; "gate_$g" >"$LOGS/$g" 2>&1; rc=$?
+    echo "$(( SECONDS - start ))" >"$LOGS/$g.secs"; exit "$rc" ) &
+  PIDS+=("$!")
+done
+
+FAILED=()
+for i in "${!gates[@]}"; do
+  g="${gates[$i]}"
+  wait "${PIDS[$i]}"; rc=$?
   echo "==> $g"
-  if "gate_$g"; then echo "    ok: $g"; else echo "    FAIL: $g"; FAILED+=("$g"); fi
+  cat "$LOGS/$g"
+  secs="$(cat "$LOGS/$g.secs" 2>/dev/null)"
+  if (( rc == 0 )); then echo "    ok: $g (${secs}s)"; else echo "    FAIL: $g (${secs}s)"; FAILED+=("$g"); fi
 done
 
 echo

@@ -1,19 +1,43 @@
 <script lang="ts">
-  import type { Connection, UpdateInfo } from "../lib/types";
+  import type { Connection, HealthStatus, UpdateInfo } from "../lib/types";
   import type { ConnectionState } from "../lib/sse";
+  import { healthTooltip } from "../lib/format";
   import ConnectionHealth from "./ConnectionHealth.svelte";
 
   const {
     connections,
+    selectedConnectionId,
     streamState,
     update,
     onShowLog,
+    onSelectConnection,
   }: {
     connections: Connection[];
+    selectedConnectionId: string | null;
     streamState: ConnectionState;
     update: UpdateInfo | null;
     onShowLog: (connectionId?: string) => void;
+    onSelectConnection: (connectionId: string | null) => void;
   } = $props();
+
+  // With several connections the picker filters the list; its health dot is
+  // the selected connection's, or the worst across all under "All". A failing
+  // connection you've filtered away still shows in its option and the failure
+  // banner (ADR-0018).
+  const RANK: Record<HealthStatus, number> = { ok: 0, degraded: 1, failing: 2 };
+  const shown = $derived(
+    connections.filter(
+      (c) => !selectedConnectionId || c.id === selectedConnectionId,
+    ),
+  );
+  const shownStatus = $derived(
+    shown.reduce<HealthStatus>(
+      (worst, c) =>
+        RANK[c.health.status] > RANK[worst] ? c.health.status : worst,
+      "ok",
+    ),
+  );
+  const shownTooltip = $derived(shown.map(healthTooltip).join("\n"));
 
   const streamTitle: Record<ConnectionState, string> = {
     open: "Live — updates in real time",
@@ -62,12 +86,34 @@
         Update
       </a>
     {/if}
-    {#each connections as c (c.id)}
+    {#if connections.length === 1}
       <ConnectionHealth
-        connection={c}
+        connection={connections[0]}
         onShowLog={(id: string) => onShowLog(id)}
       />
-    {/each}
+    {:else if connections.length > 1}
+      <button
+        class="health {shownStatus}"
+        title={shownTooltip}
+        onclick={() => onShowLog(selectedConnectionId ?? undefined)}
+        aria-label="Open sync log ({shownStatus})"
+      >
+        <span class="dot"></span>
+      </button>
+      <select
+        class="picker"
+        aria-label="Filter by connection"
+        value={selectedConnectionId ?? ""}
+        onchange={(e) => onSelectConnection(e.currentTarget.value || null)}
+      >
+        <option value="">All connections</option>
+        {#each connections as c (c.id)}
+          <option value={c.id}>
+            {c.label}{c.health.status === "ok" ? "" : ` (${c.health.status})`}
+          </option>
+        {/each}
+      </select>
+    {/if}
   </nav>
 </header>
 
@@ -110,6 +156,37 @@
   .update:hover {
     background: var(--accent);
     color: var(--bg);
+  }
+  .health {
+    border: none;
+    background: none;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  .health.ok .dot {
+    background: var(--health-ok);
+  }
+  .health.degraded .dot {
+    background: var(--health-degraded);
+  }
+  .health.failing .dot {
+    background: var(--health-failing);
+  }
+  .picker {
+    font: inherit;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+    cursor: pointer;
+  }
+  .picker:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
   }
   .stream {
     border: none;

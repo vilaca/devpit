@@ -21,6 +21,14 @@ function plural(n: number, unit: string): string {
   return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }
 
+// healthTooltip is a connection's health-dot hover text: who, status, and how
+// long since its last successful sync (ADR-0018).
+export function healthTooltip(c: Connection): string {
+  const h = c.health;
+  const last = h.last_synced_at ? relativeTime(h.last_synced_at) : "never";
+  return `${c.identity ?? c.label} · ${h.status} · synced ${last}`;
+}
+
 // emptyListCopy is the empty-attention sentence (ADR-0018): never conflate
 // "nothing to do" with "sync is broken". A failing connection replaces
 // "All clear"; otherwise we cite the oldest last_synced_at (most conservative).

@@ -24,15 +24,21 @@ provider last failed.
   failure (`auth`, `rate_limited`, `storage`, or other non-ok/non-degraded
   outcome). Worst-of-per-operation (not single-last-row) makes green mean "all
   degraded resolved": a `degraded` reconcile holds the dot amber through
-  interleaved `ok` `fast_poll` cycles until the next reconcile succeeds.
+  interleaved `ok` `fast_poll` cycles until the next reconcile succeeds. With
+  several connections the top bar shows one dot beside the connection filter:
+  the selected connection's, or the worst across all under "All"; each
+  non-`ok` connection also names its status in the filter's options.
 - **Graceful degradation**: on failure keep showing the last good data marked
   *stale*, plus a non-blocking banner naming the provider and cause. One
   provider failing never blanks the others.
 - **Never conflate empty with failed**: an empty list says so explicitly
   ("All clear — synced 1m ago", from the oldest `last_synced_at`); a failing
   connection replaces that sentence so empty never reads as healthy. Copy is
-  `emptyListCopy` in `frontend/src/lib/format.ts`. A stale/failed provider is
-  always visibly distinct.
+  `emptyListCopy` in `frontend/src/lib/format.ts`. Under a connection filter
+  the copy speaks only for the selected connection — the others are hidden by
+  choice — while the failure banner stays global, so a failing connection you
+  filtered away is still announced. A stale/failed provider is always visibly
+  distinct.
 - **A persisted, bounded sync log**: one human-readable row per poll cycle per
   connection; on failure the individual calls, statuses, retries, and
   next-retry are captured and shown on expand. Bounded by user-initiated

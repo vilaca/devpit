@@ -3,7 +3,12 @@
   import { SvelteURLSearchParams } from "svelte/reactivity";
   import { dashboard } from "./lib/dashboard.svelte";
   import type { Filter, AttentionItem } from "./lib/types";
-  import { visibleBuckets, visibleOrder, parseFilter } from "./lib/buckets";
+  import {
+    visibleBuckets,
+    visibleOrder,
+    parseFilter,
+    scopeToConnection,
+  } from "./lib/buckets";
   import TopBar from "./components/TopBar.svelte";
   import FailureBanner from "./components/FailureBanner.svelte";
   import BucketFilter from "./components/BucketFilter.svelte";
@@ -12,17 +17,19 @@
   import { theme } from "./lib/theme.svelte";
 
   // --- URL state -------------------------------------------------------
-  // Bucket filter + sync-log open state live in the URL so a browser refresh
+  // Bucket filter, connection filter, and sync-log open state live in the URL so a browser refresh
   // restores the view. No router needed — one query string, history.replaceState.
 
   function readUrl(): {
     bucket: Filter | null;
+    conn: string | null;
     log: boolean;
     logConn: string | null;
   } {
     const p = new URLSearchParams(location.search);
     return {
       bucket: parseFilter(p.get("bucket")),
+      conn: p.get("conn") ?? null,
       log: p.has("log"),
       logConn: p.get("logconn") ?? null,
     };
@@ -30,11 +37,13 @@
 
   function writeUrl(state: {
     bucket: Filter | null;
+    conn: string | null;
     log: boolean;
     logConn: string | null;
   }) {
     const p = new SvelteURLSearchParams();
     if (state.bucket) p.set("bucket", state.bucket);
+    if (state.conn) p.set("conn", state.conn);
     if (state.log) p.set("log", "1");
     if (state.log && state.logConn) p.set("logconn", state.logConn);
     const qs = p.toString();
@@ -43,17 +52,29 @@
 
   const initial = readUrl();
   let activeBucket = $state<Filter | null>(initial.bucket);
+  let connFilter = $state<string | null>(initial.conn);
   let logOpen = $state(initial.log);
   let logConnFilter = $state<string | null>(initial.logConn);
 
   // Sync URL whenever state changes.
   $effect(() => {
-    writeUrl({ bucket: activeBucket, log: logOpen, logConn: logConnFilter });
+    writeUrl({
+      bucket: activeBucket,
+      conn: connFilter,
+      log: logOpen,
+      logConn: logConnFilter,
+    });
   });
 
   function setBucket(s: Filter | null) {
     activeBucket = s;
   }
+
+  // The top-bar connection picker scopes everything below it — list, pinned
+  // zone, bucket counts, empty copy — to one connection (lib/buckets).
+  const scoped = $derived(
+    scopeToConnection(dashboard.items, dashboard.connections, connFilter),
+  );
 
   function openLog(connectionId?: string) {
     logOpen = true;
@@ -74,7 +95,7 @@
   // The ordered visible list keyboard nav steps through — the same rows the
   // renderer shows, in the same order (derived once, in lib/buckets).
   const visibleItems = $derived(
-    visibleOrder(dashboard.items, activeBucket, dashboard.connections),
+    visibleOrder(scoped.items, activeBucket, scoped.connections),
   );
 
   function moveFocus(delta: 1 | -1) {
@@ -87,7 +108,7 @@
 
   function openFocused() {
     if (!focusedId) return;
-    const item = dashboard.items.find((i) => i.id === focusedId);
+    const item = visibleItems.find((i) => i.id === focusedId);
     if (item?.url) window.open(item.url, "_blank", "noopener,noreferrer");
   }
 
@@ -110,7 +131,7 @@
         break;
       case "f":
         if (focusedId) {
-          const item = dashboard.items.find((i) => i.id === focusedId);
+          const item = visibleItems.find((i) => i.id === focusedId);
           if (item) void dashboard.toggleFlag(item);
         }
         break;
@@ -122,10 +143,7 @@
         // Cycle through visible buckets: null → first → … → last → null.
         e.preventDefault();
         {
-          const visible = visibleBuckets(
-            dashboard.items,
-            dashboard.connections,
-          );
+          const visible = visibleBuckets(scoped.items, scoped.connections);
           if (visible.length === 0) break;
           const idx = visible.findIndex((b) => b.key === activeBucket);
           activeBucket =
@@ -165,9 +183,13 @@
 <div class="layout">
   <TopBar
     connections={dashboard.connections}
+    selectedConnectionId={scoped.connectionId}
     streamState={dashboard.streamState}
     update={dashboard.update}
     onShowLog={openLog}
+    onSelectConnection={(id: string | null) => {
+      connFilter = id;
+    }}
   />
 
   {#if dashboard.banner}
@@ -189,14 +211,14 @@
       <p class="hint error">Failed to load: {dashboard.loadError}</p>
     {:else}
       <BucketFilter
-        items={dashboard.items}
-        connections={dashboard.connections}
+        items={scoped.items}
+        connections={scoped.connections}
         active={activeBucket}
         onSelect={setBucket}
       />
       <AttentionList
-        items={dashboard.items}
-        connections={dashboard.connections}
+        items={scoped.items}
+        connections={scoped.connections}
         activeFilter={activeBucket}
         {focusedId}
         onToggleFlag={(item: AttentionItem) => void dashboard.toggleFlag(item)}

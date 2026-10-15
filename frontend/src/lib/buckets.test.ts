@@ -7,6 +7,7 @@ import {
   visibleBuckets,
   parseFilter,
   partitionVisible,
+  scopeToConnection,
 } from "./buckets";
 import { makeItem, makeConnection } from "./fixtures";
 
@@ -215,5 +216,61 @@ describe("parseFilter", () => {
     expect(parseFilter("garbage")).toBeNull();
     expect(parseFilter("")).toBeNull();
     expect(parseFilter(null)).toBeNull();
+  });
+});
+
+describe("scopeToConnection", () => {
+  const conns = [
+    makeConnection({ id: "c1", identity: "me" }),
+    makeConnection({ id: "c2", identity: "me" }),
+  ];
+  const items = [
+    makeItem({ id: "a", connection_id: "c1" }),
+    makeItem({ id: "b", connection_id: "c2", flagged: true }),
+    makeItem({ id: "c", connection_id: "c2" }),
+  ];
+
+  it("keeps only the selected connection's items, pinned ones included", () => {
+    const s = scopeToConnection(items, conns, "c2");
+    expect(s.items.map((i) => i.id)).toEqual(["b", "c"]);
+    expect(s.connections.map((c) => c.id)).toEqual(["c2"]);
+    expect(s.connectionId).toBe("c2");
+  });
+
+  it("keeps the ranked order when connections interleave", () => {
+    // Scoping is a filter, never a reorder (INV-6).
+    const mixed = [
+      makeItem({ id: "w", connection_id: "c1" }),
+      makeItem({ id: "x", connection_id: "c2" }),
+      makeItem({ id: "y", connection_id: "c1" }),
+      makeItem({ id: "z", connection_id: "c2" }),
+    ];
+    expect(
+      scopeToConnection(mixed, conns, "c2").items.map((i) => i.id),
+    ).toEqual(["x", "z"]);
+  });
+
+  it("is unscoped for null (All)", () => {
+    const s = scopeToConnection(items, conns, null);
+    expect(s.items).toBe(items);
+    expect(s.connections).toBe(conns);
+    expect(s.connectionId).toBeNull();
+  });
+
+  it("falls back to unscoped for an id no configured connection has", () => {
+    // A stale ?conn= must not render an empty list that reads as "all clear".
+    const s = scopeToConnection(items, conns, "gone");
+    expect(s.items).toBe(items);
+    expect(s.connectionId).toBeNull();
+  });
+
+  it("yields no items for a known connection with nothing open", () => {
+    const s = scopeToConnection(
+      items,
+      [...conns, makeConnection({ id: "c3" })],
+      "c3",
+    );
+    expect(s.items).toEqual([]);
+    expect(s.connections.map((c) => c.id)).toEqual(["c3"]);
   });
 });

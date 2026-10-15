@@ -152,3 +152,27 @@ export function visibleOrder(
   const { pinned, ranked } = partitionVisible(items, filter, connections);
   return [...pinned, ...ranked];
 }
+
+// scopeToConnection narrows items and connections to the one connection the
+// top-bar picker selected, so the ranked list, pinned zone, bucket counts, and
+// empty-list copy all reflect it. A null or unknown id (e.g. a ?conn= naming a
+// connection since removed from config) leaves everything unscoped; the
+// returned connectionId is the effective selection (null for "All").
+export function scopeToConnection(
+  items: AttentionItem[],
+  connections: Connection[],
+  connectionId: string | null,
+): {
+  items: AttentionItem[];
+  connections: Connection[];
+  connectionId: string | null;
+} {
+  if (!connectionId || !connections.some((c) => c.id === connectionId)) {
+    return { items, connections, connectionId: null };
+  }
+  return {
+    items: items.filter((i) => i.connection_id === connectionId),
+    connections: connections.filter((c) => c.id === connectionId),
+    connectionId,
+  };
+}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Connection } from "../lib/types";
-  import { relativeTime } from "../lib/format";
+  import { healthTooltip } from "../lib/format";
 
   const {
     connection,
@@ -10,12 +10,7 @@
     onShowLog: (connectionId: string) => void;
   } = $props();
 
-  const tooltip = $derived.by(() => {
-    const h = connection.health;
-    const last = h.last_synced_at ? relativeTime(h.last_synced_at) : "never";
-    const who = connection.identity ?? connection.label;
-    return `${who} · ${h.status} · synced ${last}`;
-  });
+  const tooltip = $derived(healthTooltip(connection));
 </script>
 
 <button

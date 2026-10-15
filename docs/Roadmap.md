@@ -80,6 +80,10 @@ in v0.1.6.
   instructions documented; the README reflects the actual first-public-release
   surface. Includes the hero screenshot — captured from the committed demo forge,
   never from a real instance (ADR-0023).
+- Connection filter: with several connections, a top-bar dropdown scopes the
+  list to a single connection via ephemeral URL state, never touching config
+  (`scopeToConnection`, `frontend/src/lib/buckets.ts`; health presentation in
+  ADR-0018).
 
 ## v0.2 — More forges + sync hardening
 
@@ -259,16 +263,6 @@ Noted, not committed to any release.
   question is whether a single default config path (e.g. `~/.config/devpit/
   config.yaml`) is still honoured when `--config` is absent, or whether the
   flag becomes mandatory.
-
-- Connection filter: a UI control (toggle or multi-select) to temporarily
-  focus on one or more connections, hiding items from the others without
-  touching config. Useful when switching context between work and personal
-  accounts, or across multiple GitLab instances. The filter is ephemeral —
-  session-only or persisted in `localStorage` — and never modifies the
-  underlying connection config. The ranked list, bucket counts, and health
-  dots should all reflect the active filter. The main design question is
-  placement: a persistent header control vs. a collapsible sidebar vs. a
-  keyboard-driven picker (e.g., `f` to open a connection filter overlay).
 
 - Label-based tracking: surface items by label subscription rather than (or in
   addition to) user identity. Instead of only tracking "items assigned to me"
